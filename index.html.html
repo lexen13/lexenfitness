@@ -1,0 +1,802 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Strength &amp; Shred</title>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=IBM+Plex+Mono:wght@400;500;600&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+<!-- Firebase -->
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --bg:#08080d;--surface:#111118;--surface2:#1a1a24;--surface3:#222230;
+  --border:#2a2a3a;--border2:#383850;
+  --text:#e8e8f0;--muted:#7c7c9a;--dim:#55556a;
+  --accent:#7b5cff;--accent2:#a78bfa;
+  --green:#34d399;--gold:#fbbf24;--red:#f87171;
+  --font-display:'Bebas Neue',sans-serif;
+  --font-mono:'IBM Plex Mono',monospace;
+  --font-body:'DM Sans',sans-serif;
+}
+html{font-size:15px}
+body{background:var(--bg);color:var(--text);font-family:var(--font-body);min-height:100vh;min-height:100dvh;-webkit-tap-highlight-color:transparent}
+::selection{background:var(--accent);color:#fff}
+button{font-family:var(--font-body);cursor:pointer;-webkit-tap-highlight-color:transparent}
+input,select{font-family:var(--font-body)}
+
+/* ── Scrollbar ── */
+::-webkit-scrollbar{width:4px;height:4px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:4px}
+
+/* ── AUTH ── */
+.screen{display:none;min-height:100vh;min-height:100dvh}
+.screen.active{display:flex}
+#authScreen{align-items:center;justify-content:center;padding:1.5rem}
+.auth-box{background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:2rem;width:100%;max-width:360px}
+.auth-logo{text-align:center;margin-bottom:1.5rem}
+.auth-logo h1{font-family:var(--font-display);font-size:2.6rem;letter-spacing:3px;background:linear-gradient(135deg,var(--accent2),var(--gold));-webkit-background-clip:text;-webkit-text-fill-color:transparent;line-height:1}
+.auth-logo p{color:var(--muted);font-size:.82rem;margin-top:.3rem}
+.auth-input{width:100%;background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:10px;padding:12px 14px;font-size:.9rem;margin-bottom:.6rem;outline:none;transition:border .15s}
+.auth-input:focus{border-color:var(--accent)}
+.auth-input::placeholder{color:var(--dim)}
+.auth-btn{width:100%;padding:13px;border:none;border-radius:10px;font-weight:700;font-size:.92rem;transition:all .15s}
+.auth-btn.primary{background:var(--accent);color:#fff;margin-top:.3rem}
+.auth-btn.primary:hover{background:var(--accent2)}
+.auth-btn.ghost{background:transparent;color:var(--muted);font-size:.8rem;margin-top:.5rem;font-weight:500}
+.auth-btn.ghost:hover{color:var(--text)}
+.auth-error{color:var(--red);font-size:.78rem;text-align:center;margin-top:.5rem;min-height:1rem}
+.auth-divider{display:flex;align-items:center;gap:10px;margin:.8rem 0;color:var(--dim);font-size:.72rem;font-family:var(--font-mono)}
+.auth-divider::before,.auth-divider::after{content:'';flex:1;height:1px;background:var(--border)}
+.auth-name-row{display:flex;gap:.5rem}
+.auth-name-row .auth-input{flex:1}
+
+/* ── MAIN APP ── */
+#appScreen{flex-direction:column}
+.top-bar{padding:1rem 1.2rem;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--border);background:var(--surface);position:sticky;top:0;z-index:50}
+.top-bar h1{font-family:var(--font-display);font-size:1.5rem;letter-spacing:2px;background:linear-gradient(135deg,var(--accent2),var(--gold));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.top-bar .user-pill{display:flex;align-items:center;gap:8px;font-size:.78rem;color:var(--muted)}
+.top-bar .user-pill strong{color:var(--text);font-weight:600}
+.btn-icon{width:34px;height:34px;border:1px solid var(--border);background:var(--surface2);color:var(--muted);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:.85rem}
+.btn-icon:hover{color:var(--text);border-color:var(--border2)}
+
+/* ── TABS ── */
+.tabs{display:flex;gap:0;padding:.8rem 1.2rem 0;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none}
+.tabs::-webkit-scrollbar{display:none}
+.tab{font-family:var(--font-mono);font-size:.7rem;font-weight:600;padding:9px 14px;cursor:pointer;border:1px solid var(--border);border-bottom:none;border-radius:10px 10px 0 0;color:var(--muted);background:var(--surface);white-space:nowrap;transition:all .15s;flex-shrink:0}
+.tab.active{color:var(--accent2);background:var(--surface2);border-color:var(--accent)}
+.tab:hover:not(.active){color:var(--text)}
+.tab.log-tab{margin-left:auto;color:var(--green)}
+.tab.log-tab.active{color:var(--green);border-color:var(--green)}
+
+/* ── PANELS ── */
+.panel{display:none;padding:1.2rem;flex:1;overflow-y:auto}
+.panel.active{display:block}
+.panel-title{font-family:var(--font-display);font-size:1.6rem;letter-spacing:2px;margin-bottom:.2rem}
+.panel-sub{color:var(--muted);font-size:.8rem;margin-bottom:1rem}
+
+/* ── EXERCISE CARDS ── */
+.exercise{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:.9rem;margin-bottom:.7rem;transition:border-color .15s}
+.exercise:hover{border-color:var(--border2)}
+.ex-header{display:flex;align-items:center;gap:8px;margin-bottom:.5rem}
+.ex-num{font-family:var(--font-mono);color:var(--accent);font-size:.7rem;background:var(--surface2);border-radius:5px;padding:2px 7px;flex-shrink:0}
+.ex-name{font-weight:700;font-size:.88rem;flex:1;min-width:0}
+.ex-actions{display:flex;gap:4px;flex-shrink:0}
+.ex-btn{width:28px;height:28px;border:1px solid var(--border);background:var(--surface2);color:var(--dim);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:.72rem;transition:all .15s}
+.ex-btn:hover{color:var(--text);border-color:var(--accent)}
+.sets-grid{display:flex;flex-direction:column;gap:5px}
+.set-row{display:flex;align-items:center;gap:8px;font-size:.78rem;font-family:var(--font-mono)}
+.set-row label{color:var(--dim);min-width:28px;font-size:.72rem}
+.set-row .sep{color:var(--dim)}
+.set-row .target{color:var(--dim);font-size:.68rem;margin-left:auto;white-space:nowrap}
+input[type=number]{background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:7px;padding:7px 6px;width:62px;font-family:var(--font-mono);font-size:.82rem;text-align:center;outline:none;transition:border .15s;-moz-appearance:textfield}
+input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none}
+input[type=number]:focus{border-color:var(--accent)}
+input[type=checkbox]{appearance:none;-webkit-appearance:none;width:24px;height:24px;border:2px solid var(--border);border-radius:6px;cursor:pointer;position:relative;flex-shrink:0;transition:all .15s}
+input[type=checkbox]:checked{background:var(--accent);border-color:var(--accent)}
+input[type=checkbox]:checked::after{content:'✓';position:absolute;color:#fff;font-size:13px;top:50%;left:50%;transform:translate(-50%,-50%);font-weight:700}
+
+/* ── RULES ── */
+.rule{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:.9rem;margin-bottom:.5rem;font-size:.84rem;line-height:1.6;color:var(--muted)}
+.rule strong{color:var(--text)}
+.rule em{color:var(--gold);font-style:normal}
+.section-title{font-family:var(--font-display);font-size:1.15rem;letter-spacing:1px;margin:1.2rem 0 .6rem}
+
+/* ── LOG TABLE ── */
+.log-filters{display:flex;gap:6px;margin-bottom:1rem;overflow-x:auto;padding-bottom:4px;scrollbar-width:none}
+.log-filters::-webkit-scrollbar{display:none}
+.log-filter{font-family:var(--font-mono);font-size:.68rem;padding:6px 12px;border-radius:7px;border:1px solid var(--border);background:var(--surface);color:var(--muted);cursor:pointer;white-space:nowrap;flex-shrink:0;transition:all .15s}
+.log-filter.active{color:var(--accent2);border-color:var(--accent);background:var(--surface2)}
+.week-group{margin-bottom:1.5rem}
+.week-header{font-family:var(--font-display);font-size:1.2rem;letter-spacing:2px;padding:6px 0;border-bottom:2px solid var(--accent);margin-bottom:.6rem;display:flex;justify-content:space-between;align-items:baseline;cursor:pointer;user-select:none}
+.week-header .wk-dates{font-family:var(--font-mono);font-size:.68rem;color:var(--muted);letter-spacing:0;font-weight:400}
+.week-header .wk-toggle{font-size:.75rem;color:var(--muted);transition:transform .2s}
+.day-log{margin-bottom:.8rem}
+.day-log-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:3px}
+.day-log-title{font-weight:700;font-size:.82rem;color:var(--accent2)}
+.day-log-date{font-family:var(--font-mono);font-size:.68rem;color:var(--muted)}
+.log-table-wrap{overflow-x:auto;background:var(--surface);border:1px solid var(--border);border-radius:8px}
+.log-table{width:100%;border-collapse:collapse;font-family:var(--font-mono);font-size:.74rem}
+.log-table th{text-align:left;color:var(--muted);font-weight:600;padding:5px 8px;border-bottom:1px solid var(--border);font-size:.66rem;text-transform:uppercase;letter-spacing:.5px;white-space:nowrap}
+.log-table td{padding:4px 8px;border-bottom:1px solid var(--surface2);white-space:nowrap}
+.log-table tr:last-child td{border-bottom:none}
+.log-table .ex-nm{color:var(--text);font-family:var(--font-body);font-weight:600;font-size:.78rem;max-width:140px;overflow:hidden;text-overflow:ellipsis}
+.log-table .c-done{color:var(--green)}
+.log-table .c-miss{color:var(--muted)}
+.log-table .c-empty{color:var(--border)}
+.btn-del{background:none;border:none;color:var(--dim);cursor:pointer;font-size:.72rem;font-family:var(--font-mono);padding:2px 6px;border-radius:4px}
+.btn-del:hover{color:var(--red);background:var(--redDim)}
+
+/* ── BOTTOM BAR ── */
+.bottom-bar{position:fixed;bottom:0;left:0;right:0;background:rgba(8,8,13,.94);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border-top:1px solid var(--border);padding:10px 1rem;display:flex;gap:8px;justify-content:center;z-index:100}
+.bottom-bar button{font-weight:600;font-size:.82rem;padding:11px 20px;border:none;border-radius:10px;transition:all .15s}
+.bb-log{background:var(--green);color:#000}
+.bb-log:hover{background:#5de8b5}
+.bb-save{background:var(--accent);color:#fff}
+.bb-save:hover{background:var(--accent2)}
+.bb-clear{background:var(--surface2);color:var(--muted);border:1px solid var(--border)!important}
+.bb-clear:hover{color:var(--red);border-color:var(--red)!important}
+
+/* ── TOAST ── */
+.toast{position:fixed;bottom:75px;left:50%;transform:translateX(-50%);background:var(--green);color:#000;padding:10px 22px;border-radius:10px;font-weight:700;font-size:.82rem;opacity:0;transition:opacity .3s;pointer-events:none;z-index:300;white-space:nowrap}
+.toast.show{opacity:1}
+
+/* ── MODAL ── */
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);z-index:200;align-items:flex-end;justify-content:center}
+.modal-overlay.open{display:flex}
+.modal{background:var(--surface);border:1px solid var(--border);border-radius:20px 20px 0 0;width:100%;max-width:480px;max-height:85vh;overflow-y:auto;padding:1.5rem}
+.modal h2{font-family:var(--font-display);font-size:1.4rem;letter-spacing:1px;margin-bottom:1rem}
+.modal-field{margin-bottom:.8rem}
+.modal-field label{display:block;font-size:.75rem;color:var(--muted);margin-bottom:4px;font-family:var(--font-mono);text-transform:uppercase;letter-spacing:.5px}
+.modal-field input,.modal-field select{width:100%;background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:10px 12px;font-size:.88rem;outline:none}
+.modal-field input:focus,.modal-field select:focus{border-color:var(--accent)}
+.modal-actions{display:flex;gap:8px;margin-top:1.2rem}
+.modal-actions button{flex:1;padding:12px;border:none;border-radius:10px;font-weight:700;font-size:.88rem}
+.modal-actions .m-cancel{background:var(--surface2);color:var(--muted)}
+.modal-actions .m-save{background:var(--accent);color:#fff}
+.modal-actions .m-delete{background:var(--redDim);color:var(--red);flex:0 0 auto;padding:12px 16px}
+
+/* ── LOADING ── */
+.loading{display:flex;align-items:center;justify-content:center;min-height:100vh;min-height:100dvh;color:var(--muted);font-family:var(--font-mono);font-size:.85rem}
+.spinner{width:20px;height:20px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .6s linear infinite;margin-right:10px}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* ── ADD EXERCISE BTN ── */
+.add-ex-btn{width:100%;padding:12px;border:2px dashed var(--border);background:transparent;color:var(--dim);border-radius:12px;font-weight:600;font-size:.82rem;transition:all .15s;margin-top:.3rem}
+.add-ex-btn:hover{border-color:var(--accent);color:var(--accent)}
+
+/* ── RESPONSIVE ── */
+@media(max-width:500px){
+  .top-bar h1{font-size:1.2rem}
+  .panel-title{font-size:1.3rem}
+  input[type=number]{width:54px;padding:6px 4px;font-size:.78rem}
+  .set-row{gap:5px}
+  .bottom-bar button{padding:10px 14px;font-size:.78rem}
+  .tab{padding:8px 10px;font-size:.66rem}
+  .modal{padding:1.2rem}
+}
+@media(min-width:768px){
+  .modal-overlay{align-items:center}
+  .modal{border-radius:20px;max-height:80vh}
+}
+
+/* safe area for notch phones */
+@supports(padding-bottom: env(safe-area-inset-bottom)){
+  .bottom-bar{padding-bottom:calc(10px + env(safe-area-inset-bottom))}
+}
+</style>
+</head>
+<body>
+
+<!-- ════════ LOADING ════════ -->
+<div class="loading" id="loadingScreen">
+  <div class="spinner"></div> Loading...
+</div>
+
+<!-- ════════ AUTH SCREEN ════════ -->
+<div class="screen" id="authScreen">
+  <div class="auth-box">
+    <div class="auth-logo">
+      <h1>STRENGTH &amp; SHRED</h1>
+      <p>4-Day Body Recomp Program</p>
+    </div>
+
+    <!-- Login Form -->
+    <div id="loginForm">
+      <input class="auth-input" type="email" id="loginEmail" placeholder="Email" autocomplete="email">
+      <input class="auth-input" type="password" id="loginPass" placeholder="Password" autocomplete="current-password">
+      <button class="auth-btn primary" onclick="doLogin()">Sign In</button>
+      <div class="auth-divider">NEW HERE?</div>
+      <button class="auth-btn ghost" onclick="showSignup()">Create an account →</button>
+      <div class="auth-error" id="loginError"></div>
+    </div>
+
+    <!-- Signup Form -->
+    <div id="signupForm" style="display:none">
+      <div class="auth-name-row">
+        <input class="auth-input" type="text" id="signupFirst" placeholder="First name">
+        <input class="auth-input" type="text" id="signupLast" placeholder="Last name">
+      </div>
+      <input class="auth-input" type="email" id="signupEmail" placeholder="Email" autocomplete="email">
+      <input class="auth-input" type="password" id="signupPass" placeholder="Password (6+ chars)" autocomplete="new-password">
+      <button class="auth-btn primary" onclick="doSignup()">Create Account</button>
+      <div class="auth-divider">ALREADY HAVE AN ACCOUNT?</div>
+      <button class="auth-btn ghost" onclick="showLogin()">Sign in instead →</button>
+      <div class="auth-error" id="signupError"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ════════ MAIN APP ════════ -->
+<div class="screen" id="appScreen">
+
+  <div class="top-bar">
+    <h1>STRENGTH &amp; SHRED</h1>
+    <div class="user-pill">
+      <strong id="userName"></strong>
+      <button class="btn-icon" onclick="doLogout()" title="Sign out">⏻</button>
+    </div>
+  </div>
+
+  <div class="tabs" id="tabBar"></div>
+
+  <!-- Rules Panel -->
+  <div class="panel" id="panel-rules">
+    <div class="panel-title">KEY RULES</div>
+    <div class="panel-sub">Follow these for maximum results</div>
+    <div class="rule"><strong>Schedule:</strong> Mon = Upper A · Tue = Lower A · Thu = Upper B · Fri = Lower B. Rest Wed/Sat/Sun.</div>
+    <div class="rule"><strong>Progressive Overload</strong> = #1 driver. Add weight or <em>1–2 extra reps</em> when you hit the top of the range with good form.</div>
+    <div class="rule"><strong>Rep ranges:</strong> 4–6 = strength · 8–12 = hypertrophy · 12–15+ = endurance/burn</div>
+    <div class="rule"><strong>Rest:</strong> 2–3 min on big compounds, 60–90 sec on isolation.</div>
+    <div class="rule"><strong>Workout length:</strong> 45–60 min.</div>
+    <div class="rule"><strong>Warm-up:</strong> 5–10 min light cardio + 1–2 light warm-up sets of your first exercise.</div>
+    <div class="rule"><strong>Nutrition = 80% of fat loss:</strong> 300–500 cal deficit, <em>1.6–2.2 g protein/kg bodyweight</em>.</div>
+    <div class="rule"><strong>Optional cardio:</strong> 20–30 min steady-state on rest days. Don't overdo it.</div>
+    <div class="section-title">WEEKLY PROGRESSION</div>
+    <div class="rule"><strong>Weeks 1–2:</strong> Learn form, pick controllable weights.</div>
+    <div class="rule"><strong>Every 1–2 weeks:</strong> Hit top rep range → add <em>5–10 lbs</em> next session.</div>
+    <div class="rule"><strong>After 4–6 weeks:</strong> Progress to advanced version or add drop sets.</div>
+  </div>
+
+  <!-- Day Panels (generated by JS) -->
+  <div id="dayPanelsContainer"></div>
+
+  <!-- Log Panel -->
+  <div class="panel" id="panel-log">
+    <div class="panel-title">EXERCISE LOG</div>
+    <div class="panel-sub">Weekly spreadsheet — track your progression</div>
+    <div id="logContent"></div>
+  </div>
+
+  <!-- Bottom Bar -->
+  <div class="bottom-bar">
+    <button class="bb-log" onclick="logWorkout()">📋 Log Workout</button>
+    <button class="bb-save" onclick="saveInputs()">💾 Save</button>
+    <button class="bb-clear" onclick="clearInputs()">Clear</button>
+  </div>
+</div>
+
+<!-- ════════ EDIT EXERCISE MODAL ════════ -->
+<div class="modal-overlay" id="editModal">
+  <div class="modal">
+    <h2 id="editModalTitle">Edit Exercise</h2>
+    <div class="modal-field">
+      <label>Exercise Name</label>
+      <input type="text" id="editExName">
+    </div>
+    <div class="modal-field">
+      <label>Sets</label>
+      <input type="number" id="editExSets" min="1" max="10">
+    </div>
+    <div class="modal-field">
+      <label>Target Reps</label>
+      <input type="text" id="editExReps" placeholder="e.g. 8–10 or 30–60s">
+    </div>
+    <div class="modal-actions">
+      <button class="m-cancel" onclick="closeEditModal()">Cancel</button>
+      <button class="m-delete" onclick="deleteExercise()">🗑</button>
+      <button class="m-save" onclick="saveExerciseEdit()">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- ════════ ADD EXERCISE MODAL ════════ -->
+<div class="modal-overlay" id="addModal">
+  <div class="modal">
+    <h2>Add Exercise</h2>
+    <div class="modal-field">
+      <label>Exercise Name</label>
+      <input type="text" id="addExName" placeholder="e.g. Barbell Curl">
+    </div>
+    <div class="modal-field">
+      <label>Sets</label>
+      <input type="number" id="addExSets" value="3" min="1" max="10">
+    </div>
+    <div class="modal-field">
+      <label>Target Reps</label>
+      <input type="text" id="addExReps" placeholder="e.g. 10–12">
+    </div>
+    <div class="modal-actions">
+      <button class="m-cancel" onclick="closeAddModal()">Cancel</button>
+      <button class="m-save" onclick="saveNewExercise()">Add Exercise</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ╔══════════════════════════════════════════╗
+// ║  🔥 FIREBASE CONFIG — REPLACE WITH YOURS ║
+// ╚══════════════════════════════════════════╝
+const firebaseConfig = {
+  apiKey: "AIzaSyCbH-A7pp1xrtwHSaVUKlPA0hR2skHu9iY",
+  authDomain: "lexenfitness.firebaseapp.com",
+  projectId: "lexenfitness",
+  storageBucket: "lexenfitness.firebasestorage.app",
+  messagingSenderId: "570672585202",
+  appId: "1:570672585202:web:ce329745b0282ee86c736b",
+  measurementId: "G-E5LZERX8VY"
+};
+
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+const db = firebase.firestore();
+
+// ── DEFAULT PROGRAM ──
+const DEFAULT_PROGRAM = [
+  { id:'day1', title:'UPPER A', subtitle:'Push + Pull Strength (Monday)', exercises:[
+    {name:'Barbell Bench Press',sets:4,reps:'6–8'},
+    {name:'Overhead Barbell/DB Press',sets:3,reps:'8–10'},
+    {name:'Bent-Over Barbell Row',sets:4,reps:'8–10'},
+    {name:'Lat Pulldown (wide grip)',sets:3,reps:'10–12'},
+    {name:'Dumbbell Lateral Raises',sets:3,reps:'12–15'},
+    {name:'Tricep Pushdowns',sets:3,reps:'10–12'},
+    {name:'Dumbbell Bicep Curls',sets:3,reps:'12–15'},
+  ]},
+  { id:'day2', title:'LOWER A', subtitle:'Quad + Posterior Chain (Tuesday)', exercises:[
+    {name:'Back Squat',sets:4,reps:'6–8'},
+    {name:'Romanian Deadlift',sets:4,reps:'8–10'},
+    {name:'Bulgarian Split Squats',sets:3,reps:'10/leg'},
+    {name:'Lying/Seated Leg Curl',sets:3,reps:'10–12'},
+    {name:'Standing Calf Raises',sets:4,reps:'12–15'},
+    {name:'Plank',sets:3,reps:'30–60s',isTime:true},
+  ]},
+  { id:'day3', title:'UPPER B', subtitle:'Balanced Growth Angles (Thursday)', exercises:[
+    {name:'Incline DB Bench Press',sets:4,reps:'8–10'},
+    {name:'Seated DB Shoulder Press',sets:3,reps:'8–12'},
+    {name:'Seated Cable Row',sets:4,reps:'8–10'},
+    {name:'Pull-Ups (or Assisted)',sets:3,reps:'6–10'},
+    {name:'Face Pulls',sets:3,reps:'12–15'},
+    {name:'Overhead Tricep Extension',sets:3,reps:'10–12'},
+    {name:'Hammer Curls',sets:3,reps:'12–15'},
+  ]},
+  { id:'day4', title:'LOWER B', subtitle:'Hip-Dominant + Volume (Friday)', exercises:[
+    {name:'Conventional Deadlift',sets:3,reps:'5–7'},
+    {name:'Front Squat / Leg Press',sets:3,reps:'8–10'},
+    {name:'Hip Thrusts / Glute Bridges',sets:3,reps:'10–12'},
+    {name:'Walking Lunges (DB)',sets:3,reps:'10/leg'},
+    {name:'Seated Calf Raises',sets:4,reps:'12–15'},
+    {name:'Hanging Leg Raises',sets:3,reps:'10–15'},
+  ]},
+];
+
+// ── STATE ──
+let currentUser = null;
+let program = JSON.parse(JSON.stringify(DEFAULT_PROGRAM));
+let workoutLog = [];
+let currentTab = 'rules';
+let logFilter = 'all';
+let editTarget = null; // {dayIdx, exIdx}
+let addTarget = null;  // dayIdx
+
+// ── AUTH FUNCTIONS ──
+function showLogin(){ document.getElementById('loginForm').style.display=''; document.getElementById('signupForm').style.display='none'; }
+function showSignup(){ document.getElementById('loginForm').style.display='none'; document.getElementById('signupForm').style.display=''; }
+
+async function doLogin(){
+  const email = document.getElementById('loginEmail').value.trim();
+  const pass = document.getElementById('loginPass').value;
+  document.getElementById('loginError').textContent = '';
+  try {
+    await auth.signInWithEmailAndPassword(email, pass);
+  } catch(e){
+    document.getElementById('loginError').textContent = friendlyError(e.code);
+  }
+}
+
+async function doSignup(){
+  const first = document.getElementById('signupFirst').value.trim();
+  const last = document.getElementById('signupLast').value.trim();
+  const email = document.getElementById('signupEmail').value.trim();
+  const pass = document.getElementById('signupPass').value;
+  document.getElementById('signupError').textContent = '';
+  if(!first){ document.getElementById('signupError').textContent = 'First name required'; return; }
+  try {
+    const cred = await auth.createUserWithEmailAndPassword(email, pass);
+    await cred.user.updateProfile({ displayName: first + (last ? ' '+last : '') });
+    // Create user doc with default program
+    await db.collection('users').doc(cred.user.uid).set({
+      name: first + (last ? ' '+last : ''),
+      email: email,
+      program: DEFAULT_PROGRAM,
+      createdAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+  } catch(e){
+    document.getElementById('signupError').textContent = friendlyError(e.code);
+  }
+}
+
+function doLogout(){ auth.signOut(); }
+
+function friendlyError(code){
+  const map = {
+    'auth/invalid-email':'Invalid email address',
+    'auth/user-disabled':'Account disabled',
+    'auth/user-not-found':'No account with that email',
+    'auth/wrong-password':'Incorrect password',
+    'auth/email-already-in-use':'Email already registered',
+    'auth/weak-password':'Password must be 6+ characters',
+    'auth/invalid-credential':'Invalid email or password',
+    'auth/too-many-requests':'Too many attempts — try again later',
+  };
+  return map[code] || 'Something went wrong. Try again.';
+}
+
+// ── AUTH STATE LISTENER ──
+auth.onAuthStateChanged(async user => {
+  document.getElementById('loadingScreen').style.display = 'none';
+  if(user){
+    currentUser = user;
+    document.getElementById('authScreen').classList.remove('active');
+    document.getElementById('appScreen').classList.add('active');
+    document.getElementById('userName').textContent = user.displayName || user.email;
+    await loadUserData();
+    buildTabs();
+    switchTab('rules');
+  } else {
+    currentUser = null;
+    document.getElementById('appScreen').classList.remove('active');
+    document.getElementById('authScreen').classList.add('active');
+  }
+});
+
+// ── FIRESTORE LOAD/SAVE ──
+async function loadUserData(){
+  try {
+    const doc = await db.collection('users').doc(currentUser.uid).get();
+    if(doc.exists){
+      const data = doc.data();
+      if(data.program) program = data.program;
+      else program = JSON.parse(JSON.stringify(DEFAULT_PROGRAM));
+    } else {
+      program = JSON.parse(JSON.stringify(DEFAULT_PROGRAM));
+      await db.collection('users').doc(currentUser.uid).set({
+        name: currentUser.displayName || '',
+        email: currentUser.email,
+        program: program,
+        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+      });
+    }
+    // Load log
+    const logSnap = await db.collection('users').doc(currentUser.uid).collection('log').orderBy('date','desc').limit(200).get();
+    workoutLog = [];
+    logSnap.forEach(d => workoutLog.push({ _id: d.id, ...d.data() }));
+    // Load saved inputs
+    const inputDoc = await db.collection('users').doc(currentUser.uid).collection('meta').doc('inputs').get();
+    if(inputDoc.exists) savedInputs = inputDoc.data().data || {};
+    else savedInputs = {};
+  } catch(e){ console.error('Load error:', e); }
+}
+
+async function saveProgramToCloud(){
+  try {
+    await db.collection('users').doc(currentUser.uid).update({ program });
+  } catch(e){ console.error('Save program error:', e); }
+}
+
+async function saveLogEntryToCloud(entry){
+  try {
+    const ref = await db.collection('users').doc(currentUser.uid).collection('log').add(entry);
+    entry._id = ref.id;
+    workoutLog.unshift(entry);
+  } catch(e){ console.error('Save log error:', e); }
+}
+
+async function deleteLogEntryFromCloud(id){
+  try {
+    await db.collection('users').doc(currentUser.uid).collection('log').doc(id).delete();
+    workoutLog = workoutLog.filter(e => e._id !== id);
+  } catch(e){ console.error('Delete log error:', e); }
+}
+
+let savedInputs = {};
+async function saveInputsToCloud(){
+  try {
+    await db.collection('users').doc(currentUser.uid).collection('meta').doc('inputs').set({ data: savedInputs });
+  } catch(e){ console.error('Save inputs error:', e); }
+}
+
+// ── TABS ──
+function buildTabs(){
+  const bar = document.getElementById('tabBar');
+  let html = `<div class="tab active" data-tab="rules">RULES</div>`;
+  program.forEach(d => { html += `<div class="tab" data-tab="${d.id}">${d.title}</div>`; });
+  html += `<div class="tab log-tab" data-tab="log">📋 LOG</div>`;
+  bar.innerHTML = html;
+  bar.querySelectorAll('.tab').forEach(t => t.addEventListener('click', () => switchTab(t.dataset.tab)));
+}
+
+function switchTab(id){
+  currentTab = id;
+  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === id));
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  const panel = document.getElementById('panel-'+id);
+  if(panel) panel.classList.add('active');
+  if(id === 'log') renderLog();
+  if(program.find(d=>d.id===id)) buildDayPanel(id);
+}
+
+// ── BUILD DAY PANEL ──
+function buildDayPanel(dayId){
+  const day = program.find(d=>d.id===dayId);
+  if(!day) return;
+  let existing = document.getElementById('panel-'+dayId);
+  if(!existing){
+    existing = document.createElement('div');
+    existing.className = 'panel';
+    existing.id = 'panel-'+dayId;
+    document.getElementById('dayPanelsContainer').appendChild(existing);
+  }
+  existing.classList.add('active');
+
+  let html = `<div class="panel-title">${day.title}</div><div class="panel-sub">${day.subtitle}</div>`;
+  const dayIdx = program.indexOf(day);
+
+  day.exercises.forEach((ex, ei) => {
+    html += `<div class="exercise">
+      <div class="ex-header">
+        <span class="ex-num">${ei+1}</span>
+        <span class="ex-name">${ex.name}</span>
+        <div class="ex-actions">
+          <button class="ex-btn" onclick="openEditModal(${dayIdx},${ei})" title="Edit">✏️</button>
+        </div>
+      </div>
+      <div class="sets-grid">`;
+    for(let s=0; s<ex.sets; s++){
+      const wKey = `${dayId}_e${ei}_s${s}_w`;
+      const rKey = `${dayId}_e${ei}_s${s}_r`;
+      const cKey = `${dayId}_e${ei}_s${s}_c`;
+      if(ex.isTime){
+        html += `<div class="set-row">
+          <label>S${s+1}</label>
+          <input type="number" id="${rKey}" placeholder="sec" min="0" value="${savedInputs[rKey]||''}">
+          <span class="sep">sec</span>
+          <input type="checkbox" id="${cKey}" ${savedInputs[cKey]?'checked':''}>
+          <span class="target">${ex.reps}</span>
+        </div>`;
+      } else {
+        html += `<div class="set-row">
+          <label>S${s+1}</label>
+          <input type="number" id="${wKey}" placeholder="lbs" min="0" value="${savedInputs[wKey]||''}">
+          <span class="sep">×</span>
+          <input type="number" id="${rKey}" placeholder="reps" min="0" value="${savedInputs[rKey]||''}">
+          <input type="checkbox" id="${cKey}" ${savedInputs[cKey]?'checked':''}>
+          <span class="target">${ex.reps}</span>
+        </div>`;
+      }
+    }
+    html += `</div></div>`;
+  });
+
+  html += `<button class="add-ex-btn" onclick="openAddModal(${dayIdx})">+ Add Exercise</button>`;
+  existing.innerHTML = html;
+}
+
+// ── EDIT EXERCISE MODAL ──
+function openEditModal(dayIdx, exIdx){
+  editTarget = {dayIdx, exIdx};
+  const ex = program[dayIdx].exercises[exIdx];
+  document.getElementById('editExName').value = ex.name;
+  document.getElementById('editExSets').value = ex.sets;
+  document.getElementById('editExReps').value = ex.reps;
+  document.getElementById('editModalTitle').textContent = 'Edit Exercise';
+  document.getElementById('editModal').classList.add('open');
+}
+function closeEditModal(){ document.getElementById('editModal').classList.remove('open'); editTarget=null; }
+
+async function saveExerciseEdit(){
+  if(!editTarget) return;
+  const ex = program[editTarget.dayIdx].exercises[editTarget.exIdx];
+  ex.name = document.getElementById('editExName').value.trim() || ex.name;
+  ex.sets = parseInt(document.getElementById('editExSets').value) || ex.sets;
+  ex.reps = document.getElementById('editExReps').value.trim() || ex.reps;
+  ex.isTime = /sec|s$/i.test(ex.reps);
+  await saveProgramToCloud();
+  closeEditModal();
+  buildDayPanel(program[editTarget.dayIdx].id);
+  switchTab(program[editTarget.dayIdx].id);
+  showToast('Exercise updated!');
+}
+
+async function deleteExercise(){
+  if(!editTarget) return;
+  if(!confirm('Remove this exercise?')) return;
+  program[editTarget.dayIdx].exercises.splice(editTarget.exIdx, 1);
+  await saveProgramToCloud();
+  closeEditModal();
+  const dayId = program[editTarget.dayIdx].id;
+  buildDayPanel(dayId);
+  switchTab(dayId);
+  showToast('Exercise removed.');
+}
+
+// ── ADD EXERCISE MODAL ──
+function openAddModal(dayIdx){
+  addTarget = dayIdx;
+  document.getElementById('addExName').value = '';
+  document.getElementById('addExSets').value = 3;
+  document.getElementById('addExReps').value = '';
+  document.getElementById('addModal').classList.add('open');
+}
+function closeAddModal(){ document.getElementById('addModal').classList.remove('open'); addTarget=null; }
+
+async function saveNewExercise(){
+  if(addTarget === null) return;
+  const name = document.getElementById('addExName').value.trim();
+  const sets = parseInt(document.getElementById('addExSets').value) || 3;
+  const reps = document.getElementById('addExReps').value.trim() || '8–12';
+  if(!name){ showToast('Enter an exercise name'); return; }
+  const newEx = { name, sets, reps, isTime: /sec|s$/i.test(reps) };
+  program[addTarget].exercises.push(newEx);
+  await saveProgramToCloud();
+  closeAddModal();
+  const dayId = program[addTarget].id;
+  buildDayPanel(dayId);
+  switchTab(dayId);
+  showToast('Exercise added!');
+}
+
+// ── CAPTURE INPUTS ──
+function captureInputs(){
+  const data = {};
+  document.querySelectorAll('input[type=number]').forEach(el => { if(el.id && el.value) data[el.id] = el.value; });
+  document.querySelectorAll('input[type=checkbox]').forEach(el => { if(el.id) data[el.id] = el.checked; });
+  return data;
+}
+
+// ── SAVE / CLEAR INPUTS ──
+async function saveInputs(){
+  savedInputs = captureInputs();
+  await saveInputsToCloud();
+  showToast('Progress saved to cloud!');
+}
+
+function clearInputs(){
+  if(!confirm('Clear current inputs? Log history is kept.')) return;
+  document.querySelectorAll('.panel input[type=number]').forEach(el => el.value='');
+  document.querySelectorAll('.panel input[type=checkbox]').forEach(el => el.checked=false);
+  savedInputs = {};
+  saveInputsToCloud();
+  showToast('Inputs cleared.');
+}
+
+// ── LOG WORKOUT ──
+async function logWorkout(){
+  const day = program.find(d => d.id === currentTab);
+  if(!day){ showToast('Switch to a workout day first!'); return; }
+  const entry = { dayId:day.id, dayTitle:day.title, date:new Date().toISOString(), exercises:[] };
+  const dayIdx = program.indexOf(day);
+  let hasData = false;
+  day.exercises.forEach((ex, ei) => {
+    const sets = [];
+    for(let s=0;s<ex.sets;s++){
+      const wEl = document.getElementById(`${day.id}_e${ei}_s${s}_w`);
+      const rEl = document.getElementById(`${day.id}_e${ei}_s${s}_r`);
+      const cEl = document.getElementById(`${day.id}_e${ei}_s${s}_c`);
+      const w = wEl ? wEl.value : '';
+      const r = rEl ? rEl.value : '';
+      if(w || r) hasData = true;
+      sets.push({ weight:w, reps:r, done:cEl?cEl.checked:false, isTime:!!ex.isTime });
+    }
+    entry.exercises.push({ name:ex.name, sets });
+  });
+  if(!hasData){ showToast('Fill in some sets first!'); return; }
+  await saveLogEntryToCloud(entry);
+  showToast(`${day.title} logged! ✓`);
+}
+
+// ── RENDER LOG ──
+function renderLog(){
+  const container = document.getElementById('logContent');
+  if(!workoutLog.length){
+    container.innerHTML = '<p style="color:var(--muted);font-size:.84rem;padding:1rem 0">No workouts logged yet. Fill in a day and hit "Log Workout."</p>';
+    return;
+  }
+  const filtered = logFilter==='all' ? workoutLog : workoutLog.filter(e=>e.dayId===logFilter);
+  // Group by week
+  const weeks = {};
+  filtered.forEach(entry => {
+    const d = new Date(entry.date);
+    const mon = getMonday(d);
+    const key = mon.toISOString().slice(0,10);
+    if(!weeks[key]) weeks[key] = {monday:mon, entries:[]};
+    weeks[key].entries.push(entry);
+  });
+  const sorted = Object.values(weeks).sort((a,b) => b.monday - a.monday);
+
+  let html = '<div class="log-filters">';
+  html += `<div class="log-filter ${logFilter==='all'?'active':''}" onclick="setFilter('all')">All</div>`;
+  program.forEach(d => html += `<div class="log-filter ${logFilter===d.id?'active':''}" onclick="setFilter('${d.id}')">${d.title}</div>`);
+  html += '</div>';
+
+  if(!sorted.length){ html += '<p style="color:var(--muted);font-size:.84rem">No entries match filter.</p>'; container.innerHTML=html; return; }
+
+  sorted.forEach((week,wi) => {
+    const sun = new Date(week.monday); sun.setDate(sun.getDate()+6);
+    const fmt = d => d.toLocaleDateString('en-US',{month:'short',day:'numeric'});
+    const wn = getWeekNum(week.monday);
+    html += `<div class="week-group">`;
+    html += `<div class="week-header" onclick="toggleWk(this)"><span>WEEK ${wn} <span class="wk-dates">${fmt(week.monday)} – ${fmt(sun)}</span></span><span class="wk-toggle">▼</span></div>`;
+    html += `<div class="week-body">`;
+    week.entries.sort((a,b) => new Date(a.date)-new Date(b.date));
+    week.entries.forEach(entry => {
+      const d = new Date(entry.date);
+      const ds = d.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
+      const maxS = Math.max(...entry.exercises.map(x=>x.sets.length));
+      html += `<div class="day-log"><div class="day-log-head"><span class="day-log-title">${entry.dayTitle}</span><span><span class="day-log-date">${ds}</span> <button class="btn-del" onclick="delLog('${entry._id}')">✕</button></span></div>`;
+      html += `<div class="log-table-wrap"><table class="log-table"><thead><tr><th>Exercise</th>`;
+      for(let i=0;i<maxS;i++) html+=`<th>S${i+1}</th>`;
+      html += `</tr></thead><tbody>`;
+      entry.exercises.forEach(ex => {
+        if(!ex.sets.some(s=>s.reps||s.weight)) return;
+        html += `<tr><td class="ex-nm">${ex.name}</td>`;
+        for(let i=0;i<maxS;i++){
+          const s = ex.sets[i];
+          if(!s||(!s.reps&&!s.weight)){ html+='<td class="c-empty">—</td>'; continue; }
+          const cls = s.done?'c-done':'c-miss';
+          html += s.isTime ? `<td class="${cls}">${s.reps||0}s${s.done?' ✓':''}</td>` : `<td class="${cls}">${s.weight||0}×${s.reps||0}${s.done?' ✓':''}</td>`;
+        }
+        html += '</tr>';
+      });
+      html += '</tbody></table></div></div>';
+    });
+    html += '</div></div>';
+  });
+  container.innerHTML = html;
+}
+
+function setFilter(f){ logFilter=f; renderLog(); }
+function toggleWk(el){
+  const body=el.nextElementSibling, tog=el.querySelector('.wk-toggle');
+  if(body.style.maxHeight && body.style.maxHeight!=='0px'){ body.style.maxHeight='0px'; body.style.overflow='hidden'; tog.style.transform='rotate(-90deg)'; }
+  else { body.style.maxHeight=body.scrollHeight+'px'; body.style.overflow='visible'; tog.style.transform='rotate(0deg)'; }
+}
+async function delLog(id){
+  if(!confirm('Delete this entry?')) return;
+  await deleteLogEntryFromCloud(id);
+  renderLog();
+  showToast('Entry deleted.');
+}
+function getMonday(d){ const dt=new Date(d); const day=dt.getDay(); dt.setDate(dt.getDate()-day+(day===0?-6:1)); dt.setHours(0,0,0,0); return dt; }
+function getWeekNum(monday){
+  if(!workoutLog.length) return 1;
+  const dates = workoutLog.map(e=>getMonday(new Date(e.date)).getTime());
+  const earliest = new Date(Math.min(...dates));
+  return Math.round((monday-earliest)/(7*864e5))+1;
+}
+
+// ── TOAST ──
+function showToast(msg){
+  const t=document.getElementById('toast');
+  t.textContent=msg; t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'),2200);
+}
+</script>
+</body>
+</html>
