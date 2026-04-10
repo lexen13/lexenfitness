@@ -7,7 +7,8 @@ const DEV_EMAIL='gabinglee11@gmail.com';
 let U=null,userData={},workoutLog=[],savedInputs={},isDev=false;
 let currentDay='day1',currentPage='workout',logFilter='all',lbMode='all';
 let editTarget=null,addDayIdx=null,selectedClass=null,selectedSub=null,selectedProg=null;
-let prevRankName=null; // track rank changes for splash
+let prevRankName=null;
+let authLock=false; // prevents onAuthStateChanged from racing during signup
 const $=id=>document.getElementById(id);
 
 // ═══════════ AUTH ═══════════
@@ -22,12 +23,25 @@ async function doSignup(){
   if(/[^a-z0-9_]/.test(uname)){$('signupError').textContent='Letters, numbers, underscores only';return}
   const uc=await db.collection('usernames').doc(uname).get();
   if(uc.exists){$('signupError').textContent='Username taken';return}
-  try{const cred=await auth.createUserWithEmailAndPassword(e,p);const dn=f+(l?' '+l:'');await cred.user.updateProfile({displayName:dn});
+  try{
+    authLock=true; // block onAuthStateChanged until we finish
+    const cred=await auth.createUserWithEmailAndPassword(e,p);
+    const dn=f+(l?' '+l:'');
+    await cred.user.updateProfile({displayName:dn});
     const fc=genFriendCode();
     await db.collection('users').doc(cred.user.uid).set({name:dn,username:uname,email:e,friendCode:fc,xp:0,achievements:[],stats:{},prs:{},profilePic:'',class:'',subclass:'',programKey:'',program:[],friends:[],privacy:{hideName:false,hideStats:false},goal:'',experience:'',missionsCompleted:{},missionStreak:0,trialsCompleted:[],createdAt:firebase.firestore.FieldValue.serverTimestamp()});
     await db.collection('usernames').doc(uname).set({uid:cred.user.uid});
     await db.collection('friendCodes').doc(fc).set({uid:cred.user.uid});
-  }catch(err){$('signupError').textContent=friendlyErr(err.code)}
+    authLock=false;
+    // Manually trigger the auth flow now that everything is written
+    U=cred.user;isDev=(U.email===DEV_EMAIL);
+    await loadUserData();
+    prevRankName=getEffectiveRank().name;
+    showScreen('classScreen');buildClassSelect();
+  }catch(err){
+    authLock=false;
+    $('signupError').textContent=friendlyErr(err.code);
+  }
 }
 async function resetPassword(){const e=$('loginEmail').value.trim();if(!e){$('loginError').textContent='Enter email first';return}try{await auth.sendPasswordResetEmail(e);$('loginError').style.color='var(--green)';$('loginError').textContent='Reset link sent!';setTimeout(()=>{$('loginError').style.color='';$('loginError').textContent=''},4000)}catch(err){$('loginError').textContent=friendlyErr(err.code)}}
 async function doGoogleLogin(){
@@ -38,6 +52,7 @@ const doLogout=()=>auth.signOut();
 function friendlyErr(c){return{'auth/invalid-email':'Invalid email','auth/user-not-found':'No account','auth/wrong-password':'Wrong password','auth/email-already-in-use':'Email taken','auth/weak-password':'Password 6+ chars','auth/invalid-credential':'Invalid email or password','auth/too-many-requests':'Too many attempts','auth/requires-recent-login':'Sign out and back in first','auth/popup-closed-by-user':'Sign-in cancelled','auth/cancelled-popup-request':'Sign-in cancelled'}[c]||'Something went wrong'}
 
 auth.onAuthStateChanged(async u=>{
+  if(authLock)return; // signup in progress — don't race
   $('loadingScreen').style.display='none';
   if(u){
     U=u;isDev=(u.email===DEV_EMAIL);
@@ -167,11 +182,12 @@ async function confirmClass(){
 // ═══════════ INIT ═══════════
 function initApp(){document.querySelectorAll('.nav-item').forEach(n=>n.addEventListener('click',()=>switchPage(n.dataset.page)));updateTopBar();switchPage('workout')}
 function updateTopBar(){
-  const r=getEffectiveRank(),info=getXpBarInfo();
-  $('tbXp').textContent=userData.xp+' XP';
+  const r=getEffectiveRank(),info=getXpBarInfo(),cap=getXpCap();
+  const capped=cap!==Infinity&&userData.xp>=cap;
+  $('tbXp').textContent=capped?userData.xp+' XP 🔒':userData.xp+' XP';
+  $('tbXp').style.color=capped?'var(--red)':'';
   const rb=$('tbRank');rb.textContent=r.name;rb.style.color=r.color;rb.style.background=r.color+'22';rb.style.border='1px solid '+r.color+'44';
-  // Mini XP bar in top bar
-  const bar=$('tbXpBar');if(bar){bar.style.width=info.pct+'%';bar.style.background=`linear-gradient(90deg,${r.color},${r.color}cc)`}
+  const bar=$('tbXpBar');if(bar){bar.style.width=info.pct+'%';bar.style.background=capped?'var(--red)':`linear-gradient(90deg,${r.color},${r.color}cc)`}
 }
 function getEffectiveRank(){
   for(let i=RANKS.length-1;i>=0;i--){
@@ -184,6 +200,31 @@ function getEffectiveRank(){
   }
   return RANKS[0];
 }
+
+// ═══════════ XP CAP SYSTEM ═══════════
+// XP hard-caps at the next uncompleted trial threshold
+function getXpCap(){
+  for(let i=0;i<RANKS.length;i++){
+    if(!RANKS[i].auto&&RANKS[i].trial&&!userData.trialsCompleted.includes(RANKS[i].trial)){
+      return RANKS[i].min; // cap AT this rank's min (can reach it but not pass)
+    }
+  }
+  return Infinity; // all trials done, no cap
+}
+function addXP(amount){
+  const cap=getXpCap();
+  const before=userData.xp;
+  userData.xp=Math.min(userData.xp+amount,cap);
+  const gained=userData.xp-before;
+  if(gained<amount&&amount>0){
+    // XP was capped — notify
+    const trial=getAvailableTrial();
+    if(trial)xpCappedMsg=`⚠️ XP CAPPED — Complete ${trial.trial.name} to continue gaining XP`;
+    else xpCappedMsg='';
+  }
+  return gained; // actual XP gained after cap
+}
+let xpCappedMsg='';
 function switchPage(p){currentPage=p;document.querySelectorAll('.nav-item').forEach(n=>n.classList.toggle('active',n.dataset.page===p));document.querySelectorAll('.page').forEach(pg=>pg.classList.remove('active'));$('page-'+p).classList.add('active');
   if(p==='train')buildWorkout();if(p==='profile')renderProfile();if(p==='missions'){renderMissions();renderAchievements()}
   if(p==='nutrition')renderNutritionPage();if(p==='ranks')renderLeaderboard()}
@@ -200,14 +241,17 @@ function renderMissions(){
   const today=getTodayStr();const missions=getDailyMissions(today);
   const completed=userData.missionsCompleted[today]||[];
   const allDone=missions.every(m=>completed.includes(m.id));
+  const cap=getXpCap();const capped=cap!==Infinity&&userData.xp>=cap;
   let h=`<div class="page-title">DAILY MISSIONS</div><div class="page-sub">${completed.length}/${missions.length} complete · Streak: ${userData.missionStreak} days</div>`;
+  // Gate locked warning
+  if(capped){const trial=getAvailableTrial();h+=`<div class="gate-locked-banner">🔒 GATE LOCKED<br><span style="font-size:.72rem;font-family:var(--font-body);letter-spacing:0">XP capped at ${cap}. Complete the trial below to break through.</span></div>`}
   const trialInfo=getAvailableTrial();
   if(trialInfo)h+=renderTrialBanner(trialInfo);
   h+=missions.map(m=>{const done=completed.includes(m.id);
     if(done)return`<div class="mission-card done"><div class="mission-check">✅</div><div class="mission-icon">${m.icon}</div><div class="mission-info"><div class="mission-name">${m.name}</div><div class="mission-desc">${m.desc}</div></div><div class="mission-xp locked">DONE</div></div>`;
-    return`<div class="mission-card" onclick="completeMission('${m.id}')"><div class="mission-check">⬜</div><div class="mission-icon">${m.icon}</div><div class="mission-info"><div class="mission-name">${m.name}</div><div class="mission-desc">${m.desc}</div></div><div class="mission-xp">+${m.xp} XP</div></div>`;
+    return`<div class="mission-card" onclick="completeMission('${m.id}')"><div class="mission-check">⬜</div><div class="mission-icon">${m.icon}</div><div class="mission-info"><div class="mission-name">${m.name}</div><div class="mission-desc">${m.desc}</div></div><div class="mission-xp">${capped?'🔒':'+'+m.xp+' XP'}</div></div>`;
   }).join('');
-  if(allDone)h+=`<div class="mission-bonus">🌟 ALL MISSIONS COMPLETE! +50 BONUS XP 🌟</div>`;
+  if(allDone)h+=`<div class="mission-bonus">🌟 ALL MISSIONS COMPLETE! ${capped?'(XP capped)':'+50 BONUS XP'} 🌟</div>`;
   $('missionsContent').innerHTML=h;
 }
 async function completeMission(mid){
@@ -216,8 +260,8 @@ async function completeMission(mid){
   if(completed.includes(mid))return;
   const m=missions.find(x=>x.id===mid);if(!m)return;
   if(!confirm(`✅ Complete "${m.name}"?\n\n${m.desc}\n\nThis locks in for today.`))return;
-  completed.push(mid);userData.xp+=m.xp;let bonusMsg='';
-  if(missions.every(x=>completed.includes(x.id))){userData.xp+=50;bonusMsg=' +50 BONUS!';unlockAch('missions_all')}
+  completed.push(mid);const gained=addXP(m.xp);let bonusMsg='';
+  if(missions.every(x=>completed.includes(x.id))){addXP(50);bonusMsg=' +50 BONUS!';unlockAch('missions_all')}
   if(completed.length>=3)unlockAch('missions_3');
   userData.missionsCompleted[today]=completed;
   userData.missionStreak=calcMissionStreak();
@@ -258,40 +302,53 @@ async function claimTrial(trialId){
 // ═══════════ DEV TOOLS ═══════════
 function renderDevTools(){
   if(!isDev)return'';
-  const er=getEffectiveRank();const trial=getAvailableTrial();
+  const er=getEffectiveRank();const trial=getAvailableTrial();const cap=getXpCap();
   return`<div class="dev-panel">
     <div class="section-title" style="color:var(--red)">🔧 DEV TOOLS</div>
-    <div style="font-size:.68rem;color:var(--muted);margin:.3rem 0">Current: ${er.name} · XP: ${userData.xp} · Trials done: [${userData.trialsCompleted.join(', ')||'none'}]</div>
-    <div style="font-size:.68rem;color:var(--gold);margin-bottom:.4rem">${trial?'⚠️ Trial available: '+trial.trial.name:'No trial pending'}</div>
+    <div style="font-size:.68rem;color:var(--muted);margin:.3rem 0">Current: ${er.name} · XP: ${userData.xp} · Cap: ${cap===Infinity?'∞':cap} · Trials: [${userData.trialsCompleted.join(', ')||'none'}]</div>
+    <div style="font-size:.68rem;color:${trial?'var(--gold)':'var(--green)'};margin-bottom:.4rem">${trial?'🔒 GATE LOCKED — '+trial.trial.name+' (XP capped at '+cap+')':'✅ No gate blocking'}</div>
     <div class="dev-row">
-      <button class="dev-btn" onclick="devSetXP(400)">400 XP (E)</button>
+      <button class="dev-btn" onclick="devSetXP(400)">400 (E)</button>
       <button class="dev-btn" onclick="devSetXP(1400)">1400 (D)</button>
       <button class="dev-btn" onclick="devSetXP(3400)">3400 (C)</button>
+      <button class="dev-btn" onclick="devAddXP(500)">+500</button>
     </div>
     <div class="dev-row">
-      <button class="dev-btn" onclick="devSetXP(3600)">3600 (B trial)</button>
-      <button class="dev-btn" onclick="devSetXP(7100)">7100 (A trial)</button>
-      <button class="dev-btn" onclick="devSetXP(15100)">15100 (S trial)</button>
+      <button class="dev-btn" onclick="devSetXP(3600)">3600 (→B)</button>
+      <button class="dev-btn" onclick="devSetXP(7100)">7100 (→A)</button>
+      <button class="dev-btn" onclick="devSetXP(15100)">15100 (→S)</button>
+      <button class="dev-btn" style="color:var(--red)" onclick="devForceXP(parseInt(prompt('Force XP to:')||'0'))">Force XP ⚡</button>
+    </div>
+    <div class="dev-row" style="margin-top:.3rem;border-top:1px dashed var(--border);padding-top:.4rem">
+      <button class="dev-btn" style="color:var(--gold)" onclick="devFakeIronGate()">Fake Iron Gate</button>
+      <button class="dev-btn" style="color:var(--gold)" onclick="devFakeGauntlet()">Fake Gauntlet</button>
+      <button class="dev-btn" style="color:var(--gold)" onclick="devFakeAwakening()">Fake Awakening</button>
     </div>
     <div class="dev-row">
-      <button class="dev-btn" onclick="devAddXP(500)">+500 XP</button>
+      <button class="dev-btn" style="color:var(--cyan)" onclick="devInjectWorkouts(5)">+5 Logs</button>
+      <button class="dev-btn" style="color:var(--cyan)" onclick="devInjectWorkouts(20)">+20 Logs</button>
+      <button class="dev-btn" onclick="devTriggerSplash()">Test Splash</button>
+    </div>
+    <div class="dev-row">
       <button class="dev-btn" onclick="devResetTrials()">Reset Trials</button>
-      <button class="dev-btn" onclick="devResetAll()">Full Reset</button>
-    </div>
-    <div class="dev-row" style="margin-top:.4rem;border-top:1px dashed var(--border);padding-top:.4rem">
-      <button class="dev-btn" style="color:var(--gold)" onclick="devFakeIronGate()">Fake Iron Gate ✓</button>
-      <button class="dev-btn" style="color:var(--gold)" onclick="devFakeGauntlet()">Fake Gauntlet ✓</button>
-      <button class="dev-btn" style="color:var(--gold)" onclick="devFakeAwakening()">Fake Awakening ✓</button>
-    </div>
-    <div class="dev-row">
-      <button class="dev-btn" style="color:var(--cyan)" onclick="devInjectWorkouts(5)">+5 Fake Logs</button>
-      <button class="dev-btn" style="color:var(--cyan)" onclick="devInjectWorkouts(20)">+20 Fake Logs</button>
-      <button class="dev-btn" style="color:var(--cyan)" onclick="devTriggerSplash()">Test Splash</button>
+      <button class="dev-btn" style="color:var(--red)" onclick="devResetAll()">Full Reset</button>
     </div>
   </div>`;
 }
-async function devSetXP(xp){userData.xp=xp;await saveUser({xp});await saveLeaderboard();updateTopBar();checkRankUp();renderProfile();toast('DEV: XP set to '+xp)}
-async function devAddXP(xp){userData.xp+=xp;await saveUser({xp:userData.xp});await saveLeaderboard();updateTopBar();checkRankUp();renderProfile();toast('DEV: +'+xp+' XP')}
+async function devSetXP(xp){
+  const cap=getXpCap();userData.xp=Math.min(xp,cap);
+  await saveUser({xp:userData.xp});await saveLeaderboard();updateTopBar();checkRankUp();renderProfile();
+  toast(userData.xp<xp?`DEV: Capped at ${userData.xp} (trial blocks ${cap}+)`:`DEV: XP set to ${userData.xp}`);
+}
+async function devAddXP(xp){
+  const gained=addXP(xp);await saveUser({xp:userData.xp});await saveLeaderboard();updateTopBar();checkRankUp();renderProfile();
+  toast(gained<xp?`DEV: +${gained} XP (capped — trial needed)`:`DEV: +${gained} XP`);
+}
+async function devForceXP(xp){
+  // Bypass cap entirely — for testing splash/rank display only
+  userData.xp=xp;await saveUser({xp});await saveLeaderboard();updateTopBar();checkRankUp();renderProfile();
+  toast('DEV: FORCED XP to '+xp+' (cap bypassed)');
+}
 async function devResetTrials(){userData.trialsCompleted=[];await saveUser({trialsCompleted:[]});updateTopBar();renderProfile();toast('DEV: Trials reset')}
 async function devResetAll(){await saveUser({xp:0,achievements:[],trialsCompleted:[],missionsCompleted:{},missionStreak:0});userData.xp=0;userData.achievements=[];userData.trialsCompleted=[];updateTopBar();renderProfile();toast('DEV: Full reset')}
 
@@ -400,12 +457,14 @@ async function logWorkout(){
   const streak=calcStreak();if(streak>=7)unlockAch('streak_7');if(streak>=30)unlockAch('streak_30');
   const fw=calcFullWeeks();if(fw>=1)unlockAch('full_week');if(fw>=5)unlockAch('full_week_5');
   const nx=userData.xp+xp;if(nx>=500)unlockAch('rank_d');if(nx>=1500)unlockAch('rank_c');
-  await saveUser({xp:nx});await saveLeaderboard();updateTopBar();checkRankUp();toast(day.title+' +'+xp+' XP')}
+  const gained=addXP(xp);await saveUser({xp:userData.xp});await saveLeaderboard();updateTopBar();checkRankUp();
+  let msg=day.title+' +'+gained+' XP';if(gained<xp)msg+=' (CAPPED — complete trial!)';if(xpCappedMsg)msg=xpCappedMsg;
+  toast(msg)}
 function calcStreak(){const dates=[...new Set(workoutLog.map(e=>new Date(e.date).toDateString()))].sort((a,b)=>new Date(b)-new Date(a));let s=0;for(let i=0;i<dates.length;i++){const exp=new Date();exp.setDate(exp.getDate()-i);if(dates[i]===exp.toDateString())s++;else break}return s}
 function calcFullWeeks(){const w={};workoutLog.forEach(e=>{const m=getMonday(new Date(e.date)).toISOString().slice(0,10);if(!w[m])w[m]=new Set();w[m].add(e.dayId)});return Object.values(w).filter(s=>s.size>=4).length}
 
 // ═══════════ ACHIEVEMENTS ═══════════
-async function unlockAch(id){if(userData.achievements.includes(id))return;userData.achievements.push(id);const a=ACHIEVEMENTS.find(x=>x.id===id);if(a&&a.xp>0)userData.xp+=a.xp;await saveUser({achievements:userData.achievements,xp:userData.xp});await saveLeaderboard();updateTopBar()}
+async function unlockAch(id){if(userData.achievements.includes(id))return;userData.achievements.push(id);const a=ACHIEVEMENTS.find(x=>x.id===id);if(a&&a.xp>0)addXP(a.xp);await saveUser({achievements:userData.achievements,xp:userData.xp});await saveLeaderboard();updateTopBar()}
 function renderAchievements(){const ul=userData.achievements||[];$('achSub').textContent=ul.length+' / '+ACHIEVEMENTS.length+' unlocked';$('achGrid').innerHTML=ACHIEVEMENTS.map(a=>{const u=ul.includes(a.id);return`<div class="ach-card${u?' unlocked':''}"><span class="ach-icon">${a.icon}</span><div class="ach-info"><div class="ach-name">${a.name}</div><div class="ach-desc">${a.desc}</div>${a.xp?'<div class="ach-xp">+'+a.xp+' XP</div>':''}</div></div>`}).join('')}
 
 // ═══════════ PROFILE ═══════════
