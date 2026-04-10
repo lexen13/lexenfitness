@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#08080d">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self' https://*.googleapis.com https://*.gstatic.com https://*.firebaseapp.com https://*.firebaseio.com https://world.openfoodfacts.org; script-src 'self' 'unsafe-inline' https://*.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src https://*.googleapis.com https://*.firebaseio.com https://*.firebaseapp.com https://world.openfoodfacts.org; media-src * blob: data:">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self' https://*.googleapis.com https://*.gstatic.com https://*.firebaseapp.com https://*.firebaseio.com https://world.openfoodfacts.org; script-src 'self' 'unsafe-inline' https://*.gstatic.com https://unpkg.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src https://*.googleapis.com https://*.firebaseio.com https://*.firebaseapp.com https://world.openfoodfacts.org; media-src * blob: data:">
 <title>LexenFitness</title>
 <link rel="stylesheet" href="style.css">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -207,10 +207,10 @@
 <!-- BARCODE SCANNER MODAL -->
 <div class="modal-bg" id="scannerModal"><div class="modal" style="text-align:center">
 <h2>📸 Scan Barcode</h2>
-<video id="scannerVideo" style="width:100%;max-height:250px;border-radius:10px;background:#000;display:none" playsinline muted autoplay></video>
-<p id="scannerStatus" style="font-size:.74rem;color:var(--muted);margin:.5rem 0">Starting camera...</p>
+<div id="scannerReader" style="width:100%;border-radius:10px;overflow:hidden"></div>
+<p id="scannerStatus" style="font-size:.74rem;color:var(--muted);margin:.5rem 0"></p>
 <div id="scannerManualRow" class="food-search-bar" style="margin-top:.5rem">
-  <input type="text" id="scannerManualInput" class="auth-input" placeholder="Enter barcode number" style="margin:0;flex:1" inputmode="numeric" onkeydown="if(event.key==='Enter')scannerManualLookup()">
+  <input type="text" id="scannerManualInput" class="auth-input" placeholder="Or type barcode number" style="margin:0;flex:1" inputmode="numeric" onkeydown="if(event.key==='Enter')scannerManualLookup()">
   <button class="m-save-btn" style="flex:0 0 auto;padding:10px 14px;border-radius:8px;margin-left:6px" onclick="scannerManualLookup()">Look Up</button>
 </div>
 <div class="m-actions" style="margin-top:.6rem"><button class="m-cancel" onclick="closeScanner()">Cancel</button></div>
@@ -229,6 +229,7 @@
 <input type="file" id="picInput" accept="image/*" style="display:none">
 <div class="toast" id="toast"></div>
 
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <script src="data.js"></script>
 <script src="app.js"></script>
 <script src="nutrition.js"></script>
