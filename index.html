@@ -12,62 +12,62 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
 </head>
 <body>
-<div class="loading" id="loadingScreen"><div class="spinner"></div>Loading...</div>
+<div class="loading" id="loadingScreen"><div class="spinner"></div>SYSTEM INITIALIZING...</div>
 
-<!-- ══ AUTH ══ -->
+<!-- AUTH -->
 <div class="screen-center" id="authScreen">
 <div class="auth-box">
-<div class="auth-logo"><h1>LEXENFITNESS</h1><p>Train. Level Up. Dominate.</p></div>
+<div class="auth-logo"><h1>LEXENFITNESS</h1><p class="sl-flicker">— SYSTEM ONLINE —</p></div>
 <div id="loginForm">
   <input class="auth-input" type="email" id="loginEmail" placeholder="Email">
   <input class="auth-input" type="password" id="loginPass" placeholder="Password">
-  <button class="auth-btn primary" onclick="doLogin()">Sign In</button>
+  <button class="auth-btn primary" onclick="doLogin()">ENTER THE SYSTEM</button>
   <button class="auth-btn ghost" onclick="resetPassword()" style="margin-top:.2rem;font-size:.72rem">Forgot password?</button>
   <div class="auth-divider">OR</div>
   <button class="auth-btn google" onclick="doGoogleLogin()"><svg width="18" height="18" viewBox="0 0 24 24" style="vertical-align:middle;margin-right:8px"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>Continue with Google</button>
-  <div class="auth-divider">NEW HERE?</div>
+  <div class="auth-divider">NEW HUNTER?</div>
   <button class="auth-btn ghost" onclick="showSignup()">Create an account →</button>
   <div class="auth-error" id="loginError"></div>
 </div>
 <div id="signupForm" style="display:none">
   <div class="auth-name-row"><input class="auth-input" type="text" id="signupFirst" placeholder="First name"><input class="auth-input" type="text" id="signupLast" placeholder="Last name"></div>
-  <input class="auth-input" type="text" id="signupUsername" placeholder="Username (required — public display)" maxlength="20" autocapitalize="off" style="border-color:var(--accent)">
+  <input class="auth-input" type="text" id="signupUsername" placeholder="Username (required — your hunter ID)" maxlength="20" autocapitalize="off" style="border-color:var(--accent)">
   <input class="auth-input" type="email" id="signupEmail" placeholder="Email">
   <input class="auth-input" type="password" id="signupPass" placeholder="Password (6+ chars)">
-  <button class="auth-btn primary" onclick="doSignup()">Create Account</button>
+  <button class="auth-btn primary" onclick="doSignup()">CREATE HUNTER</button>
   <div class="auth-divider">OR</div>
   <button class="auth-btn google" onclick="doGoogleLogin()"><svg width="18" height="18" viewBox="0 0 24 24" style="vertical-align:middle;margin-right:8px"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>Continue with Google</button>
-  <div class="auth-divider">ALREADY HAVE AN ACCOUNT?</div>
+  <div class="auth-divider">ALREADY A HUNTER?</div>
   <button class="auth-btn ghost" onclick="showLogin()">Sign in →</button>
   <div class="auth-error" id="signupError"></div>
 </div>
 </div>
 </div>
 
-<!-- ══ USERNAME REQUIRED (after Google sign-in) ══ -->
+<!-- USERNAME REQUIRED -->
 <div class="screen-center" id="usernameScreen" style="display:none">
 <div class="auth-box">
-  <div class="auth-logo"><h1>ALMOST THERE</h1><p>Choose a username to continue</p></div>
-  <input class="auth-input" type="text" id="newUsername" placeholder="Username (required)" maxlength="20" autocapitalize="off" style="border-color:var(--accent)">
-  <p style="font-size:.7rem;color:var(--muted);margin-bottom:.8rem">This is your public identity — only this shows on leaderboards and to friends. Letters, numbers, underscores only.</p>
-  <button class="auth-btn primary" onclick="submitUsername()">Let's Go</button>
+  <div class="auth-logo"><h1>HUNTER ID</h1><p>The System requires a username to proceed</p></div>
+  <input class="auth-input" type="text" id="newUsername" placeholder="Choose your hunter ID" maxlength="20" autocapitalize="off" style="border-color:var(--accent)">
+  <p style="font-size:.68rem;color:var(--muted);margin-bottom:.8rem">Lowercase letters, numbers, underscores. This is your public identity. Only this shows on leaderboards.</p>
+  <button class="auth-btn primary" onclick="submitUsername()">REGISTER</button>
   <div class="auth-error" id="usernameError"></div>
 </div>
 </div>
 
-<!-- ══ CLASS & PROGRAM SELECT ══ -->
+<!-- CLASS SELECT -->
 <div class="screen-center" id="classScreen" style="display:none;align-items:flex-start;padding-top:1.5rem">
 <div style="width:100%;max-width:540px">
   <div class="cs-title">CHOOSE YOUR CLASS</div>
-  <div class="cs-sub">Pick your class, then choose a program</div>
+  <div class="cs-sub">Pick your class, then your program</div>
   <div class="class-grid" id="classGrid"></div>
   <div class="subclass-area" id="subclassArea"><label>Choose your sport</label><div class="sub-options" id="subOptions"></div></div>
   <div class="program-area" id="programArea"><label>Choose your program</label><div class="program-grid" id="programGrid"></div></div>
-  <button class="cs-confirm" id="csConfirm" disabled onclick="confirmClass()">Lock In</button>
+  <button class="cs-confirm" id="csConfirm" disabled onclick="confirmClass()">⚔️ LOCK IN</button>
 </div>
 </div>
 
-<!-- ══ MAIN APP ══ -->
+<!-- MAIN APP -->
 <div class="screen" id="appScreen">
 <div class="top-bar">
   <h1>LEXENFITNESS</h1>
@@ -80,47 +80,70 @@
   <div class="splash-glow" id="splashGlow"></div>
   <div class="splash-particles" id="splashParticles"></div>
   <div class="splash-content">
-    <div class="splash-label">RANK UP</div>
+    <div class="splash-label">— SYSTEM NOTIFICATION —</div>
     <div class="splash-rank" id="splashRankName"></div>
     <div class="splash-title" id="splashTitle"></div>
     <div class="splash-sub">A new gate has opened...</div>
   </div>
 </div>
-<div class="tb-xp-bar"><div class="tb-xp-bar-fill" id="tbXpBar"></div></div>
 
-<div class="page active" id="page-workout">
-  <div class="page-title" id="workoutTitle">WORKOUT</div>
-  <div class="page-sub" id="workoutSub"></div>
-  <div class="day-tabs" id="dayTabs"></div>
-  <div id="dayContent"></div>
-  <div class="workout-actions"><button class="wa-log" onclick="logWorkout()">📋 Log</button><button class="wa-save" onclick="saveInputs()">💾 Save</button><button class="wa-clear" onclick="clearInputs()">Clear</button></div>
+<!-- ══ TRAIN ══ -->
+<div class="page active" id="page-train">
+  <div class="sub-tabs" id="trainTabs">
+    <div class="stab active" data-st="workout" onclick="switchSubTab('train','workout')">Workout</div>
+    <div class="stab" data-st="log" onclick="switchSubTab('train','log')">Log</div>
+  </div>
+  <div class="sub-page active" id="sp-workout">
+    <div class="page-title" id="workoutTitle">WORKOUT</div>
+    <div class="page-sub" id="workoutSub"></div>
+    <div class="day-tabs" id="dayTabs"></div>
+    <div id="dayContent"></div>
+    <div class="workout-actions"><button class="wa-log" onclick="logWorkout()">📋 Log Workout</button><button class="wa-save" onclick="saveInputs()">💾 Save</button><button class="wa-clear" onclick="clearInputs()">Clear</button></div>
+  </div>
+  <div class="sub-page" id="sp-log">
+    <div class="page-title">EXERCISE LOG</div>
+    <div class="page-sub">Weekly progression</div>
+    <div id="logContent"></div>
+  </div>
 </div>
 
-<div class="page" id="page-log">
-  <div class="page-title">EXERCISE LOG</div>
-  <div class="page-sub">Weekly progression tracker</div>
-  <div id="logContent"></div>
-</div>
-
+<!-- ══ MISSIONS ══ -->
 <div class="page" id="page-missions">
   <div id="missionsContent"></div>
-  <div style="margin-top:1.5rem"><div class="page-title">ACHIEVEMENTS</div><div class="page-sub" id="achSub">0 / 0</div><div class="ach-grid" id="achGrid"></div></div>
+  <div style="margin-top:1.2rem"><div class="page-title">ACHIEVEMENTS</div><div class="page-sub" id="achSub">0 / 0</div><div class="ach-grid" id="achGrid"></div></div>
 </div>
 
+<!-- ══ NUTRITION ══ -->
+<div class="page" id="page-nutrition">
+  <div id="nutritionContent"></div>
+</div>
+
+<!-- ══ RANKS ══ -->
+<div class="page" id="page-ranks">
+  <div class="sub-tabs" id="ranksTabs">
+    <div class="stab active" data-st="leaderboard" onclick="switchSubTab('ranks','leaderboard')">Leaderboard</div>
+    <div class="stab" data-st="rankinfo" onclick="switchSubTab('ranks','rankinfo')">Rank Info</div>
+  </div>
+  <div class="sub-page active" id="sp-leaderboard">
+    <div class="page-title">LEADERBOARD</div>
+    <div class="page-sub">Top hunters by XP</div>
+    <div class="lb-list" id="lbList"></div>
+  </div>
+  <div class="sub-page" id="sp-rankinfo">
+    <div id="rankInfoContent"></div>
+  </div>
+</div>
+
+<!-- ══ PROFILE ══ -->
 <div class="page" id="page-profile"><div id="profileContent"></div></div>
 
-<div class="page" id="page-leaderboard">
-  <div class="page-title">LEADERBOARD</div>
-  <div class="page-sub">Top hunters ranked by XP</div>
-  <div class="lb-list" id="lbList"></div>
-</div>
-
+<!-- NAV -->
 <div class="nav-bar">
-  <div class="nav-item active" data-page="workout"><span class="nav-icon">🏋️</span>Train</div>
-  <div class="nav-item" data-page="log"><span class="nav-icon">📋</span>Log</div>
-  <div class="nav-item" data-page="missions"><span class="nav-icon">⚔️</span>Missions</div>
+  <div class="nav-item active" data-page="train"><span class="nav-icon">⚔️</span>Train</div>
+  <div class="nav-item" data-page="missions"><span class="nav-icon">📋</span>Missions</div>
+  <div class="nav-item" data-page="nutrition"><span class="nav-icon">🍽️</span>Nutrition</div>
+  <div class="nav-item" data-page="ranks"><span class="nav-icon">🏆</span>Ranks</div>
   <div class="nav-item" data-page="profile"><span class="nav-icon">👤</span>Profile</div>
-  <div class="nav-item" data-page="leaderboard"><span class="nav-icon">🔥</span>Ranks</div>
 </div>
 </div>
 
@@ -139,88 +162,72 @@
 <div class="m-actions"><button class="m-cancel" onclick="closeAdd()">Cancel</button><button class="m-save-btn" onclick="saveAdd()">Add</button></div>
 </div></div>
 
-<!-- ══ SETTINGS MODAL ══ -->
+<!-- SETTINGS -->
 <div class="modal-bg" id="settingsModal"><div class="modal" style="max-height:90vh">
 <h2>⚙️ SETTINGS</h2>
 <div class="settings-section">ACCOUNT</div>
 <div class="m-field"><label>Username</label><input type="text" id="setUsername" maxlength="20" autocapitalize="off"></div>
-<div class="m-field"><label>Display Name</label><input type="text" id="setDisplayName"></div>
-<div class="m-field"><label>New Password</label><div class="settings-row"><input type="password" id="setNewPass" placeholder="Leave blank to keep current" style="flex:1"><button class="m-save-btn" style="flex:0 0 auto;padding:10px 12px;margin-left:6px;border-radius:8px;font-size:.76rem" onclick="changePassword()">Update</button></div></div>
-
-<div class="settings-section">BODY STATS</div>
-<div class="settings-row-fields">
-  <div class="m-field" style="flex:1"><label>Height</label><input type="text" id="setHeight" placeholder='5\'10"'></div>
-  <div class="m-field" style="flex:1"><label>Weight (lbs)</label><input type="number" id="setWeight" placeholder="185"></div>
-</div>
-<div class="settings-row-fields">
-  <div class="m-field" style="flex:1"><label>Age</label><input type="number" id="setAge" placeholder="25"></div>
-  <div class="m-field" style="flex:1"><label>Body Fat %</label><input type="number" id="setBodyFat" placeholder="15"></div>
-</div>
-
+<div class="m-field"><label>Display Name (private)</label><input type="text" id="setDisplayName"></div>
+<div class="m-field"><label>New Password</label><div class="settings-row"><input type="password" id="setNewPass" placeholder="Leave blank to keep" style="flex:1"><button class="m-save-btn" style="flex:0 0 auto;padding:10px 12px;margin-left:6px;border-radius:8px;font-size:.76rem" onclick="changePassword()">Update</button></div></div>
+<div class="settings-section">BODY STATS (private)</div>
+<div class="settings-row-fields"><div class="m-field" style="flex:1"><label>Height</label><input type="text" id="setHeight" placeholder='5\'10"'></div><div class="m-field" style="flex:1"><label>Weight (lbs)</label><input type="number" id="setWeight"></div></div>
+<div class="settings-row-fields"><div class="m-field" style="flex:1"><label>Age</label><input type="number" id="setAge"></div><div class="m-field" style="flex:1"><label>Body Fat %</label><input type="number" id="setBodyFat"></div></div>
 <div class="settings-section">PR RECORDS (lbs)</div>
-<div class="settings-row-fields">
-  <div class="m-field" style="flex:1"><label>Bench</label><input type="number" id="setBench" placeholder="225"></div>
-  <div class="m-field" style="flex:1"><label>Squat</label><input type="number" id="setSquat" placeholder="315"></div>
-</div>
-<div class="settings-row-fields">
-  <div class="m-field" style="flex:1"><label>Deadlift</label><input type="number" id="setDeadlift" placeholder="405"></div>
-  <div class="m-field" style="flex:1"><label>OHP</label><input type="number" id="setOhp" placeholder="135"></div>
-</div>
-
+<div class="settings-row-fields"><div class="m-field" style="flex:1"><label>Bench</label><input type="number" id="setBench"></div><div class="m-field" style="flex:1"><label>Squat</label><input type="number" id="setSquat"></div></div>
+<div class="settings-row-fields"><div class="m-field" style="flex:1"><label>Deadlift</label><input type="number" id="setDeadlift"></div><div class="m-field" style="flex:1"><label>OHP</label><input type="number" id="setOhp"></div></div>
 <div class="settings-section">PREFERENCES</div>
 <div class="m-field"><label>Goal</label><select id="setGoal"><option value="">Select...</option></select></div>
 <div class="m-field"><label>Experience</label><select id="setExperience"><option value="">Select...</option></select></div>
-
 <div class="settings-section">PRIVACY</div>
-<label class="toggle-row"><input type="checkbox" class="toggle-cb" id="setHideName"><span>Hide real name (show username only)</span></label>
+<label class="toggle-row"><input type="checkbox" class="toggle-cb" id="setHideName"><span>Hide real name everywhere (username only)</span></label>
 <label class="toggle-row"><input type="checkbox" class="toggle-cb" id="setHideStats"><span>Hide body stats from others</span></label>
-
-<div class="m-actions" style="margin-top:1rem">
-  <button class="m-cancel" onclick="closeSettings()">Cancel</button>
-  <button class="m-save-btn" onclick="saveSettings()">Save All</button>
-</div>
+<div class="m-actions" style="margin-top:1rem"><button class="m-cancel" onclick="closeSettings()">Cancel</button><button class="m-save-btn" onclick="saveSettings()">Save All</button></div>
 <button class="edit-stats-btn" onclick="changeProgram();closeSettings()" style="margin-top:.8rem">🔄 Change Class / Program</button>
 <button class="edit-stats-btn" onclick="doLogout()" style="color:var(--red);border-color:var(--red)">Sign Out</button>
 </div></div>
 
-<!-- ══ RANK-UP SPLASH ══ -->
-<div class="rank-up-overlay" id="rankUpOverlay">
-  <div id="rankUpParticles" class="ru-particles"></div>
-  <div class="ru-content">
-    <div class="ru-label">RANK UP</div>
-    <div class="ru-icon" id="rankUpIcon">⭐</div>
-    <div class="ru-rank" id="rankUpName">B-RANK</div>
-    <div class="ru-title" id="rankUpTitle">Powerhouse</div>
-    <div class="ru-tap">Tap to continue</div>
-  </div>
-</div>
+<!-- FOOD SEARCH MODAL -->
+<div class="modal-bg" id="foodSearchModal"><div class="modal">
+<h2>🔍 Search Food</h2>
+<div class="food-search-bar"><input type="text" id="foodSearchInput" class="auth-input" placeholder="Search food..." style="margin:0;flex:1" onkeydown="if(event.key==='Enter')searchFood()"><button class="m-save-btn" style="flex:0 0 auto;padding:10px 14px;border-radius:8px;margin-left:6px" onclick="searchFood()">Search</button></div>
+<div id="foodSearchResults" style="margin-top:.6rem;max-height:50vh;overflow-y:auto"></div>
+<div class="m-actions" style="margin-top:.6rem"><button class="m-cancel" onclick="closeFoodSearch()">Close</button></div>
+</div></div>
 
-<!-- ══ DEV PANEL (only visible to admin) ══ -->
-<div id="devPanel" style="display:none;position:fixed;top:50px;right:8px;z-index:400;background:var(--surface);border:2px solid var(--red);border-radius:12px;padding:.8rem;font-size:.72rem;max-width:220px">
-  <div style="font-family:var(--font-display);color:var(--red);margin-bottom:.5rem;font-size:.9rem">🔧 DEV PANEL</div>
-  <div class="m-field" style="margin-bottom:.4rem"><label style="font-size:.6rem">Set XP</label><div style="display:flex;gap:4px"><input type="number" id="devXpInput" placeholder="XP" style="width:80px;font-size:.72rem"><button onclick="devSetXP()" style="padding:4px 8px;background:var(--accent);color:#fff;border:none;border-radius:5px;font-size:.68rem">Set</button></div></div>
-  <div style="display:flex;flex-wrap:wrap;gap:3px;margin-bottom:.5rem">
-    <button onclick="devSetRank('E-RANK')" style="padding:3px 6px;border:1px solid var(--border);background:var(--surface2);color:#7c7c9a;border-radius:4px;font-size:.6rem">E</button>
-    <button onclick="devSetRank('D-RANK')" style="padding:3px 6px;border:1px solid var(--border);background:var(--surface2);color:#34d399;border-radius:4px;font-size:.6rem">D</button>
-    <button onclick="devSetRank('C-RANK')" style="padding:3px 6px;border:1px solid var(--border);background:var(--surface2);color:#22d3ee;border-radius:4px;font-size:.6rem">C</button>
-    <button onclick="devSetRank('B-RANK')" style="padding:3px 6px;border:1px solid var(--border);background:var(--surface2);color:#a78bfa;border-radius:4px;font-size:.6rem">B</button>
-    <button onclick="devSetRank('A-RANK')" style="padding:3px 6px;border:1px solid var(--border);background:var(--surface2);color:#fb923c;border-radius:4px;font-size:.6rem">A</button>
-    <button onclick="devSetRank('S-RANK')" style="padding:3px 6px;border:1px solid var(--border);background:var(--surface2);color:#fbbf24;border-radius:4px;font-size:.6rem">S</button>
-  </div>
-  <div style="display:flex;gap:4px;margin-bottom:.4rem">
-    <select id="devSplashRank" style="flex:1;background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:5px;padding:3px;font-size:.65rem"><option>E-RANK</option><option>D-RANK</option><option>C-RANK</option><option selected>B-RANK</option><option>A-RANK</option><option>S-RANK</option></select>
-    <button onclick="devTestSplash()" style="padding:3px 8px;background:var(--gold);color:#000;border:none;border-radius:5px;font-size:.65rem;font-weight:700">Splash</button>
-  </div>
-  <button onclick="devResetAccount()" style="width:100%;padding:5px;background:var(--red);color:#fff;border:none;border-radius:5px;font-size:.65rem;font-weight:700">Reset Account</button>
-</div>
+<!-- MANUAL FOOD MODAL -->
+<div class="modal-bg" id="manualFoodModal"><div class="modal">
+<h2>✏️ Manual Entry</h2>
+<div class="m-field"><label>Food Name</label><input type="text" id="mfName" placeholder="e.g. Chicken breast"></div>
+<div class="settings-row-fields"><div class="m-field" style="flex:1"><label>Calories</label><input type="number" id="mfCal"></div><div class="m-field" style="flex:1"><label>Protein (g)</label><input type="number" id="mfProtein"></div></div>
+<div class="settings-row-fields"><div class="m-field" style="flex:1"><label>Carbs (g)</label><input type="number" id="mfCarbs"></div><div class="m-field" style="flex:1"><label>Fat (g)</label><input type="number" id="mfFat"></div></div>
+<div class="m-actions"><button class="m-cancel" onclick="closeManualFood()">Cancel</button><button class="m-save-btn" onclick="saveManualFood()">Add</button></div>
+</div></div>
+
+<!-- BARCODE SCANNER MODAL -->
+<div class="modal-bg" id="scannerModal"><div class="modal" style="text-align:center">
+<h2>📸 Scan Barcode</h2>
+<video id="scannerVideo" style="width:100%;max-height:300px;border-radius:10px;background:#000" playsinline></video>
+<p style="font-size:.72rem;color:var(--muted);margin-top:.5rem">Point camera at barcode</p>
+<div class="m-actions"><button class="m-cancel" onclick="closeScanner()">Cancel</button></div>
+</div></div>
+
+<!-- MACRO ADJUSTMENT MODAL -->
+<div class="modal-bg" id="macroModal"><div class="modal">
+<h2>⚙️ Adjust Targets</h2>
+<div class="m-field"><label>Activity Level</label><select id="macroActivity"></select></div>
+<label class="toggle-row" style="margin:.6rem 0"><input type="checkbox" class="toggle-cb" id="macroCustomToggle" onchange="toggleMacroFields()"><span>Set custom macros (override auto-calc)</span></label>
+<div class="macro-custom-field"><div class="m-field"><label>Calories</label><input type="number" id="macroCalories"></div></div>
+<div class="settings-row-fields macro-custom-field"><div class="m-field" style="flex:1"><label>Protein (g)</label><input type="number" id="macroProtein"></div><div class="m-field" style="flex:1"><label>Carbs (g)</label><input type="number" id="macroCarbs"></div><div class="m-field" style="flex:1"><label>Fat (g)</label><input type="number" id="macroFat"></div></div>
+<div class="m-actions"><button class="m-cancel" onclick="closeMacroModal()">Cancel</button><button class="m-save-btn" onclick="saveMacroSettings()">Save</button></div>
+</div></div>
 
 <input type="file" id="picInput" accept="image/*" style="display:none">
 <div class="toast" id="toast"></div>
 
 <script src="data.js"></script>
 <script src="app.js"></script>
+<script src="nutrition.js"></script>
 <script>
-// Populate goal/experience dropdowns
 GOALS.forEach(g=>{const o=document.createElement('option');o.value=g;o.textContent=g;document.getElementById('setGoal').appendChild(o)});
 EXPERIENCE.forEach(e=>{const o=document.createElement('option');o.value=e;o.textContent=e;document.getElementById('setExperience').appendChild(o)});
 </script>
