@@ -5,7 +5,7 @@ firebase.initializeApp({apiKey:"AIzaSyCbH-A7pp1xrtwHSaVUKlPA0hR2skHu9iY",authDom
 const auth=firebase.auth(),db=firebase.firestore();
 const DEV_EMAIL='gabinglee11@gmail.com';
 let U=null,userData={},workoutLog=[],savedInputs={},isDev=false;
-let currentDay='day1',currentPage='workout',logFilter='all',lbMode='all';
+let currentDay='day1',currentPage='profile',logFilter='all',lbMode='all';
 let editTarget=null,addDayIdx=null,selectedClass=null,selectedSub=null,selectedProg=null;
 let prevRankName=null;
 let authLock=false;
@@ -210,7 +210,7 @@ async function confirmClass(){
 }
 
 // ═══════════ INIT ═══════════
-function initApp(){document.querySelectorAll('.nav-item').forEach(n=>n.addEventListener('click',()=>switchPage(n.dataset.page)));updateTopBar();switchPage('workout')}
+function initApp(){document.querySelectorAll('.nav-item').forEach(n=>n.addEventListener('click',()=>switchPage(n.dataset.page)));updateTopBar();syncAcceptedRequests();switchPage('profile')}
 function updateTopBar(){
   const r=getEffectiveRank(),info=getXpBarInfo(),cap=getXpCap();
   const capped=cap!==Infinity&&userData.xp>=cap;
@@ -666,18 +666,41 @@ async function loadFriendRequests(){
 }
 
 async function acceptFriendRequest(reqId,fromUid){
-  // Update request status
   await db.collection('friendRequests').doc(reqId).update({status:'accepted'});
-  // Add to both users' friends lists
+  // Add to MY friends list (I'm the receiver)
   const friends=userData.friends||[];
   if(!friends.includes(fromUid)){
     friends.push(fromUid);
     await saveUser({friends});
   }
-  await db.collection('users').doc(fromUid).update({friends:firebase.firestore.FieldValue.arrayUnion(U.uid)});
+  // Note: the sender syncs their own list via syncAcceptedRequests() on their next login
   unlockAch('add_friend');
   if(friends.length>=5)unlockAch('friends_5');
   toast('Friend added!');loadFriendRequests();loadFriendsList();
+}
+
+// Called on login — checks for accepted requests where I'm the sender and adds those friends
+async function syncAcceptedRequests(){
+  try{
+    const snap=await db.collection('friendRequests').where('from','==',U.uid).where('status','==','accepted').get();
+    if(snap.empty)return;
+    const friends=userData.friends||[];
+    let updated=false;
+    for(const doc of snap.docs){
+      const req=doc.data();
+      if(!friends.includes(req.to)){
+        friends.push(req.to);
+        updated=true;
+      }
+      // Clean up — delete the processed request
+      await doc.ref.delete();
+    }
+    if(updated){
+      await saveUser({friends});
+      unlockAch('add_friend');
+      if(friends.length>=5)unlockAch('friends_5');
+    }
+  }catch(e){}
 }
 
 async function declineFriendRequest(reqId){

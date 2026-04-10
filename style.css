@@ -506,3 +506,10 @@ input[type=checkbox]:checked::after{content:'✓';position:absolute;color:#fff;f
 /* ── Nav adjust for 6 items ── */
 .nav-item{font-size:.55rem}
 .nav-item .nav-icon{font-size:.95rem}
+
+/* ── AI Coach Questions ── */
+.coach-questions{margin-top:.6rem;padding-top:.6rem;border-top:1px solid var(--border)}
+.coach-q-label{font-family:var(--font-mono);font-size:.65rem;color:var(--muted);margin-bottom:.4rem;letter-spacing:1px}
+.coach-q-btns{display:flex;flex-wrap:wrap;gap:5px}
+.coach-q-btns button{padding:7px 12px;border:1px solid var(--border);background:var(--surface);color:var(--text);border-radius:18px;font-size:.72rem;font-weight:600;cursor:pointer;transition:all .15s}
+.coach-q-btns button:hover{border-color:var(--accent);color:var(--accent);background:var(--surface2)}
