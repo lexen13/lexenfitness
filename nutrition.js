@@ -65,7 +65,7 @@ function renderNutritionPage(){
   h+=`<div class="section-title" style="margin:.8rem 0 .4rem">TODAY'S LOG</div>`;
   if(!todayLog.length)h+=`<p style="color:var(--muted);font-size:.78rem">No food logged today. Tap above to start.</p>`;
   else h+=todayLog.map((f,i)=>`<div class="food-item">
-    <div class="food-item-info"><div class="food-item-name">${f.name}</div><div class="food-item-detail">${f.serving||''} · ${f.cal} cal · P:${f.protein}g C:${f.carbs}g F:${f.fat}g</div></div>
+    <div class="food-item-info"><div class="food-item-name">${esc(f.name)}</div><div class="food-item-detail">${esc(f.serving||'')} · ${f.cal||0} cal · P:${f.protein||0}g C:${f.carbs||0}g F:${f.fat||0}g</div></div>
     <button class="btn-del" onclick="removeFoodItem(${i})">✕</button>
   </div>`).join('');
 
@@ -86,12 +86,14 @@ async function searchFood(){
     const res=await fetch(`${OFF_API}/cgi/search.pl?search_terms=${encodeURIComponent(q)}&search_simple=1&action=process&json=1&page_size=10`);
     const data=await res.json();
     if(!data.products||!data.products.length){$('foodSearchResults').innerHTML='<p style="color:var(--muted);font-size:.78rem;padding:.5rem">No results found.</p>';return}
-    $('foodSearchResults').innerHTML=data.products.map(p=>{
-      const n=p.product_name||'Unknown';const nut=p.nutriments||{};
-      const cal=Math.round(nut['energy-kcal_100g']||nut['energy-kcal']||0);
-      const pro=Math.round(nut.proteins_100g||0);const carb=Math.round(nut.carbohydrates_100g||0);const fat=Math.round(nut.fat_100g||0);
-      return`<div class="food-result" onclick='addFoodFromSearch(${JSON.stringify({name:n,cal,protein:pro,carbs:carb,fat,serving:"per 100g"}).replace(/'/g,"\\'")})'><div class="food-result-name">${n}</div><div class="food-result-macros">${cal} cal · P:${pro}g C:${carb}g F:${fat}g <span style="color:var(--dim)">per 100g</span></div></div>`;
-    }).join('');
+    // Store results safely — reference by index to avoid XSS from product names
+    window._foodResults=data.products.map(p=>{
+      const nut=p.nutriments||{};
+      return{name:String(p.product_name||'Unknown').slice(0,100),cal:Math.round(nut['energy-kcal_100g']||nut['energy-kcal']||0),protein:Math.round(nut.proteins_100g||0),carbs:Math.round(nut.carbohydrates_100g||0),fat:Math.round(nut.fat_100g||0),serving:'per 100g'};
+    });
+    $('foodSearchResults').innerHTML=window._foodResults.map((f,i)=>
+      `<div class="food-result" onclick="addFoodFromSearch(window._foodResults[${i}])"><div class="food-result-name">${esc(f.name)}</div><div class="food-result-macros">${f.cal} cal · P:${f.protein}g C:${f.carbs}g F:${f.fat}g <span style="color:var(--dim)">per 100g</span></div></div>`
+    ).join('');
   }catch(e){$('foodSearchResults').innerHTML='<p style="color:var(--red);font-size:.78rem;padding:.5rem">Search failed. Try again.</p>'}
 }
 
@@ -113,42 +115,78 @@ let scannerStream=null;let scannerRunning=false;
 
 async function openScanner(){
   $('scannerModal').classList.add('open');
-  $('scannerStatus').textContent='Starting camera...';
+  $('scannerStatus').textContent='Requesting camera...';
   $('scannerManualRow').style.display='flex';
   $('scannerManualInput').value='';
+  const video=$('scannerVideo');
+  video.style.display='none';
 
-  // Try to get camera
+  // Check if camera API exists
+  if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){
+    $('scannerStatus').textContent='Camera not supported on this browser. Enter barcode manually:';
+    $('scannerStatus').style.color='var(--gold)';
+    return;
+  }
+
   try{
-    const stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'}},audio:false});
+    // Request camera — this triggers the permission prompt
+    const constraints={video:{facingMode:'environment',width:{ideal:640},height:{ideal:480}},audio:false};
+    const stream=await navigator.mediaDevices.getUserMedia(constraints);
     scannerStream=stream;
-    const video=$('scannerVideo');video.srcObject=stream;video.style.display='block';
-    await video.play();
 
-    // Check if BarcodeDetector is available (Chrome/Edge Android, not iOS)
+    // Set up video element (iOS needs muted + playsinline + srcObject set before play)
+    video.srcObject=stream;
+    video.setAttribute('playsinline','');
+    video.setAttribute('muted','');
+    video.muted=true;
+    video.style.display='block';
+
+    // Wait for video to actually start
+    await new Promise((resolve,reject)=>{
+      video.onloadedmetadata=()=>{video.play().then(resolve).catch(reject)};
+      setTimeout(()=>reject(new Error('Video timeout')),5000);
+    });
+
+    $('scannerStatus').textContent='📷 Camera active';
+    $('scannerStatus').style.color='var(--green)';
+
+    // Try auto-scan if BarcodeDetector available (Chrome Android only)
     if('BarcodeDetector' in window){
-      $('scannerStatus').textContent='Point at barcode...';
-      const detector=new BarcodeDetector({formats:['ean_13','ean_8','upc_a','upc_e','code_128']});
-      scannerRunning=true;
-      const scanLoop=async()=>{
-        if(!scannerRunning){return}
-        try{
-          const codes=await detector.detect(video);
-          if(codes.length>0){
-            scannerRunning=false;closeScanner();
-            await lookupBarcode(codes[0].rawValue);return;
-          }
-        }catch(e){}
-        if(scannerRunning)requestAnimationFrame(scanLoop);
-      };
-      scanLoop();
+      try{
+        const detector=new BarcodeDetector({formats:['ean_13','ean_8','upc_a','upc_e','code_128']});
+        $('scannerStatus').textContent='📷 Point at barcode — scanning...';
+        scannerRunning=true;
+        const scanLoop=async()=>{
+          if(!scannerRunning)return;
+          try{
+            const codes=await detector.detect(video);
+            if(codes.length>0){
+              scannerRunning=false;closeScanner();
+              await lookupBarcode(codes[0].rawValue);return;
+            }
+          }catch(e){}
+          if(scannerRunning)requestAnimationFrame(scanLoop);
+        };
+        scanLoop();
+      }catch(e){
+        $('scannerStatus').textContent='📷 Camera active — enter barcode below:';
+        $('scannerStatus').style.color='var(--gold)';
+      }
     }else{
-      $('scannerStatus').textContent='Auto-scan not supported on this device. Enter barcode below or take a photo of the number.';
+      $('scannerStatus').textContent='📷 Camera active — auto-scan not available on this device. Read the barcode number and enter below:';
+      $('scannerStatus').style.color='var(--gold)';
     }
   }catch(e){
-    // Camera denied or unavailable
-    $('scannerVideo').style.display='none';
-    $('scannerStatus').textContent='Camera unavailable. Enter barcode number below:';
-    console.log('Camera error:',e.message);
+    // Camera denied or failed
+    video.style.display='none';
+    if(e.name==='NotAllowedError'||e.name==='PermissionDeniedError'){
+      $('scannerStatus').textContent='Camera permission denied. Check your browser settings, or enter barcode manually:';
+    }else if(e.name==='NotFoundError'){
+      $('scannerStatus').textContent='No camera found. Enter barcode manually:';
+    }else{
+      $('scannerStatus').textContent='Camera error: '+e.message+'. Enter barcode manually:';
+    }
+    $('scannerStatus').style.color='var(--red)';
   }
 }
 
@@ -156,6 +194,7 @@ function closeScanner(){
   scannerRunning=false;
   if(scannerStream){scannerStream.getTracks().forEach(t=>t.stop());scannerStream=null}
   const video=$('scannerVideo');if(video){video.srcObject=null;video.style.display='none'}
+  $('scannerStatus').style.color='';
   $('scannerModal').classList.remove('open');
 }
 
@@ -173,7 +212,7 @@ async function lookupBarcode(code){
     const data=await res.json();
     if(data.status!==1||!data.product){toast('Product not found');return}
     const p=data.product;const nut=p.nutriments||{};
-    const food={name:p.product_name||'Unknown',cal:Math.round(nut['energy-kcal_100g']||0),protein:Math.round(nut.proteins_100g||0),carbs:Math.round(nut.carbohydrates_100g||0),fat:Math.round(nut.fat_100g||0),serving:'per 100g',barcode:code};
+    const food={name:String(p.product_name||'Unknown').slice(0,100),cal:Math.round(nut['energy-kcal_100g']||0),protein:Math.round(nut.proteins_100g||0),carbs:Math.round(nut.carbohydrates_100g||0),fat:Math.round(nut.fat_100g||0),serving:'per 100g',barcode:String(code).slice(0,20)};
     unlockAch('scan_1');
     await addFoodFromSearch(food);
   }catch(e){toast('Lookup failed. Try again.')}
