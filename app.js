@@ -556,9 +556,11 @@ function renderProfile(){
   h+=`<div class="stats-grid"><div class="stat-card"><div class="sv">${workoutLog.length}</div><div class="sl">Workouts</div></div><div class="stat-card"><div class="sv">${calcStreak()}</div><div class="sl">Streak</div></div><div class="stat-card"><div class="sv">${(userData.achievements||[]).length}</div><div class="sl">Achieve.</div></div></div>`;
   h+=`<button class="edit-stats-btn" onclick="openSettings()">⚙️ Settings</button>`;
   // Friends — username only
+  // Friends
   h+=`<div class="section-title" style="margin:.8rem 0 .4rem">FRIENDS (${(userData.friends||[]).length})</div>`;
-  h+=`<div class="friend-add-row"><input type="text" id="friendCodeInput" class="auth-input" placeholder="Enter friend code" maxlength="6" style="margin:0;flex:1"><button class="m-save-btn" style="flex:0 0 auto;padding:10px 14px;border-radius:8px" onclick="addFriend()">Add</button></div>`;
-  h+=`<div id="friendsList" style="margin-top:.5rem"></div>`;
+  h+=`<div class="friend-add-row"><input type="text" id="friendCodeInput" class="auth-input" placeholder="Enter friend code" maxlength="6" style="margin:0;flex:1"><button class="m-save-btn" style="flex:0 0 auto;padding:10px 14px;border-radius:8px" onclick="sendFriendRequest()">Send Request</button></div>`;
+  h+=`<div id="friendRequests" style="margin-top:.5rem"></div>`;
+  h+=`<div id="friendsList" style="margin-top:.3rem"></div>`;
   // Dev tools
   h+=renderDevTools();
   $('profileContent').innerHTML=h;loadFriendsList();
@@ -613,15 +615,90 @@ document.getElementById('picInput').addEventListener('change',async function(){
   };reader.readAsDataURL(file);
 });
 
-// ═══════════ FRIENDS (username only) ═══════════
-async function addFriend(){const code=$('friendCodeInput').value.trim().toUpperCase();if(code.length!==6){toast('Enter 6-char code');return}if(code===userData.friendCode){toast("That's your code!");return}
-  const cd=await db.collection('friendCodes').doc(code).get();if(!cd.exists){toast('Code not found');return}const fid=cd.data().uid;if((userData.friends||[]).includes(fid)){toast('Already friends!');return}
-  const friends=userData.friends||[];friends.push(fid);await saveUser({friends});
-  await db.collection('users').doc(fid).update({friends:firebase.firestore.FieldValue.arrayUnion(U.uid)});
-  unlockAch('add_friend');if(friends.length>=5)unlockAch('friends_5');$('friendCodeInput').value='';toast('Friend added!');loadFriendsList()}
-async function loadFriendsList(){const list=$('friendsList');if(!list)return;const friends=userData.friends||[];if(!friends.length){list.innerHTML='<p style="color:var(--muted);font-size:.76rem">No friends yet — share your code!</p>';return}
-  let h='';for(const fid of friends.slice(0,20)){try{const d=await db.collection('users').doc(fid).get();if(!d.exists)continue;const f=d.data();const r=getRank(f.xp||0);
-    h+=`<div class="friend-row"><div class="lb-pic">${f.profilePic?'<img src="'+f.profilePic+'">':'👤'}</div><div class="lb-info"><div class="lb-name">@${f.username||'hunter'}</div><div class="lb-class">${f.class||''}</div></div><div class="lb-xp">${f.xp||0}</div><div class="lb-rank" style="color:${r.color}">${r.name}</div></div>`}catch(e){}}list.innerHTML=h}
+// ═══════════ FRIENDS — REQUEST SYSTEM ═══════════
+async function sendFriendRequest(){
+  const code=$('friendCodeInput').value.trim().toUpperCase();
+  if(code.length!==6){toast('Enter 6-char code');return}
+  if(code===userData.friendCode){toast("That's your own code!");return}
+  const cd=await db.collection('friendCodes').doc(code).get();
+  if(!cd.exists){toast('Friend code not found');return}
+  const toUid=cd.data().uid;
+  if((userData.friends||[]).includes(toUid)){toast('Already friends!');return}
+  // Check for existing request
+  const existing=await db.collection('friendRequests').where('from','==',U.uid).where('to','==',toUid).where('status','==','pending').get();
+  if(!existing.empty){toast('Request already sent!');return}
+  // Check reverse (they already sent us one)
+  const reverse=await db.collection('friendRequests').where('from','==',toUid).where('to','==',U.uid).where('status','==','pending').get();
+  if(!reverse.empty){
+    // Auto-accept — they already want to be friends
+    const reqDoc=reverse.docs[0];
+    await acceptFriendRequest(reqDoc.id,toUid);
+    $('friendCodeInput').value='';return;
+  }
+  // Create request
+  await db.collection('friendRequests').add({
+    from:U.uid,to:toUid,
+    fromUsername:userData.username||'hunter',
+    fromPic:userData.profilePic||'',
+    status:'pending',
+    createdAt:firebase.firestore.FieldValue.serverTimestamp()
+  });
+  $('friendCodeInput').value='';toast('Friend request sent!');
+}
+
+async function loadFriendRequests(){
+  const el=$('friendRequests');if(!el)return;
+  // Load incoming pending requests
+  const snap=await db.collection('friendRequests').where('to','==',U.uid).where('status','==','pending').get();
+  if(snap.empty){el.innerHTML='';return}
+  let h='<div style="font-size:.72rem;color:var(--gold);margin-bottom:.3rem;font-family:var(--font-mono)">PENDING REQUESTS</div>';
+  for(const doc of snap.docs){
+    const req=doc.data();
+    h+=`<div class="friend-request">
+      <div class="lb-pic">${req.fromPic?'<img src="'+req.fromPic+'">':'👤'}</div>
+      <div class="lb-info"><div class="lb-name">@${esc(req.fromUsername)}</div><div class="lb-class">wants to be friends</div></div>
+      <button class="fr-accept" onclick="acceptFriendRequest('${doc.id}','${req.from}')">✓</button>
+      <button class="fr-decline" onclick="declineFriendRequest('${doc.id}')">✕</button>
+    </div>`;
+  }
+  el.innerHTML=h;
+}
+
+async function acceptFriendRequest(reqId,fromUid){
+  // Update request status
+  await db.collection('friendRequests').doc(reqId).update({status:'accepted'});
+  // Add to both users' friends lists
+  const friends=userData.friends||[];
+  if(!friends.includes(fromUid)){
+    friends.push(fromUid);
+    await saveUser({friends});
+  }
+  await db.collection('users').doc(fromUid).update({friends:firebase.firestore.FieldValue.arrayUnion(U.uid)});
+  unlockAch('add_friend');
+  if(friends.length>=5)unlockAch('friends_5');
+  toast('Friend added!');loadFriendRequests();loadFriendsList();
+}
+
+async function declineFriendRequest(reqId){
+  await db.collection('friendRequests').doc(reqId).update({status:'declined'});
+  toast('Request declined.');loadFriendRequests();
+}
+
+async function loadFriendsList(){
+  const list=$('friendsList');if(!list)return;
+  // Also load requests
+  await loadFriendRequests();
+  const friends=userData.friends||[];
+  if(!friends.length){list.innerHTML='<p style="color:var(--muted);font-size:.76rem">No friends yet — share your code!</p>';return}
+  let h='';
+  for(const fid of friends.slice(0,20)){
+    try{
+      const d=await db.collection('users').doc(fid).get();if(!d.exists)continue;const f=d.data();const r=getRank(f.xp||0);
+      h+=`<div class="friend-row"><div class="lb-pic">${f.profilePic?'<img src="'+f.profilePic+'">':'👤'}</div><div class="lb-info"><div class="lb-name">@${f.username||'hunter'}</div><div class="lb-class">${f.class||''}</div></div><div class="lb-xp">${f.xp||0}</div><div class="lb-rank" style="color:${r.color}">${r.name}</div></div>`;
+    }catch(e){}
+  }
+  list.innerHTML=h;
+}
 
 // ═══════════ LEADERBOARD (username only) ═══════════
 async function renderLeaderboard(){let list=[];if(lbMode==='friends'){const fids=[U.uid,...(userData.friends||[])];for(const fid of fids.slice(0,30)){try{const d=await db.collection('leaderboard').doc(fid).get();if(d.exists)list.push({uid:d.id,...d.data()})}catch(e){}}list.sort((a,b)=>b.xp-a.xp)}else{const snap=await db.collection('leaderboard').orderBy('xp','desc').limit(50).get();snap.forEach(d=>list.push({uid:d.id,...d.data()}))}

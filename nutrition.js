@@ -134,23 +134,40 @@ async function searchFood(){
   }catch(e){$('foodSearchResults').innerHTML='<p style="color:var(--red);font-size:.78rem;padding:.5rem">Search failed. Try again.</p>'}
 }
 
-// ── SERVING SIZE MODAL ──
+// ── SERVING SIZE MODAL (supports g, ml, oz, fl oz, cups, servings) ──
+const UNIT_TO_GRAMS={g:1,ml:1,oz:28.35,floz:29.57,cup:240,serving:100};
 let pendingFood=null;
+
 function openServingModal(idx){
   pendingFood=window._foodResults[idx];if(!pendingFood)return;
   $('servingFoodName').textContent=pendingFood.name;
-  $('servingAmount').value=100;
-  // Show suggested serving if available
-  const sugg=pendingFood.servingSuggestion;
-  $('servingSuggestion').innerHTML=sugg?`Suggested serving: <strong>${esc(sugg)}</strong>`:'Enter amount in grams';
+  $('servingAmount').value=1;
+  // Auto-detect best unit from suggestion
+  const sugg=(pendingFood.servingSuggestion||'').toLowerCase();
+  let defaultUnit='serving';
+  if(sugg.includes('ml')||sugg.includes('fl'))defaultUnit='ml';
+  else if(sugg.includes('oz'))defaultUnit='floz';
+  else if(sugg.includes('cup'))defaultUnit='cup';
+  else if(sugg.includes('g'))defaultUnit='g';
+  $('servingUnit').value=defaultUnit;
+  // Set smart default amount
+  if(defaultUnit==='g')$('servingAmount').value=100;
+  else if(defaultUnit==='ml')$('servingAmount').value=250;
+  else if(defaultUnit==='floz')$('servingAmount').value=12;
+  else if(defaultUnit==='cup')$('servingAmount').value=1;
+  else if(defaultUnit==='oz')$('servingAmount').value=4;
+  else $('servingAmount').value=1;
+  $('servingSuggestion').innerHTML=pendingFood.servingSuggestion?`Suggested: <strong>${esc(pendingFood.servingSuggestion)}</strong>`:'';
   updateServingPreview();
   $('servingModal').classList.add('open');
 }
 function closeServingModal(){$('servingModal').classList.remove('open');pendingFood=null}
 function updateServingPreview(){
   if(!pendingFood)return;
-  const g=parseFloat($('servingAmount').value)||100;
-  const mult=g/100;
+  const amount=parseFloat($('servingAmount').value)||1;
+  const unit=$('servingUnit').value;
+  const grams=amount*(UNIT_TO_GRAMS[unit]||100);
+  const mult=grams/100;
   const cal=Math.round(pendingFood.calPer100*mult);
   const p=Math.round(pendingFood.proteinPer100*mult);
   const c=Math.round(pendingFood.carbsPer100*mult);
@@ -159,15 +176,18 @@ function updateServingPreview(){
 }
 async function confirmServing(){
   if(!pendingFood)return;
-  const g=parseFloat($('servingAmount').value)||100;
-  const mult=g/100;
+  const amount=parseFloat($('servingAmount').value)||1;
+  const unit=$('servingUnit').value;
+  const unitLabels={g:'g',ml:'ml',oz:'oz',floz:'fl oz',cup:'cup(s)',serving:'serving(s)'};
+  const grams=amount*(UNIT_TO_GRAMS[unit]||100);
+  const mult=grams/100;
   const food={
     name:pendingFood.name,
     cal:Math.round(pendingFood.calPer100*mult),
     protein:Math.round(pendingFood.proteinPer100*mult),
     carbs:Math.round(pendingFood.carbsPer100*mult),
     fat:Math.round(pendingFood.fatPer100*mult),
-    serving:g+'g'
+    serving:amount+' '+(unitLabels[unit]||unit)
   };
   await saveFoodItem(food);
   closeServingModal();closeFoodSearch();

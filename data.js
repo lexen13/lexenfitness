@@ -158,4 +158,4 @@ function getRank(xp){for(let i=RANKS.length-1;i>=0;i--)if(xp>=RANKS[i].min)retur
 function getNextRank(xp){for(let i=0;i<RANKS.length;i++)if(xp<RANKS[i].min)return RANKS[i];return null}
 function genFriendCode(){const c='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';let r='';for(let i=0;i<6;i++)r+=c[Math.floor(Math.random()*c.length)];return r}
 function getDailyMissions(dateStr){let seed=0;for(let i=0;i<dateStr.length;i++)seed=((seed<<5)-seed)+dateStr.charCodeAt(i);seed=Math.abs(seed);const pool=[...DAILY_MISSION_POOL];const picked=[];for(let i=0;i<5;i++){const idx=seed%(pool.length);picked.push(pool.splice(idx,1)[0]);seed=Math.abs((seed*16807)%2147483647)}return picked}
-function getTodayStr(){return new Date().toISOString().slice(0,10)}
+function getTodayStr(){const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')}

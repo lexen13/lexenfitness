@@ -456,3 +456,14 @@ input[type=checkbox]:checked::after{content:'✓';position:absolute;color:#fff;f
 .day-manage{display:flex;gap:6px;margin-top:.6rem}
 .day-manage-btn{flex:1;padding:8px;border:1px solid var(--border);background:var(--surface);color:var(--muted);border-radius:8px;font-size:.72rem;font-weight:600;cursor:pointer;font-family:var(--font-body)}
 .day-manage-btn:hover{border-color:var(--accent);color:var(--text)}
+
+/* ── Friend Requests ── */
+.friend-request{display:flex;align-items:center;gap:.5rem;background:var(--surface);border:1px solid var(--gold);border-radius:10px;padding:.5rem .6rem;margin-bottom:.3rem}
+.fr-accept{width:32px;height:32px;border:none;background:var(--green);color:#000;border-radius:7px;font-size:.9rem;font-weight:700;cursor:pointer;flex-shrink:0}
+.fr-decline{width:32px;height:32px;border:1px solid var(--border);background:var(--surface2);color:var(--muted);border-radius:7px;font-size:.9rem;cursor:pointer;flex-shrink:0}
+.fr-decline:hover{color:var(--red);border-color:var(--red)}
+
+/* ── Serving Input Row ── */
+.serving-input-row{display:flex;gap:.5rem;align-items:flex-end}
+.serving-input-row select{background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:10px 8px;font-size:.84rem;outline:none;width:100%}
+.serving-input-row select:focus{border-color:var(--accent)}

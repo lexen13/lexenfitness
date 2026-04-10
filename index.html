@@ -210,14 +210,24 @@
 <h2>🍽️ Adjust Serving</h2>
 <div class="serving-food-name" id="servingFoodName"></div>
 <p id="servingSuggestion" style="font-size:.72rem;color:var(--gold);margin:.4rem 0"></p>
-<div class="m-field"><label>Amount (grams)</label><input type="number" id="servingAmount" value="100" min="1" oninput="updateServingPreview()"></div>
+<div class="serving-input-row">
+  <div class="m-field" style="flex:2"><label>Amount</label><input type="number" id="servingAmount" value="1" min="0.1" step="0.5" oninput="updateServingPreview()"></div>
+  <div class="m-field" style="flex:1.5"><label>Unit</label><select id="servingUnit" onchange="updateServingPreview()">
+    <option value="serving">Servings</option>
+    <option value="g">Grams (g)</option>
+    <option value="ml">Milliliters (ml)</option>
+    <option value="oz">Ounces (oz)</option>
+    <option value="floz">Fl Oz</option>
+    <option value="cup">Cups</option>
+  </select></div>
+</div>
 <div class="serving-quick-btns">
-  <button onclick="$('servingAmount').value=50;updateServingPreview()">50g</button>
-  <button onclick="$('servingAmount').value=100;updateServingPreview()">100g</button>
-  <button onclick="$('servingAmount').value=200;updateServingPreview()">200g</button>
-  <button onclick="$('servingAmount').value=250;updateServingPreview()">250g</button>
-  <button onclick="$('servingAmount').value=350;updateServingPreview()">350g</button>
-  <button onclick="$('servingAmount').value=500;updateServingPreview()">500g</button>
+  <button onclick="$('servingUnit').value='ml';$('servingAmount').value=250;updateServingPreview()">250ml</button>
+  <button onclick="$('servingUnit').value='floz';$('servingAmount').value=12;updateServingPreview()">12 fl oz</button>
+  <button onclick="$('servingUnit').value='cup';$('servingAmount').value=1;updateServingPreview()">1 cup</button>
+  <button onclick="$('servingUnit').value='g';$('servingAmount').value=100;updateServingPreview()">100g</button>
+  <button onclick="$('servingUnit').value='oz';$('servingAmount').value=6;updateServingPreview()">6 oz</button>
+  <button onclick="$('servingUnit').value='g';$('servingAmount').value=200;updateServingPreview()">200g</button>
 </div>
 <div class="serving-preview" id="servingPreview"></div>
 <div class="m-actions"><button class="m-cancel" onclick="closeServingModal()">Cancel</button><button class="m-save-btn" onclick="confirmServing()">Log It</button></div>
