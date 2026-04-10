@@ -114,41 +114,64 @@ async function addFoodFromSearch(food){
 let scannerStream=null;let scannerRunning=false;
 
 async function openScanner(){
-  $('scannerModal').classList.add('open');
-  $('scannerStatus').textContent='Requesting camera...';
-  $('scannerManualRow').style.display='flex';
-  $('scannerManualInput').value='';
   const video=$('scannerVideo');
-  video.style.display='none';
 
   // Check if camera API exists
   if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){
+    $('scannerModal').classList.add('open');
     $('scannerStatus').textContent='Camera not supported on this browser. Enter barcode manually:';
+    $('scannerStatus').style.color='var(--gold)';
+    $('scannerManualRow').style.display='flex';
+    $('scannerManualInput').value='';
+    video.style.display='none';
+    return;
+  }
+
+  // Request camera FIRST before any DOM changes (iOS requires user gesture → getUserMedia with no gap)
+  let stream;
+  try{
+    try{
+      stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'},audio:false});
+    }catch(e1){
+      stream=await navigator.mediaDevices.getUserMedia({video:true,audio:false});
+    }
+  }catch(e){
+    // Camera failed — show modal with manual entry and error
+    $('scannerModal').classList.add('open');
+    $('scannerManualRow').style.display='flex';
+    $('scannerManualInput').value='';
+    video.style.display='none';
+    if(e.name==='NotAllowedError'||e.name==='PermissionDeniedError'){
+      $('scannerStatus').textContent='Camera permission denied. Allow camera in your browser settings, or enter barcode below:';
+    }else if(e.name==='NotFoundError'){
+      $('scannerStatus').textContent='No camera found. Enter barcode below:';
+    }else{
+      $('scannerStatus').textContent='Camera error ('+e.name+'). Enter barcode below:';
+    }
+    $('scannerStatus').style.color='var(--red)';
+    return;
+  }
+
+  // Camera granted — now open modal and show feed
+  scannerStream=stream;
+  $('scannerModal').classList.add('open');
+  $('scannerManualRow').style.display='flex';
+  $('scannerManualInput').value='';
+  video.srcObject=stream;
+  video.muted=true;
+  video.style.display='block';
+
+  try{
+    await video.play();
+  }catch(playErr){
+    // play() can fail on some mobile browsers
+    $('scannerStatus').textContent='Camera stream received but video failed. Enter barcode below:';
     $('scannerStatus').style.color='var(--gold)';
     return;
   }
 
-  try{
-    // Request camera — this triggers the permission prompt
-    const constraints={video:{facingMode:'environment',width:{ideal:640},height:{ideal:480}},audio:false};
-    const stream=await navigator.mediaDevices.getUserMedia(constraints);
-    scannerStream=stream;
-
-    // Set up video element (iOS needs muted + playsinline + srcObject set before play)
-    video.srcObject=stream;
-    video.setAttribute('playsinline','');
-    video.setAttribute('muted','');
-    video.muted=true;
-    video.style.display='block';
-
-    // Wait for video to actually start
-    await new Promise((resolve,reject)=>{
-      video.onloadedmetadata=()=>{video.play().then(resolve).catch(reject)};
-      setTimeout(()=>reject(new Error('Video timeout')),5000);
-    });
-
-    $('scannerStatus').textContent='📷 Camera active';
-    $('scannerStatus').style.color='var(--green)';
+  $('scannerStatus').textContent='📷 Camera active';
+  $('scannerStatus').style.color='var(--green)';
 
     // Try auto-scan if BarcodeDetector available (Chrome Android only)
     if('BarcodeDetector' in window){
@@ -173,21 +196,9 @@ async function openScanner(){
         $('scannerStatus').style.color='var(--gold)';
       }
     }else{
-      $('scannerStatus').textContent='📷 Camera active — auto-scan not available on this device. Read the barcode number and enter below:';
+      $('scannerStatus').textContent='📷 Camera active — auto-scan not available. Read the barcode number and enter below:';
       $('scannerStatus').style.color='var(--gold)';
     }
-  }catch(e){
-    // Camera denied or failed
-    video.style.display='none';
-    if(e.name==='NotAllowedError'||e.name==='PermissionDeniedError'){
-      $('scannerStatus').textContent='Camera permission denied. Check your browser settings, or enter barcode manually:';
-    }else if(e.name==='NotFoundError'){
-      $('scannerStatus').textContent='No camera found. Enter barcode manually:';
-    }else{
-      $('scannerStatus').textContent='Camera error: '+e.message+'. Enter barcode manually:';
-    }
-    $('scannerStatus').style.color='var(--red)';
-  }
 }
 
 function closeScanner(){
