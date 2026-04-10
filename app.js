@@ -257,13 +257,14 @@ function addXP(amount){
 let xpCappedMsg='';
 function switchPage(p){currentPage=p;document.querySelectorAll('.nav-item').forEach(n=>n.classList.toggle('active',n.dataset.page===p));document.querySelectorAll('.page').forEach(pg=>pg.classList.remove('active'));$('page-'+p).classList.add('active');
   if(p==='train')buildWorkout();if(p==='profile')renderProfile();if(p==='missions'){renderMissions();renderAchievements()}
-  if(p==='nutrition')renderNutritionPage();if(p==='ranks')renderLeaderboard()}
+  if(p==='nutrition')renderNutritionPage();if(p==='ranks')renderLeaderboard();if(p==='chat')renderChatPage()}
 function switchSubTab(page,tab){
   const container=$('page-'+page);if(!container)return;
   container.querySelectorAll('.stab').forEach(t=>t.classList.toggle('active',t.dataset.st===tab));
   container.querySelectorAll('.sub-page').forEach(p=>p.classList.remove('active'));
   const sp=$('sp-'+tab);if(sp)sp.classList.add('active');
   if(tab==='log')renderLog();if(tab==='rankinfo')$('rankInfoContent').innerHTML=renderRankInfo();if(tab==='leaderboard')renderLeaderboard();
+  if(tab==='aicoach')renderAICoach();if(tab==='friendchat')renderChatList();
 }
 
 // ═══════════ DAILY MISSIONS ═══════════

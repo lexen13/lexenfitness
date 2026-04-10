@@ -135,6 +135,11 @@
   </div>
 </div>
 
+<!-- ══ CHAT ══ -->
+<div class="page" id="page-chat">
+  <div id="chatPageContent"></div>
+</div>
+
 <!-- ══ PROFILE ══ -->
 <div class="page" id="page-profile"><div id="profileContent"></div></div>
 
@@ -143,6 +148,7 @@
   <div class="nav-item active" data-page="train"><span class="nav-icon">⚔️</span>Train</div>
   <div class="nav-item" data-page="missions"><span class="nav-icon">📋</span>Missions</div>
   <div class="nav-item" data-page="nutrition"><span class="nav-icon">🍽️</span>Nutrition</div>
+  <div class="nav-item" data-page="chat"><span class="nav-icon">💬</span>Chat</div>
   <div class="nav-item" data-page="ranks"><span class="nav-icon">🏆</span>Ranks</div>
   <div class="nav-item" data-page="profile"><span class="nav-icon">👤</span>Profile</div>
 </div>
@@ -262,6 +268,7 @@
 <script src="data.js"></script>
 <script src="app.js"></script>
 <script src="nutrition.js"></script>
+<script src="chat.js"></script>
 <script>
 GOALS.forEach(g=>{const o=document.createElement('option');o.value=g;o.textContent=g;document.getElementById('setGoal').appendChild(o)});
 EXPERIENCE.forEach(e=>{const o=document.createElement('option');o.value=e;o.textContent=e;document.getElementById('setExperience').appendChild(o)});
