@@ -234,13 +234,15 @@ input[type=checkbox]:checked::after{content:'✓';position:absolute;color:#fff;f
 /* ── Missions ── */
 .mission-card{display:flex;align-items:center;gap:.6rem;background:var(--surface);border:1px solid var(--border);border-radius:11px;padding:.75rem;margin-bottom:.5rem;cursor:pointer;transition:all .15s}
 .mission-card:active{transform:scale(.98)}
-.mission-card.done{border-color:var(--green);background:var(--surface2)}
+.mission-card.done{border-color:var(--green);background:var(--surface2);cursor:default;opacity:.75}
+.mission-card.done:active{transform:none}
 .mission-check{font-size:1.1rem;flex-shrink:0}
 .mission-icon{font-size:1.3rem;flex-shrink:0}
 .mission-info{flex:1;min-width:0}
 .mission-name{font-weight:700;font-size:.82rem}
 .mission-desc{font-size:.68rem;color:var(--muted);margin-top:1px}
 .mission-xp{font-family:var(--font-mono);font-size:.68rem;color:var(--gold);flex-shrink:0}
+.mission-xp.locked{color:var(--green);font-weight:700;font-size:.64rem}
 .mission-bonus{text-align:center;font-family:var(--font-display);font-size:1rem;letter-spacing:1px;color:var(--gold);padding:.8rem;margin-top:.5rem;background:var(--surface);border:1px solid var(--gold);border-radius:11px}
 
 /* ── Rank Trials ── */
@@ -274,3 +276,89 @@ input[type=checkbox]:checked::after{content:'✓';position:absolute;color:#fff;f
 .prog-card .prog-icon{font-size:1.4rem}
 .prog-card .prog-name{font-weight:700;font-size:.76rem;margin-top:.2rem}
 .prog-card .prog-desc{font-size:.62rem;color:var(--muted);margin-top:.1rem;line-height:1.3}
+
+/* ── Mini XP Bar (under top bar) ── */
+.tb-xp-bar{height:3px;background:var(--surface2);position:sticky;top:44px;z-index:49}
+.tb-xp-bar-fill{height:100%;background:linear-gradient(90deg,var(--accent),var(--gold));transition:width .6s ease;width:0%}
+
+/* ── TDEE Card ── */
+.tdee-card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:1rem;margin-bottom:.8rem}
+.tdee-title{font-family:var(--font-display);font-size:1rem;letter-spacing:1px;margin-bottom:.2rem}
+.tdee-goal{font-family:var(--font-mono);font-size:.68rem;color:var(--muted);margin-bottom:.5rem}
+.tdee-cals{font-family:var(--font-display);font-size:2.2rem;letter-spacing:2px;line-height:1}
+.tdee-cals span{font-size:.7rem;color:var(--muted);letter-spacing:0}
+.tdee-macros{display:flex;gap:.5rem;margin-top:.7rem}
+.tdee-macro{flex:1;background:var(--surface2);border-radius:8px;padding:.5rem;text-align:center}
+.tdee-mv{font-family:var(--font-display);font-size:1.3rem;letter-spacing:1px}
+.tdee-ml{font-family:var(--font-mono);font-size:.58rem;color:var(--muted);text-transform:uppercase;margin-top:1px}
+.tdee-note{font-family:var(--font-mono);font-size:.6rem;color:var(--dim);margin-top:.5rem;text-align:center}
+
+/* ── Rank-Up Splash ── */
+.rank-up-overlay{position:fixed;inset:0;z-index:500;background:rgba(0,0,0,.92);display:none;align-items:center;justify-content:center;flex-direction:column;cursor:pointer}
+.rank-up-overlay.show{display:flex;animation:ruFadeIn .4s ease}
+@keyframes ruFadeIn{from{opacity:0}to{opacity:1}}
+.ru-content{text-align:center;position:relative;z-index:2;animation:ruScale .6s cubic-bezier(.17,.67,.35,1.35)}
+@keyframes ruScale{0%{transform:scale(0);opacity:0}100%{transform:scale(1);opacity:1}}
+.ru-label{font-family:var(--font-mono);font-size:.8rem;letter-spacing:4px;color:var(--muted);margin-bottom:1rem;animation:ruPulse 2s infinite}
+@keyframes ruPulse{0%,100%{opacity:1}50%{opacity:.5}}
+.ru-icon{font-size:5rem;margin-bottom:.5rem;animation:ruBounce 1s ease infinite alternate}
+@keyframes ruBounce{0%{transform:translateY(0)}100%{transform:translateY(-10px)}}
+.ru-rank{font-family:var(--font-display);font-size:3.5rem;letter-spacing:6px;line-height:1;margin-bottom:.3rem;text-shadow:0 0 40px currentColor,0 0 80px currentColor}
+.ru-title{font-family:var(--font-display);font-size:1.5rem;letter-spacing:3px;color:var(--text);margin-bottom:1.5rem}
+.ru-tap{font-family:var(--font-mono);font-size:.7rem;color:var(--dim);animation:ruPulse 2s infinite}
+
+/* Particles */
+.ru-particles{position:absolute;inset:0;overflow:hidden;z-index:1}
+.ru-particle{position:absolute;width:4px;height:4px;border-radius:50%;bottom:-10px;animation:ruParticle linear forwards;opacity:.8}
+@keyframes ruParticle{0%{transform:translateY(0) scale(1);opacity:.8}100%{transform:translateY(-100vh) scale(0);opacity:0}}
+
+/* ── Glow ring behind rank icon ── */
+.ru-content::before{content:'';position:absolute;top:50%;left:50%;transform:translate(-50%,-60%);width:160px;height:160px;border-radius:50%;background:radial-gradient(circle,currentColor 0%,transparent 70%);opacity:.15;animation:ruGlow 2s ease infinite alternate;z-index:-1}
+@keyframes ruGlow{0%{transform:translate(-50%,-60%) scale(.8);opacity:.1}100%{transform:translate(-50%,-60%) scale(1.2);opacity:.2}}
+
+/* ── Rank-Up Splash ── */
+.rankup-splash{position:fixed;inset:0;z-index:500;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.95);opacity:0;pointer-events:none;transition:opacity .5s}
+.rankup-splash.active{opacity:1;pointer-events:auto;animation:splashIn .5s ease-out}
+.splash-glow{position:absolute;width:300px;height:300px;border-radius:50%;animation:splashPulse 2s ease-in-out infinite}
+.splash-particles{position:absolute;width:0;height:0}
+.splash-particle{position:absolute;width:4px;height:4px;border-radius:50%;animation:particleBurst 1.2s ease-out forwards;opacity:0}
+.splash-content{position:relative;text-align:center;animation:splashContent .8s ease-out .3s both}
+.splash-label{font-family:var(--font-mono);font-size:.7rem;letter-spacing:4px;color:var(--muted);text-transform:uppercase;margin-bottom:.5rem}
+.splash-rank{font-family:var(--font-display);font-size:4rem;letter-spacing:6px;line-height:1;text-shadow:0 0 40px currentColor,0 0 80px currentColor}
+.splash-title{font-family:var(--font-display);font-size:1.5rem;letter-spacing:3px;margin-top:.3rem}
+.splash-sub{font-family:var(--font-mono);font-size:.72rem;color:var(--muted);margin-top:.8rem;font-style:italic}
+@keyframes splashIn{from{opacity:0}to{opacity:1}}
+@keyframes splashContent{from{transform:scale(.5) translateY(20px);opacity:0}to{transform:scale(1) translateY(0);opacity:1}}
+@keyframes splashPulse{0%,100%{transform:scale(1);opacity:.6}50%{transform:scale(1.2);opacity:1}}
+@keyframes particleBurst{0%{transform:translate(0,0) scale(1);opacity:1}100%{transform:translate(var(--tx),var(--ty)) scale(0);opacity:0}}
+
+/* ── Mini XP bar in top bar ── */
+.tb-xp-bar{position:absolute;bottom:0;left:0;right:0;height:3px;background:var(--surface2)}
+.tb-xp-bar-fill{height:100%;border-radius:0 2px 2px 0;transition:width .6s ease-out}
+.top-bar{position:sticky;top:0;z-index:50;position:relative}
+
+/* ── TDEE Card ── */
+.tdee-card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:1.1rem;margin-bottom:.8rem;text-align:center}
+.tdee-empty{color:var(--dim);font-size:.78rem;padding:.5rem 0}
+.tdee-header{font-family:var(--font-mono);font-size:.66rem;letter-spacing:1px;color:var(--muted);margin-bottom:.6rem;text-transform:uppercase}
+.tdee-main{margin-bottom:.7rem}
+.tdee-cal{font-family:var(--font-display);font-size:2.8rem;letter-spacing:2px;line-height:1;background:linear-gradient(135deg,var(--accent2),var(--gold));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.tdee-cal-label{font-family:var(--font-mono);font-size:.62rem;color:var(--muted);letter-spacing:1px;margin-top:2px}
+.tdee-macros{display:flex;justify-content:center;gap:1.5rem;margin-bottom:.5rem}
+.tdee-macro{text-align:center}
+.tdee-mv{font-family:var(--font-display);font-size:1.4rem;letter-spacing:1px}
+.tdee-ml{font-family:var(--font-mono);font-size:.58rem;color:var(--muted);text-transform:uppercase;margin-top:1px}
+.tdee-detail{font-family:var(--font-mono);font-size:.6rem;color:var(--dim)}
+
+/* ── Dev Tools ── */
+.dev-panel{margin-top:1.2rem;padding:1rem;background:rgba(248,113,113,.05);border:1px dashed var(--red);border-radius:12px}
+.dev-row{display:flex;gap:5px;margin-top:.4rem;flex-wrap:wrap}
+.dev-btn{padding:7px 12px;border:1px solid var(--border);background:var(--surface2);color:var(--muted);border-radius:7px;font-size:.68rem;font-family:var(--font-mono);cursor:pointer;transition:all .15s}
+.dev-btn:hover{color:var(--red);border-color:var(--red)}
+
+/* ── Google Sign-In Button ── */
+.auth-btn.google{background:#fff;color:#333;font-weight:600;display:flex;align-items:center;justify-content:center;border:1px solid #ddd;margin-top:.3rem}
+.auth-btn.google:hover{background:#f5f5f5}
+
+/* ── Profile real name (private) ── */
+.profile-realname{font-size:.76rem;color:var(--muted);margin-top:.1rem}
