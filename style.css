@@ -418,3 +418,7 @@ input[type=checkbox]:checked::after{content:'✓';position:absolute;color:#fff;f
 @keyframes slFlicker{0%,100%{opacity:1}50%{opacity:.6}75%{opacity:1}80%{opacity:.4}85%{opacity:1}}
 .auth-logo h1{text-shadow:0 0 30px rgba(167,139,250,.3)}
 .page-title{text-shadow:0 0 20px rgba(123,92,255,.15)}
+
+/* ── Gate Locked Banner ── */
+.gate-locked-banner{text-align:center;font-family:var(--font-display);font-size:1.3rem;letter-spacing:3px;color:var(--red);padding:1rem;margin-bottom:.8rem;background:rgba(248,113,113,.08);border:2px solid var(--red);border-radius:12px;animation:gatePulse 2s infinite}
+@keyframes gatePulse{0%,100%{border-color:var(--red);box-shadow:0 0 10px rgba(248,113,113,.2)}50%{border-color:rgba(248,113,113,.4);box-shadow:0 0 20px rgba(248,113,113,.1)}}
