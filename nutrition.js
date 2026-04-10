@@ -110,101 +110,58 @@ async function addFoodFromSearch(food){
   closeFoodSearch();renderNutritionPage();toast(`${food.name} logged!`);
 }
 
-// ── BARCODE SCANNER ──
-let scannerStream=null;let scannerRunning=false;
+// ── BARCODE SCANNER (html5-qrcode library — works on iOS + Android + Desktop) ──
+let html5Scanner=null;
 
 async function openScanner(){
-  const video=$('scannerVideo');
-
-  // Check if camera API exists
-  if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){
-    $('scannerModal').classList.add('open');
-    $('scannerStatus').textContent='Camera not supported on this browser. Enter barcode manually:';
-    $('scannerStatus').style.color='var(--gold)';
-    $('scannerManualRow').style.display='flex';
-    $('scannerManualInput').value='';
-    video.style.display='none';
-    return;
-  }
-
-  // Request camera FIRST before any DOM changes (iOS requires user gesture → getUserMedia with no gap)
-  let stream;
-  try{
-    try{
-      stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'},audio:false});
-    }catch(e1){
-      stream=await navigator.mediaDevices.getUserMedia({video:true,audio:false});
-    }
-  }catch(e){
-    // Camera failed — show modal with manual entry and error
-    $('scannerModal').classList.add('open');
-    $('scannerManualRow').style.display='flex';
-    $('scannerManualInput').value='';
-    video.style.display='none';
-    if(e.name==='NotAllowedError'||e.name==='PermissionDeniedError'){
-      $('scannerStatus').textContent='Camera permission denied. Allow camera in your browser settings, or enter barcode below:';
-    }else if(e.name==='NotFoundError'){
-      $('scannerStatus').textContent='No camera found. Enter barcode below:';
-    }else{
-      $('scannerStatus').textContent='Camera error ('+e.name+'). Enter barcode below:';
-    }
-    $('scannerStatus').style.color='var(--red)';
-    return;
-  }
-
-  // Camera granted — now open modal and show feed
-  scannerStream=stream;
   $('scannerModal').classList.add('open');
+  $('scannerStatus').textContent='Starting camera...';
+  $('scannerStatus').style.color='var(--muted)';
   $('scannerManualRow').style.display='flex';
   $('scannerManualInput').value='';
-  video.srcObject=stream;
-  video.muted=true;
-  video.style.display='block';
+
+  // Clear previous scanner instance
+  if(html5Scanner){try{await html5Scanner.clear()}catch(e){}}
+  $('scannerReader').innerHTML='';
 
   try{
-    await video.play();
-  }catch(playErr){
-    // play() can fail on some mobile browsers
-    $('scannerStatus').textContent='Camera stream received but video failed. Enter barcode below:';
-    $('scannerStatus').style.color='var(--gold)';
-    return;
-  }
-
-  $('scannerStatus').textContent='📷 Camera active';
-  $('scannerStatus').style.color='var(--green)';
-
-    // Try auto-scan if BarcodeDetector available (Chrome Android only)
-    if('BarcodeDetector' in window){
-      try{
-        const detector=new BarcodeDetector({formats:['ean_13','ean_8','upc_a','upc_e','code_128']});
-        $('scannerStatus').textContent='📷 Point at barcode — scanning...';
-        scannerRunning=true;
-        const scanLoop=async()=>{
-          if(!scannerRunning)return;
-          try{
-            const codes=await detector.detect(video);
-            if(codes.length>0){
-              scannerRunning=false;closeScanner();
-              await lookupBarcode(codes[0].rawValue);return;
-            }
-          }catch(e){}
-          if(scannerRunning)requestAnimationFrame(scanLoop);
-        };
-        scanLoop();
-      }catch(e){
-        $('scannerStatus').textContent='📷 Camera active — enter barcode below:';
-        $('scannerStatus').style.color='var(--gold)';
+    html5Scanner=new Html5Qrcode('scannerReader');
+    await html5Scanner.start(
+      {facingMode:'environment'},
+      {fps:10,qrbox:{width:250,height:150},aspectRatio:1.5},
+      async(decodedText)=>{
+        // Barcode found!
+        await closeScanner();
+        await lookupBarcode(decodedText);
+      },
+      (errorMessage)=>{
+        // Scanning... no barcode yet (this fires constantly, ignore)
       }
+    );
+    $('scannerStatus').textContent='📷 Point at barcode...';
+    $('scannerStatus').style.color='var(--green)';
+  }catch(e){
+    $('scannerStatus').style.color='var(--red)';
+    if(e.toString().includes('NotAllowedError')||e.toString().includes('Permission')){
+      $('scannerStatus').textContent='Camera permission denied. Allow camera access or enter barcode below:';
     }else{
-      $('scannerStatus').textContent='📷 Camera active — auto-scan not available. Read the barcode number and enter below:';
-      $('scannerStatus').style.color='var(--gold)';
+      $('scannerStatus').textContent='Camera unavailable. Enter barcode below:';
     }
+  }
 }
 
-function closeScanner(){
-  scannerRunning=false;
-  if(scannerStream){scannerStream.getTracks().forEach(t=>t.stop());scannerStream=null}
-  const video=$('scannerVideo');if(video){video.srcObject=null;video.style.display='none'}
+async function closeScanner(){
+  if(html5Scanner){
+    try{
+      const state=html5Scanner.getState();
+      if(state===Html5QrcodeScannerState.SCANNING||state===Html5QrcodeScannerState.PAUSED){
+        await html5Scanner.stop();
+      }
+      await html5Scanner.clear();
+    }catch(e){}
+    html5Scanner=null;
+  }
+  $('scannerReader').innerHTML='';
   $('scannerStatus').style.color='';
   $('scannerModal').classList.remove('open');
 }
