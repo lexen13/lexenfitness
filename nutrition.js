@@ -109,31 +109,61 @@ async function addFoodFromSearch(food){
 }
 
 // ── BARCODE SCANNER ──
+let scannerStream=null;let scannerRunning=false;
+
 async function openScanner(){
-  // Try native BarcodeDetector first
-  if('BarcodeDetector' in window){
-    try{
-      const stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}});
-      $('scannerModal').classList.add('open');
-      const video=$('scannerVideo');video.srcObject=stream;video.play();
-      const detector=new BarcodeDetector({formats:['ean_13','ean_8','upc_a','upc_e']});
+  $('scannerModal').classList.add('open');
+  $('scannerStatus').textContent='Starting camera...';
+  $('scannerManualRow').style.display='flex';
+  $('scannerManualInput').value='';
+
+  // Try to get camera
+  try{
+    const stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'}},audio:false});
+    scannerStream=stream;
+    const video=$('scannerVideo');video.srcObject=stream;video.style.display='block';
+    await video.play();
+
+    // Check if BarcodeDetector is available (Chrome/Edge Android, not iOS)
+    if('BarcodeDetector' in window){
+      $('scannerStatus').textContent='Point at barcode...';
+      const detector=new BarcodeDetector({formats:['ean_13','ean_8','upc_a','upc_e','code_128']});
+      scannerRunning=true;
       const scanLoop=async()=>{
-        if(!$('scannerModal').classList.contains('open')){stream.getTracks().forEach(t=>t.stop());return}
-        try{const codes=await detector.detect(video);
-          if(codes.length>0){stream.getTracks().forEach(t=>t.stop());$('scannerModal').classList.remove('open');await lookupBarcode(codes[0].rawValue);return}
+        if(!scannerRunning){return}
+        try{
+          const codes=await detector.detect(video);
+          if(codes.length>0){
+            scannerRunning=false;closeScanner();
+            await lookupBarcode(codes[0].rawValue);return;
+          }
         }catch(e){}
-        requestAnimationFrame(scanLoop);
-      };scanLoop();
-      return;
-    }catch(e){console.log('Camera error, falling back to manual')}
+        if(scannerRunning)requestAnimationFrame(scanLoop);
+      };
+      scanLoop();
+    }else{
+      $('scannerStatus').textContent='Auto-scan not supported on this device. Enter barcode below or take a photo of the number.';
+    }
+  }catch(e){
+    // Camera denied or unavailable
+    $('scannerVideo').style.display='none';
+    $('scannerStatus').textContent='Camera unavailable. Enter barcode number below:';
+    console.log('Camera error:',e.message);
   }
-  // Fallback: manual barcode entry
-  const code=prompt('Camera not available.\n\nEnter barcode number manually:');
-  if(code)await lookupBarcode(code.trim());
 }
+
 function closeScanner(){
-  const video=$('scannerVideo');if(video.srcObject)video.srcObject.getTracks().forEach(t=>t.stop());
+  scannerRunning=false;
+  if(scannerStream){scannerStream.getTracks().forEach(t=>t.stop());scannerStream=null}
+  const video=$('scannerVideo');if(video){video.srcObject=null;video.style.display='none'}
   $('scannerModal').classList.remove('open');
+}
+
+async function scannerManualLookup(){
+  const code=$('scannerManualInput').value.trim();
+  if(!code){toast('Enter a barcode number');return}
+  closeScanner();
+  await lookupBarcode(code);
 }
 
 async function lookupBarcode(code){
