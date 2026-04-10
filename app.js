@@ -451,7 +451,47 @@ function devTriggerSplash(){
 }
 
 // ═══════════ WORKOUT ═══════════
-function buildWorkout(){const prog=userData.program||[];if(!prog.length)return;$('workoutTitle').textContent=(userData.class||'WORKOUT').toUpperCase();$('workoutSub').textContent=(userData.subclass?userData.subclass+' — ':'')+getEffectiveRank().name;$('dayTabs').innerHTML=prog.map(d=>`<div class="dtab${d.id===currentDay?' active':''}" data-d="${d.id}" onclick="switchDay('${d.id}')">${d.title}</div>`).join('');renderDay()}
+function buildWorkout(){
+  const prog=userData.program||[];
+  $('workoutTitle').textContent=(userData.class||'WORKOUT').toUpperCase();
+  $('workoutSub').textContent=(userData.subclass?userData.subclass+' — ':'')+getEffectiveRank().name;
+  if(!prog.length){$('dayTabs').innerHTML='';$('dayContent').innerHTML='<p style="color:var(--muted);font-size:.82rem">No days in your program.</p><button class="add-ex" onclick="addWorkoutDay()" style="margin-top:.5rem">+ Add Workout Day</button>';return}
+  if(!prog.find(d=>d.id===currentDay))currentDay=prog[0].id;
+  $('dayTabs').innerHTML=prog.map(d=>`<div class="dtab${d.id===currentDay?' active':''}" data-d="${d.id}" onclick="switchDay('${d.id}')">${d.title}</div>`).join('')+`<div class="dtab" style="color:var(--green);border-color:var(--green)" onclick="addWorkoutDay()">+</div>`;
+  renderDay();
+}
+async function addWorkoutDay(){
+  const prog=userData.program||[];
+  const num=prog.length+1;
+  const title=prompt('Day name (e.g. "PUSH DAY", "DAY 5"):','DAY '+num);
+  if(!title)return;
+  const sub=prompt('Subtitle (e.g. "Monday — Chest & Tris"):','');
+  captureInputs();
+  prog.push({id:'day'+Date.now(),title:title.toUpperCase(),subtitle:sub||'',exercises:[]});
+  await saveUser({program:prog});
+  currentDay=prog[prog.length-1].id;
+  buildWorkout();toast('Day added!');
+}
+async function removeWorkoutDay(){
+  const prog=userData.program||[];
+  const day=prog.find(d=>d.id===currentDay);
+  if(!day)return;
+  if(!confirm(`Remove "${day.title}"? This deletes all exercises in this day.`))return;
+  captureInputs();
+  const idx=prog.indexOf(day);prog.splice(idx,1);
+  await saveUser({program:prog});
+  currentDay=prog.length?prog[0].id:'';
+  buildWorkout();toast('Day removed.');
+}
+async function renameWorkoutDay(){
+  const prog=userData.program||[];
+  const day=prog.find(d=>d.id===currentDay);if(!day)return;
+  const title=prompt('New day name:',day.title);if(!title)return;
+  const sub=prompt('New subtitle:',day.subtitle);
+  day.title=title.toUpperCase();day.subtitle=sub||day.subtitle;
+  await saveUser({program:prog});
+  buildWorkout();toast('Day renamed!');
+}
 function switchDay(id){currentDay=id;document.querySelectorAll('.dtab').forEach(t=>t.classList.toggle('active',t.dataset.d===id));renderDay()}
 function renderDay(){const prog=userData.program||[],day=prog.find(d=>d.id===currentDay);if(!day)return;const di=prog.indexOf(day);let h='';
   day.exercises.forEach((ex,ei)=>{h+=`<div class="exercise"><div class="ex-header"><span class="ex-num">${ei+1}</span><span class="ex-name">${ex.name}</span><button class="ex-edit" onclick="openEdit(${di},${ei})">✏️</button></div><div class="sets-grid">`;
@@ -459,7 +499,9 @@ function renderDay(){const prog=userData.program||[],day=prog.find(d=>d.id===cur
       if(ex.isTime)h+=`<div class="set-row"><label>S${s+1}</label><input type="number" id="${rK}" placeholder="sec" value="${savedInputs[rK]||''}"><span class="sep">sec</span><input type="checkbox" id="${cK}" ${savedInputs[cK]?'checked':''}><span class="target">${ex.reps}</span></div>`;
       else h+=`<div class="set-row"><label>S${s+1}</label><input type="number" id="${wK}" placeholder="lbs" value="${savedInputs[wK]||''}"><span class="sep">×</span><input type="number" id="${rK}" placeholder="reps" value="${savedInputs[rK]||''}"><input type="checkbox" id="${cK}" ${savedInputs[cK]?'checked':''}><span class="target">${ex.reps}</span></div>`}
     h+='</div></div>'});
-  h+=`<button class="add-ex" onclick="openAdd(${di})">+ Add Exercise</button>`;$('dayContent').innerHTML=h}
+  h+=`<button class="add-ex" onclick="openAdd(${di})">+ Add Exercise</button>`;
+  h+=`<div class="day-manage"><button class="day-manage-btn" onclick="renameWorkoutDay()">✏️ Rename Day</button><button class="day-manage-btn" style="color:var(--red)" onclick="removeWorkoutDay()">🗑 Remove Day</button></div>`;
+  $('dayContent').innerHTML=h}
 
 function openEdit(di,ei){editTarget={di,ei};const ex=userData.program[di].exercises[ei];$('editName').value=ex.name;$('editSets').value=ex.sets;$('editReps').value=ex.reps;$('editModal').classList.add('open')}
 function closeEdit(){$('editModal').classList.remove('open')}

@@ -198,10 +198,29 @@
 <!-- MANUAL FOOD MODAL -->
 <div class="modal-bg" id="manualFoodModal"><div class="modal">
 <h2>✏️ Manual Entry</h2>
-<div class="m-field"><label>Food Name</label><input type="text" id="mfName" placeholder="e.g. Chicken breast"></div>
+<div class="m-field"><label>Food Name</label><input type="text" id="mfName" placeholder="e.g. Chicken breast 6oz"></div>
+<div class="m-field"><label>Serving</label><input type="text" id="mfServing" placeholder="e.g. 1 can, 6oz, 2 scoops"></div>
 <div class="settings-row-fields"><div class="m-field" style="flex:1"><label>Calories</label><input type="number" id="mfCal"></div><div class="m-field" style="flex:1"><label>Protein (g)</label><input type="number" id="mfProtein"></div></div>
 <div class="settings-row-fields"><div class="m-field" style="flex:1"><label>Carbs (g)</label><input type="number" id="mfCarbs"></div><div class="m-field" style="flex:1"><label>Fat (g)</label><input type="number" id="mfFat"></div></div>
 <div class="m-actions"><button class="m-cancel" onclick="closeManualFood()">Cancel</button><button class="m-save-btn" onclick="saveManualFood()">Add</button></div>
+</div></div>
+
+<!-- SERVING SIZE MODAL -->
+<div class="modal-bg" id="servingModal"><div class="modal">
+<h2>🍽️ Adjust Serving</h2>
+<div class="serving-food-name" id="servingFoodName"></div>
+<p id="servingSuggestion" style="font-size:.72rem;color:var(--gold);margin:.4rem 0"></p>
+<div class="m-field"><label>Amount (grams)</label><input type="number" id="servingAmount" value="100" min="1" oninput="updateServingPreview()"></div>
+<div class="serving-quick-btns">
+  <button onclick="$('servingAmount').value=50;updateServingPreview()">50g</button>
+  <button onclick="$('servingAmount').value=100;updateServingPreview()">100g</button>
+  <button onclick="$('servingAmount').value=200;updateServingPreview()">200g</button>
+  <button onclick="$('servingAmount').value=250;updateServingPreview()">250g</button>
+  <button onclick="$('servingAmount').value=350;updateServingPreview()">350g</button>
+  <button onclick="$('servingAmount').value=500;updateServingPreview()">500g</button>
+</div>
+<div class="serving-preview" id="servingPreview"></div>
+<div class="m-actions"><button class="m-cancel" onclick="closeServingModal()">Cancel</button><button class="m-save-btn" onclick="confirmServing()">Log It</button></div>
 </div></div>
 
 <!-- BARCODE SCANNER MODAL -->

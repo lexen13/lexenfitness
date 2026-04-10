@@ -430,3 +430,29 @@ input[type=checkbox]:checked::after{content:'✓';position:absolute;color:#fff;f
 #html5-qrcode-button-camera-start,
 #html5-qrcode-button-camera-stop{background:var(--accent)!important;color:#fff!important;border:none!important;border-radius:8px!important;padding:8px 16px!important;font-family:var(--font-body)!important;font-weight:600!important;cursor:pointer!important}
 #html5-qrcode-select-camera{background:var(--surface2)!important;color:var(--text)!important;border:1px solid var(--border)!important;border-radius:8px!important;padding:6px 10px!important;font-family:var(--font-body)!important}
+
+/* ── Serving Size Modal ── */
+.serving-food-name{font-weight:700;font-size:.92rem;margin-bottom:.2rem}
+.serving-quick-btns{display:flex;gap:5px;flex-wrap:wrap;margin:.5rem 0}
+.serving-quick-btns button{padding:6px 12px;border:1px solid var(--border);background:var(--surface2);color:var(--muted);border-radius:7px;font-size:.72rem;font-family:var(--font-mono);cursor:pointer}
+.serving-quick-btns button:hover{border-color:var(--accent);color:var(--accent)}
+.serving-preview{font-family:var(--font-mono);font-size:.85rem;text-align:center;padding:.6rem;background:var(--surface2);border-radius:8px;margin:.5rem 0}
+
+/* ── Food Date Navigation ── */
+.date-nav{display:flex;justify-content:center;gap:8px;margin-bottom:.7rem}
+.date-btn{padding:6px 14px;border:1px solid var(--border);background:var(--surface);color:var(--muted);border-radius:7px;font-size:.74rem;font-family:var(--font-mono);cursor:pointer}
+.date-btn:hover:not(:disabled){color:var(--text);border-color:var(--accent)}
+.date-btn.active{color:var(--accent2);border-color:var(--accent);background:var(--surface2)}
+.date-btn:disabled{opacity:.3;cursor:not-allowed}
+
+/* ── Food History ── */
+.food-history{display:flex;flex-direction:column;gap:.3rem}
+.food-history-day{padding:.5rem .7rem;background:var(--surface);border:1px solid var(--border);border-radius:8px;cursor:pointer;transition:all .15s}
+.food-history-day:hover,.food-history-day.current{border-color:var(--accent);background:var(--surface2)}
+.fh-date{font-weight:600;font-size:.78rem}
+.fh-stats{font-family:var(--font-mono);font-size:.66rem;color:var(--muted);margin-top:1px}
+
+/* ── Workout Day Management ── */
+.day-manage{display:flex;gap:6px;margin-top:.6rem}
+.day-manage-btn{flex:1;padding:8px;border:1px solid var(--border);background:var(--surface);color:var(--muted);border-radius:8px;font-size:.72rem;font-weight:600;cursor:pointer;font-family:var(--font-body)}
+.day-manage-btn:hover{border-color:var(--accent);color:var(--text)}
