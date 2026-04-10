@@ -8,8 +8,25 @@ let U=null,userData={},workoutLog=[],savedInputs={},isDev=false;
 let currentDay='day1',currentPage='workout',logFilter='all',lbMode='all';
 let editTarget=null,addDayIdx=null,selectedClass=null,selectedSub=null,selectedProg=null;
 let prevRankName=null;
-let authLock=false; // prevents onAuthStateChanged from racing during signup
+let authLock=false;
 const $=id=>document.getElementById(id);
+
+// XSS protection: escape HTML in user/API-sourced strings
+function esc(s){if(!s)return'';const d=document.createElement('div');d.textContent=String(s);return d.innerHTML}
+
+// Cleanup: cap unbounded data to prevent Firestore bloat
+async function cleanupOldData(){
+  let dirty=false;
+  if(userData.missionsCompleted){
+    const cut=new Date();cut.setDate(cut.getDate()-90);const cs=cut.toISOString().slice(0,10);
+    Object.keys(userData.missionsCompleted).forEach(k=>{if(k<cs){delete userData.missionsCompleted[k];dirty=true}});
+  }
+  if(userData.foodLog){
+    const cut=new Date();cut.setDate(cut.getDate()-30);const cs=cut.toISOString().slice(0,10);
+    Object.keys(userData.foodLog).forEach(k=>{if(k<cs){delete userData.foodLog[k];dirty=true}});
+  }
+  if(dirty)await saveUser({missionsCompleted:userData.missionsCompleted,foodLog:userData.foodLog||{}});
+}
 
 // ═══════════ AUTH ═══════════
 const showLogin=()=>{$('loginForm').style.display='';$('signupForm').style.display='none'};
@@ -104,9 +121,9 @@ async function submitUsername(){
 // ═══════════ FIRESTORE ═══════════
 async function loadUserData(){
   const doc=await db.collection('users').doc(U.uid).get();
-  userData=doc.exists?doc.data():{name:U.displayName||'',xp:0,achievements:[],stats:{},prs:{},friends:[],privacy:{hideName:false,hideStats:false},missionsCompleted:{},missionStreak:0,trialsCompleted:[]};
+  userData=doc.exists?doc.data():{name:U.displayName||'',xp:0,achievements:[],stats:{},prs:{},friends:[],privacy:{hideName:false,hideStats:false},missionsCompleted:{},missionStreak:0,trialsCompleted:[],foodLog:{}};
   ['achievements','friends','trialsCompleted'].forEach(k=>{if(!userData[k])userData[k]=[]});
-  ['stats','prs','privacy','missionsCompleted'].forEach(k=>{if(!userData[k])userData[k]={}});
+  ['stats','prs','privacy','missionsCompleted','foodLog'].forEach(k=>{if(!userData[k])userData[k]={}});
   if(!userData.missionStreak)userData.missionStreak=0;
   // Migrate: generate friend code if missing
   if(!userData.friendCode){
@@ -119,6 +136,8 @@ async function loadUserData(){
   workoutLog=[];ls.forEach(d=>workoutLog.push({_id:d.id,...d.data()}));
   const iDoc=await db.collection('users').doc(U.uid).collection('meta').doc('inputs').get();
   savedInputs=iDoc.exists?(iDoc.data().data||{}):{};
+  // Cleanup old data to prevent Firestore bloat
+  await cleanupOldData();
 }
 async function saveUser(f){await db.collection('users').doc(U.uid).update(f);Object.assign(userData,f)}
 async function saveLeaderboard(){const r=getEffectiveRank();await db.collection('leaderboard').doc(U.uid).set({username:userData.username||'hunter',xp:userData.xp,class:userData.class,subclass:userData.subclass||'',rank:r.name,profilePic:userData.profilePic||'',updatedAt:firebase.firestore.FieldValue.serverTimestamp()})}
@@ -533,7 +552,24 @@ async function saveSettings(){
 async function changePassword(){const np=$('setNewPass').value;if(!np||np.length<6){toast('6+ chars required');return}try{await U.updatePassword(np);$('setNewPass').value='';toast('Password changed!')}catch(err){toast(friendlyErr(err.code))}}
 function changeProgram(){selectedClass=null;selectedSub=null;selectedProg=null;showScreen('classScreen');buildClassSelect()}
 
-document.getElementById('picInput').addEventListener('change',async function(){const file=this.files[0];if(!file)return;const reader=new FileReader();reader.onload=async function(e){const img=new Image();img.onload=async function(){const canvas=document.createElement('canvas');const max=200;let w=img.width,h=img.height;if(w>h){h=h*(max/w);w=max}else{w=w*(max/h);h=max}canvas.width=w;canvas.height=h;canvas.getContext('2d').drawImage(img,0,0,w,h);await saveUser({profilePic:canvas.toDataURL('image/jpeg',0.7)});await saveLeaderboard();renderProfile();toast('Photo updated!')};img.src=e.target.result};reader.readAsDataURL(file)});
+document.getElementById('picInput').addEventListener('change',async function(){
+  const file=this.files[0];if(!file)return;
+  if(file.size>5*1024*1024){toast('Image too large (5MB max)');return}
+  const reader=new FileReader();
+  reader.onload=async function(e){
+    const img=new Image();img.onload=async function(){
+      const canvas=document.createElement('canvas');const max=150;
+      let w=img.width,h=img.height;
+      if(w>h){h=h*(max/w);w=max}else{w=w*(max/h);h=max}
+      canvas.width=w;canvas.height=h;
+      canvas.getContext('2d').drawImage(img,0,0,w,h);
+      const data=canvas.toDataURL('image/jpeg',0.5);
+      // Cap at 100KB base64
+      if(data.length>100000){toast('Image too complex — try a simpler photo');return}
+      await saveUser({profilePic:data});await saveLeaderboard();renderProfile();toast('Photo updated!');
+    };img.src=e.target.result;
+  };reader.readAsDataURL(file);
+});
 
 // ═══════════ FRIENDS (username only) ═══════════
 async function addFriend(){const code=$('friendCodeInput').value.trim().toUpperCase();if(code.length!==6){toast('Enter 6-char code');return}if(code===userData.friendCode){toast("That's your code!");return}
