@@ -80,25 +80,22 @@ const doLogout=()=>auth.signOut();
 function friendlyErr(c){return{'auth/invalid-email':'Invalid email','auth/user-not-found':'No account','auth/wrong-password':'Wrong password','auth/email-already-in-use':'Email taken','auth/weak-password':'Password 6+ chars','auth/invalid-credential':'Invalid email or password','auth/too-many-requests':'Too many attempts','auth/requires-recent-login':'Sign out and back in first','auth/popup-closed-by-user':'Sign-in cancelled','auth/cancelled-popup-request':'Sign-in cancelled'}[c]||'Something went wrong'}
 
 auth.onAuthStateChanged(async u=>{
-  if(authLock)return; // signup in progress — don't race
-  $('loadingScreen').style.display='none';
+  if(authLock)return;
   if(u){
     U=u;isDev=(u.email===DEV_EMAIL);
-    // Check if user doc exists
     const doc=await db.collection('users').doc(U.uid).get();
     if(!doc.exists){
-      // Brand new Google user — needs full setup
       const fc=genFriendCode();
       await db.collection('users').doc(U.uid).set({name:u.displayName||'',username:'',email:u.email,friendCode:fc,xp:0,achievements:[],stats:{},prs:{},profilePic:u.photoURL||'',class:'',subclass:'',programKey:'',program:[],friends:[],privacy:{hideName:false,hideStats:false},goal:'',experience:'',missionsCompleted:{},missionStreak:0,trialsCompleted:[],createdAt:firebase.firestore.FieldValue.serverTimestamp()});
       await db.collection('friendCodes').doc(fc).set({uid:U.uid});
     }
     await loadUserData();
     prevRankName=getEffectiveRank().name;
-    // Check if username is set — if not, force username screen
+    $('loadingScreen').style.display='none';
     if(!userData.username){showScreen('usernameScreen');return}
     if(!userData.class){showScreen('classScreen');buildClassSelect()}
     else{showScreen('appScreen');initApp()}
-  }else{U=null;isDev=false;showScreen('authScreen')}
+  }else{U=null;isDev=false;$('loadingScreen').style.display='none';showScreen('authScreen')}
 });
 function showScreen(id){['authScreen','classScreen','appScreen','usernameScreen'].forEach(s=>{$(s).classList.remove('active');$(s).style.display='none'});$(id).style.display='';$(id).classList.add('active')}
 
@@ -265,6 +262,7 @@ function switchSubTab(page,tab){
   const sp=$('sp-'+tab);if(sp)sp.classList.add('active');
   if(tab==='log')renderLog();if(tab==='rankinfo')$('rankInfoContent').innerHTML=renderRankInfo();if(tab==='leaderboard')renderLeaderboard();
   if(tab==='aicoach')renderAICoach();if(tab==='friendchat')renderChatList();
+  if(tab==='friends')renderFriendsPage();if(tab==='mystats')renderProfile();
 }
 
 // ═══════════ DAILY MISSIONS ═══════════
@@ -556,15 +554,22 @@ function renderProfile(){
   h+=`<div class="stats-grid"><div class="stat-card"><div class="sv">${prs.bench||'—'}</div><div class="sl">Bench PR</div></div><div class="stat-card"><div class="sv">${prs.squat||'—'}</div><div class="sl">Squat PR</div></div><div class="stat-card"><div class="sv">${prs.deadlift||'—'}</div><div class="sl">Deadlift PR</div></div></div>`;
   h+=`<div class="stats-grid"><div class="stat-card"><div class="sv">${workoutLog.length}</div><div class="sl">Workouts</div></div><div class="stat-card"><div class="sv">${calcStreak()}</div><div class="sl">Streak</div></div><div class="stat-card"><div class="sv">${(userData.achievements||[]).length}</div><div class="sl">Achieve.</div></div></div>`;
   h+=`<button class="edit-stats-btn" onclick="openSettings()">⚙️ Settings</button>`;
-  // Friends — username only
-  // Friends
-  h+=`<div class="section-title" style="margin:.8rem 0 .4rem">FRIENDS (${(userData.friends||[]).length})</div>`;
-  h+=`<div class="friend-add-row"><input type="text" id="friendCodeInput" class="auth-input" placeholder="Enter friend code" maxlength="6" style="margin:0;flex:1"><button class="m-save-btn" style="flex:0 0 auto;padding:10px 14px;border-radius:8px" onclick="sendFriendRequest()">Send Request</button></div>`;
-  h+=`<div id="friendRequests" style="margin-top:.5rem"></div>`;
-  h+=`<div id="friendsList" style="margin-top:.3rem"></div>`;
-  // Dev tools
   h+=renderDevTools();
-  $('profileContent').innerHTML=h;loadFriendsList();
+  $('profileContent').innerHTML=h;
+}
+
+// ═══════════ FRIENDS PAGE ═══════════
+function renderFriendsPage(){
+  const fc=userData.friendCode||'------';
+  const friends=userData.friends||[];
+  let h=`<div class="page-title">FRIENDS</div>`;
+  h+=`<div class="profile-friend-code" style="text-align:center;margin:.5rem 0">Your Friend Code: <strong style="font-size:1.1rem;letter-spacing:2px;color:var(--gold)">${fc}</strong></div>`;
+  h+=`<div class="friend-add-row" style="margin-bottom:.6rem"><input type="text" id="friendCodeInput" class="auth-input" placeholder="Enter friend code" maxlength="6" style="margin:0;flex:1" autocapitalize="characters"><button class="m-save-btn" style="flex:0 0 auto;padding:10px 14px;border-radius:8px" onclick="sendFriendRequest()">Send Request</button></div>`;
+  h+=`<div id="friendRequests"></div>`;
+  h+=`<div class="section-title" style="margin:.6rem 0 .3rem">FRIENDS LIST (${friends.length})</div>`;
+  h+=`<div id="friendsList"></div>`;
+  $('friendsPageContent').innerHTML=h;
+  loadFriendsList();
 }
 
 // ═══════════ SETTINGS ═══════════

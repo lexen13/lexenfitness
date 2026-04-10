@@ -141,7 +141,14 @@
 </div>
 
 <!-- ══ PROFILE ══ -->
-<div class="page active" id="page-profile"><div id="profileContent"></div></div>
+<div class="page active" id="page-profile">
+  <div class="sub-tabs" id="profileTabs">
+    <div class="stab active" data-st="mystats" onclick="switchSubTab('profile','mystats')">Profile</div>
+    <div class="stab" data-st="friends" onclick="switchSubTab('profile','friends')">Friends</div>
+  </div>
+  <div class="sub-page active" id="sp-mystats"><div id="profileContent"></div></div>
+  <div class="sub-page" id="sp-friends"><div id="friendsPageContent"></div></div>
+</div>
 
 <!-- NAV -->
 <div class="nav-bar">
