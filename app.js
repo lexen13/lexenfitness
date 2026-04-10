@@ -21,11 +21,22 @@ async function doSignup(){
   if(!f){$('signupError').textContent='First name required';return}
   if(!uname||uname.length<3){$('signupError').textContent='Username must be 3+ characters';return}
   if(/[^a-z0-9_]/.test(uname)){$('signupError').textContent='Letters, numbers, underscores only';return}
-  const uc=await db.collection('usernames').doc(uname).get();
-  if(uc.exists){$('signupError').textContent='Username taken';return}
+  if(!e){$('signupError').textContent='Email required';return}
+  if(!p||p.length<6){$('signupError').textContent='Password must be 6+ characters';return}
   try{
-    authLock=true; // block onAuthStateChanged until we finish
+    authLock=true;
+    // 1. Create auth account first (so we're authenticated for Firestore)
     const cred=await auth.createUserWithEmailAndPassword(e,p);
+    // 2. Now check username availability (authenticated, rules allow read)
+    const uc=await db.collection('usernames').doc(uname).get();
+    if(uc.exists){
+      // Username taken — delete the auth account we just created and bail
+      await cred.user.delete();
+      authLock=false;
+      $('signupError').textContent='Username taken — try another';
+      return;
+    }
+    // 3. All good — write everything
     const dn=f+(l?' '+l:'');
     await cred.user.updateProfile({displayName:dn});
     const fc=genFriendCode();
@@ -33,10 +44,10 @@ async function doSignup(){
     await db.collection('usernames').doc(uname).set({uid:cred.user.uid});
     await db.collection('friendCodes').doc(fc).set({uid:cred.user.uid});
     authLock=false;
-    // Manually trigger the auth flow now that everything is written
     U=cred.user;isDev=(U.email===DEV_EMAIL);
     await loadUserData();
     prevRankName=getEffectiveRank().name;
+    $('loadingScreen').style.display='none';
     showScreen('classScreen');buildClassSelect();
   }catch(err){
     authLock=false;
