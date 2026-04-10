@@ -23,20 +23,35 @@
   <input class="auth-input" type="password" id="loginPass" placeholder="Password">
   <button class="auth-btn primary" onclick="doLogin()">Sign In</button>
   <button class="auth-btn ghost" onclick="resetPassword()" style="margin-top:.2rem;font-size:.72rem">Forgot password?</button>
+  <div class="auth-divider">OR</div>
+  <button class="auth-btn google" onclick="doGoogleLogin()"><svg width="18" height="18" viewBox="0 0 24 24" style="vertical-align:middle;margin-right:8px"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>Continue with Google</button>
   <div class="auth-divider">NEW HERE?</div>
   <button class="auth-btn ghost" onclick="showSignup()">Create an account →</button>
   <div class="auth-error" id="loginError"></div>
 </div>
 <div id="signupForm" style="display:none">
   <div class="auth-name-row"><input class="auth-input" type="text" id="signupFirst" placeholder="First name"><input class="auth-input" type="text" id="signupLast" placeholder="Last name"></div>
-  <input class="auth-input" type="text" id="signupUsername" placeholder="Username (public)" maxlength="20" autocapitalize="off">
+  <input class="auth-input" type="text" id="signupUsername" placeholder="Username (required — public display)" maxlength="20" autocapitalize="off" style="border-color:var(--accent)">
   <input class="auth-input" type="email" id="signupEmail" placeholder="Email">
   <input class="auth-input" type="password" id="signupPass" placeholder="Password (6+ chars)">
   <button class="auth-btn primary" onclick="doSignup()">Create Account</button>
+  <div class="auth-divider">OR</div>
+  <button class="auth-btn google" onclick="doGoogleLogin()"><svg width="18" height="18" viewBox="0 0 24 24" style="vertical-align:middle;margin-right:8px"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>Continue with Google</button>
   <div class="auth-divider">ALREADY HAVE AN ACCOUNT?</div>
   <button class="auth-btn ghost" onclick="showLogin()">Sign in →</button>
   <div class="auth-error" id="signupError"></div>
 </div>
+</div>
+</div>
+
+<!-- ══ USERNAME REQUIRED (after Google sign-in) ══ -->
+<div class="screen-center" id="usernameScreen" style="display:none">
+<div class="auth-box">
+  <div class="auth-logo"><h1>ALMOST THERE</h1><p>Choose a username to continue</p></div>
+  <input class="auth-input" type="text" id="newUsername" placeholder="Username (required)" maxlength="20" autocapitalize="off" style="border-color:var(--accent)">
+  <p style="font-size:.7rem;color:var(--muted);margin-bottom:.8rem">This is your public identity — only this shows on leaderboards and to friends. Letters, numbers, underscores only.</p>
+  <button class="auth-btn primary" onclick="submitUsername()">Let's Go</button>
+  <div class="auth-error" id="usernameError"></div>
 </div>
 </div>
 
@@ -57,7 +72,21 @@
 <div class="top-bar">
   <h1>LEXENFITNESS</h1>
   <div class="tb-right"><span class="tb-xp" id="tbXp">0 XP</span><span class="tb-rank" id="tbRank"></span></div>
+  <div class="tb-xp-bar"><div class="tb-xp-bar-fill" id="tbXpBar"></div></div>
 </div>
+
+<!-- RANK-UP SPLASH -->
+<div class="rankup-splash" id="rankUpSplash">
+  <div class="splash-glow" id="splashGlow"></div>
+  <div class="splash-particles" id="splashParticles"></div>
+  <div class="splash-content">
+    <div class="splash-label">RANK UP</div>
+    <div class="splash-rank" id="splashRankName"></div>
+    <div class="splash-title" id="splashTitle"></div>
+    <div class="splash-sub">A new gate has opened...</div>
+  </div>
+</div>
+<div class="tb-xp-bar"><div class="tb-xp-bar-fill" id="tbXpBar"></div></div>
 
 <div class="page active" id="page-workout">
   <div class="page-title" id="workoutTitle">WORKOUT</div>
@@ -153,6 +182,37 @@
 <button class="edit-stats-btn" onclick="changeProgram();closeSettings()" style="margin-top:.8rem">🔄 Change Class / Program</button>
 <button class="edit-stats-btn" onclick="doLogout()" style="color:var(--red);border-color:var(--red)">Sign Out</button>
 </div></div>
+
+<!-- ══ RANK-UP SPLASH ══ -->
+<div class="rank-up-overlay" id="rankUpOverlay">
+  <div id="rankUpParticles" class="ru-particles"></div>
+  <div class="ru-content">
+    <div class="ru-label">RANK UP</div>
+    <div class="ru-icon" id="rankUpIcon">⭐</div>
+    <div class="ru-rank" id="rankUpName">B-RANK</div>
+    <div class="ru-title" id="rankUpTitle">Powerhouse</div>
+    <div class="ru-tap">Tap to continue</div>
+  </div>
+</div>
+
+<!-- ══ DEV PANEL (only visible to admin) ══ -->
+<div id="devPanel" style="display:none;position:fixed;top:50px;right:8px;z-index:400;background:var(--surface);border:2px solid var(--red);border-radius:12px;padding:.8rem;font-size:.72rem;max-width:220px">
+  <div style="font-family:var(--font-display);color:var(--red);margin-bottom:.5rem;font-size:.9rem">🔧 DEV PANEL</div>
+  <div class="m-field" style="margin-bottom:.4rem"><label style="font-size:.6rem">Set XP</label><div style="display:flex;gap:4px"><input type="number" id="devXpInput" placeholder="XP" style="width:80px;font-size:.72rem"><button onclick="devSetXP()" style="padding:4px 8px;background:var(--accent);color:#fff;border:none;border-radius:5px;font-size:.68rem">Set</button></div></div>
+  <div style="display:flex;flex-wrap:wrap;gap:3px;margin-bottom:.5rem">
+    <button onclick="devSetRank('E-RANK')" style="padding:3px 6px;border:1px solid var(--border);background:var(--surface2);color:#7c7c9a;border-radius:4px;font-size:.6rem">E</button>
+    <button onclick="devSetRank('D-RANK')" style="padding:3px 6px;border:1px solid var(--border);background:var(--surface2);color:#34d399;border-radius:4px;font-size:.6rem">D</button>
+    <button onclick="devSetRank('C-RANK')" style="padding:3px 6px;border:1px solid var(--border);background:var(--surface2);color:#22d3ee;border-radius:4px;font-size:.6rem">C</button>
+    <button onclick="devSetRank('B-RANK')" style="padding:3px 6px;border:1px solid var(--border);background:var(--surface2);color:#a78bfa;border-radius:4px;font-size:.6rem">B</button>
+    <button onclick="devSetRank('A-RANK')" style="padding:3px 6px;border:1px solid var(--border);background:var(--surface2);color:#fb923c;border-radius:4px;font-size:.6rem">A</button>
+    <button onclick="devSetRank('S-RANK')" style="padding:3px 6px;border:1px solid var(--border);background:var(--surface2);color:#fbbf24;border-radius:4px;font-size:.6rem">S</button>
+  </div>
+  <div style="display:flex;gap:4px;margin-bottom:.4rem">
+    <select id="devSplashRank" style="flex:1;background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:5px;padding:3px;font-size:.65rem"><option>E-RANK</option><option>D-RANK</option><option>C-RANK</option><option selected>B-RANK</option><option>A-RANK</option><option>S-RANK</option></select>
+    <button onclick="devTestSplash()" style="padding:3px 8px;background:var(--gold);color:#000;border:none;border-radius:5px;font-size:.65rem;font-weight:700">Splash</button>
+  </div>
+  <button onclick="devResetAccount()" style="width:100%;padding:5px;background:var(--red);color:#fff;border:none;border-radius:5px;font-size:.65rem;font-weight:700">Reset Account</button>
+</div>
 
 <input type="file" id="picInput" accept="image/*" style="display:none">
 <div class="toast" id="toast"></div>
