@@ -82,6 +82,13 @@ async function loadUserData(){
   ['achievements','friends','trialsCompleted'].forEach(k=>{if(!userData[k])userData[k]=[]});
   ['stats','prs','privacy','missionsCompleted'].forEach(k=>{if(!userData[k])userData[k]={}});
   if(!userData.missionStreak)userData.missionStreak=0;
+  // Migrate: generate friend code if missing
+  if(!userData.friendCode){
+    const fc=genFriendCode();
+    await db.collection('users').doc(U.uid).update({friendCode:fc});
+    await db.collection('friendCodes').doc(fc).set({uid:U.uid});
+    userData.friendCode=fc;
+  }
   const ls=await db.collection('users').doc(U.uid).collection('log').orderBy('date','desc').limit(200).get();
   workoutLog=[];ls.forEach(d=>workoutLog.push({_id:d.id,...d.data()}));
   const iDoc=await db.collection('users').doc(U.uid).collection('meta').doc('inputs').get();
@@ -178,7 +185,15 @@ function getEffectiveRank(){
   return RANKS[0];
 }
 function switchPage(p){currentPage=p;document.querySelectorAll('.nav-item').forEach(n=>n.classList.toggle('active',n.dataset.page===p));document.querySelectorAll('.page').forEach(pg=>pg.classList.remove('active'));$('page-'+p).classList.add('active');
-  if(p==='workout')buildWorkout();if(p==='log')renderLog();if(p==='profile')renderProfile();if(p==='leaderboard')renderLeaderboard();if(p==='missions'){renderMissions();renderAchievements()}}
+  if(p==='train')buildWorkout();if(p==='profile')renderProfile();if(p==='missions'){renderMissions();renderAchievements()}
+  if(p==='nutrition')renderNutritionPage();if(p==='ranks')renderLeaderboard()}
+function switchSubTab(page,tab){
+  const container=$('page-'+page);if(!container)return;
+  container.querySelectorAll('.stab').forEach(t=>t.classList.toggle('active',t.dataset.st===tab));
+  container.querySelectorAll('.sub-page').forEach(p=>p.classList.remove('active'));
+  const sp=$('sp-'+tab);if(sp)sp.classList.add('active');
+  if(tab==='log')renderLog();if(tab==='rankinfo')$('rankInfoContent').innerHTML=renderRankInfo();if(tab==='leaderboard')renderLeaderboard();
+}
 
 // ═══════════ DAILY MISSIONS ═══════════
 function renderMissions(){
@@ -238,72 +253,40 @@ async function claimTrial(trialId){
   toast('⚔️ '+rank.name+' ACHIEVED!');switchPage('missions');
 }
 
-// ═══════════ TDEE / MACRO CALCULATOR ═══════════
-function calcTDEE(){
-  const st=userData.stats||{};
-  const w=parseFloat(st.weight);const a=parseFloat(st.age);const hRaw=st.height||'';
-  if(!w||!a||!hRaw)return null;
-  // Parse height: accept "5'10", "5'10\"", "70", "178cm"
-  let hCm=0;
-  if(hRaw.includes("'")){const parts=hRaw.replace(/"/g,'').split("'");hCm=(parseInt(parts[0])*12+parseInt(parts[1]||0))*2.54}
-  else if(hRaw.toLowerCase().includes('cm')){hCm=parseFloat(hRaw)}
-  else{const n=parseFloat(hRaw);hCm=n>100?n:n*2.54} // assume inches if <100
-  if(!hCm)return null;
-  const wKg=w*0.453592;
-  // Mifflin-St Jeor (default male — can add gender later)
-  const bmr=10*wKg+6.25*hCm-5*a+5;
-  // Activity multiplier based on workouts/week
-  const mult=1.55; // moderate (4 days/week)
-  const tdee=Math.round(bmr*mult);
-  // Goal adjustment
-  const goal=userData.goal||'';
-  let target=tdee;
-  if(goal.includes('Fat Loss'))target=tdee-400;
-  else if(goal.includes('Muscle Gain'))target=tdee+300;
-  else if(goal.includes('Recomp'))target=tdee-100;
-  // Macros
-  const proteinG=Math.round(wKg*2); // 2g/kg
-  const proteinCal=proteinG*4;
-  const fatCal=Math.round(target*0.25);
-  const fatG=Math.round(fatCal/9);
-  const carbCal=target-proteinCal-fatCal;
-  const carbG=Math.round(carbCal/4);
-  return{bmr,tdee,target,proteinG,fatG,carbG,goal:goal||'Maintenance'};
-}
-function renderTDEE(){
-  const t=calcTDEE();
-  if(!t)return'<div class="tdee-card"><div class="tdee-empty">Add height, weight, age in Settings to see your TDEE &amp; macros</div></div>';
-  return`<div class="tdee-card">
-    <div class="tdee-header">DAILY TARGETS — ${t.goal.toUpperCase()}</div>
-    <div class="tdee-main"><div class="tdee-cal">${t.target}</div><div class="tdee-cal-label">CALORIES / DAY</div></div>
-    <div class="tdee-macros">
-      <div class="tdee-macro"><div class="tdee-mv" style="color:var(--red)">${t.proteinG}g</div><div class="tdee-ml">Protein</div></div>
-      <div class="tdee-macro"><div class="tdee-mv" style="color:var(--gold)">${t.carbG}g</div><div class="tdee-ml">Carbs</div></div>
-      <div class="tdee-macro"><div class="tdee-mv" style="color:var(--cyan)">${t.fatG}g</div><div class="tdee-ml">Fat</div></div>
-    </div>
-    <div class="tdee-detail">BMR: ${t.bmr} · TDEE: ${t.tdee} · Adjusted for ${t.goal}</div>
-  </div>`;
-}
+// TDEE/Nutrition functions moved to nutrition.js
 
 // ═══════════ DEV TOOLS ═══════════
 function renderDevTools(){
   if(!isDev)return'';
+  const er=getEffectiveRank();const trial=getAvailableTrial();
   return`<div class="dev-panel">
     <div class="section-title" style="color:var(--red)">🔧 DEV TOOLS</div>
+    <div style="font-size:.68rem;color:var(--muted);margin:.3rem 0">Current: ${er.name} · XP: ${userData.xp} · Trials done: [${userData.trialsCompleted.join(', ')||'none'}]</div>
+    <div style="font-size:.68rem;color:var(--gold);margin-bottom:.4rem">${trial?'⚠️ Trial available: '+trial.trial.name:'No trial pending'}</div>
     <div class="dev-row">
-      <button class="dev-btn" onclick="devSetXP(400)">Set 400 XP (E)</button>
-      <button class="dev-btn" onclick="devSetXP(1400)">Set 1400 (D)</button>
-      <button class="dev-btn" onclick="devSetXP(3400)">Set 3400 (C)</button>
+      <button class="dev-btn" onclick="devSetXP(400)">400 XP (E)</button>
+      <button class="dev-btn" onclick="devSetXP(1400)">1400 (D)</button>
+      <button class="dev-btn" onclick="devSetXP(3400)">3400 (C)</button>
     </div>
     <div class="dev-row">
-      <button class="dev-btn" onclick="devSetXP(6900)">Set 6900 (B-edge)</button>
-      <button class="dev-btn" onclick="devSetXP(14900)">Set 14900 (A-edge)</button>
-      <button class="dev-btn" onclick="devSetXP(20000)">Set 20000 (S)</button>
+      <button class="dev-btn" onclick="devSetXP(3600)">3600 (B trial)</button>
+      <button class="dev-btn" onclick="devSetXP(7100)">7100 (A trial)</button>
+      <button class="dev-btn" onclick="devSetXP(15100)">15100 (S trial)</button>
     </div>
     <div class="dev-row">
       <button class="dev-btn" onclick="devAddXP(500)">+500 XP</button>
       <button class="dev-btn" onclick="devResetTrials()">Reset Trials</button>
       <button class="dev-btn" onclick="devResetAll()">Full Reset</button>
+    </div>
+    <div class="dev-row" style="margin-top:.4rem;border-top:1px dashed var(--border);padding-top:.4rem">
+      <button class="dev-btn" style="color:var(--gold)" onclick="devFakeIronGate()">Fake Iron Gate ✓</button>
+      <button class="dev-btn" style="color:var(--gold)" onclick="devFakeGauntlet()">Fake Gauntlet ✓</button>
+      <button class="dev-btn" style="color:var(--gold)" onclick="devFakeAwakening()">Fake Awakening ✓</button>
+    </div>
+    <div class="dev-row">
+      <button class="dev-btn" style="color:var(--cyan)" onclick="devInjectWorkouts(5)">+5 Fake Logs</button>
+      <button class="dev-btn" style="color:var(--cyan)" onclick="devInjectWorkouts(20)">+20 Fake Logs</button>
+      <button class="dev-btn" style="color:var(--cyan)" onclick="devTriggerSplash()">Test Splash</button>
     </div>
   </div>`;
 }
@@ -311,6 +294,74 @@ async function devSetXP(xp){userData.xp=xp;await saveUser({xp});await saveLeader
 async function devAddXP(xp){userData.xp+=xp;await saveUser({xp:userData.xp});await saveLeaderboard();updateTopBar();checkRankUp();renderProfile();toast('DEV: +'+xp+' XP')}
 async function devResetTrials(){userData.trialsCompleted=[];await saveUser({trialsCompleted:[]});updateTopBar();renderProfile();toast('DEV: Trials reset')}
 async function devResetAll(){await saveUser({xp:0,achievements:[],trialsCompleted:[],missionsCompleted:{},missionStreak:0});userData.xp=0;userData.achievements=[];userData.trialsCompleted=[];updateTopBar();renderProfile();toast('DEV: Full reset')}
+
+// Trial fakers — inject fake log data so trial progress checks pass
+async function devFakeIronGate(){
+  // Need 3 perfect weeks: inject 3 weeks of 4-day logs with all sets done
+  const prog=userData.program||[];if(prog.length<4){toast('Need a program first');return}
+  for(let w=0;w<3;w++){
+    const weekStart=new Date();weekStart.setDate(weekStart.getDate()-(7*(w+1)));
+    for(let d=0;d<4;d++){
+      const date=new Date(weekStart);date.setDate(date.getDate()+d);
+      const day=prog[d];
+      const entry={dayId:day.id,dayTitle:day.title,date:date.toISOString(),exercises:day.exercises.map(ex=>({name:ex.name,sets:Array.from({length:ex.sets},()=>({weight:'135',reps:'8',done:true,isTime:!!ex.isTime}))}))};
+      const ref=await db.collection('users').doc(U.uid).collection('log').add(entry);
+      workoutLog.push({_id:ref.id,...entry});
+    }
+  }
+  toast('DEV: Injected 3 perfect weeks (12 workouts). Check Missions → Iron Gate.');renderProfile();
+}
+async function devFakeGauntlet(){
+  // Need 14-day streak + 225lb lift
+  const prog=userData.program||[];if(!prog.length){toast('Need a program first');return}
+  for(let i=0;i<14;i++){
+    const date=new Date();date.setDate(date.getDate()-i);
+    const day=prog[i%prog.length];
+    const entry={dayId:day.id,dayTitle:day.title,date:date.toISOString(),exercises:[{name:'Heavy Squat',sets:[{weight:'245',reps:'5',done:true,isTime:false}]}]};
+    const ref=await db.collection('users').doc(U.uid).collection('log').add(entry);
+    workoutLog.push({_id:ref.id,...entry});
+  }
+  toast('DEV: Injected 14-day streak with 245lb lifts. Check Missions → Gauntlet.');renderProfile();
+}
+async function devFakeAwakening(){
+  // Need 30-day streak + 7-day mission streak + 50 workouts
+  const prog=userData.program||[];if(!prog.length){toast('Need a program first');return}
+  // 30-day streak + pad to 50 workouts
+  for(let i=0;i<50;i++){
+    const date=new Date();date.setDate(date.getDate()-i);
+    const day=prog[i%prog.length];
+    const entry={dayId:day.id,dayTitle:day.title,date:date.toISOString(),exercises:[{name:'Training',sets:[{weight:'135',reps:'10',done:true,isTime:false}]}]};
+    const ref=await db.collection('users').doc(U.uid).collection('log').add(entry);
+    workoutLog.push({_id:ref.id,...entry});
+  }
+  // 7-day mission streak
+  const mc={};
+  for(let i=0;i<7;i++){
+    const d=new Date();d.setDate(d.getDate()-i);const key=d.toISOString().slice(0,10);
+    const missions=getDailyMissions(key);mc[key]=missions.map(m=>m.id);
+  }
+  userData.missionsCompleted={...userData.missionsCompleted,...mc};
+  userData.missionStreak=calcMissionStreak();
+  await saveUser({missionsCompleted:userData.missionsCompleted,missionStreak:userData.missionStreak});
+  toast('DEV: Injected 50 workouts (30-day streak) + 7-day missions. Check Missions → Awakening.');renderProfile();
+}
+async function devInjectWorkouts(n){
+  const prog=userData.program||[];if(!prog.length){toast('Need a program first');return}
+  for(let i=0;i<n;i++){
+    const date=new Date();date.setDate(date.getDate()-i);
+    const day=prog[i%prog.length];
+    const entry={dayId:day.id,dayTitle:day.title,date:date.toISOString(),exercises:[{name:day.exercises[0]?.name||'Exercise',sets:[{weight:'135',reps:'10',done:true,isTime:false}]}]};
+    const ref=await db.collection('users').doc(U.uid).collection('log').add(entry);
+    workoutLog.push({_id:ref.id,...entry});
+  }
+  toast('DEV: +'+n+' fake workouts');renderProfile();
+}
+function devTriggerSplash(){
+  // Test splash with whatever the next rank would be
+  const r=getEffectiveRank();const ri=RANKS.findIndex(x=>x.name===r.name);
+  const next=ri<RANKS.length-1?RANKS[ri+1]:RANKS[RANKS.length-1];
+  showRankUpSplash(next);
+}
 
 // ═══════════ WORKOUT ═══════════
 function buildWorkout(){const prog=userData.program||[];if(!prog.length)return;$('workoutTitle').textContent=(userData.class||'WORKOUT').toUpperCase();$('workoutSub').textContent=(userData.subclass?userData.subclass+' — ':'')+getEffectiveRank().name;$('dayTabs').innerHTML=prog.map(d=>`<div class="dtab${d.id===currentDay?' active':''}" data-d="${d.id}" onclick="switchDay('${d.id}')">${d.title}</div>`).join('');renderDay()}
@@ -368,8 +419,6 @@ function renderProfile(){
     <div class="profile-class">${userData.class}${userData.subclass?' — '+userData.subclass:''}</div>
     <div class="profile-rank-badge" style="color:${r.color};background:${r.color}22;border:1px solid ${r.color}44">${r.name} — ${title}</div>
     <div class="xp-bar-wrap"><div class="xp-bar-label"><span>${info.label}</span><span>${info.sublabel}</span></div><div class="xp-bar"><div class="xp-bar-fill" style="width:${info.pct}%;background:linear-gradient(90deg,${r.color},${r.color}cc)"></div></div></div></div>`;
-  // TDEE
-  h+=renderTDEE();
   // Stats
   h+=`<div class="stats-grid"><div class="stat-card"><div class="sv">${st.height||'—'}</div><div class="sl">Height</div></div><div class="stat-card"><div class="sv">${st.weight?st.weight+' lbs':'—'}</div><div class="sl">Weight</div></div><div class="stat-card"><div class="sv">${st.age||'—'}</div><div class="sl">Age</div></div></div>`;
   h+=`<div class="stats-grid"><div class="stat-card"><div class="sv">${prs.bench||'—'}</div><div class="sl">Bench PR</div></div><div class="stat-card"><div class="sv">${prs.squat||'—'}</div><div class="sl">Squat PR</div></div><div class="stat-card"><div class="sv">${prs.deadlift||'—'}</div><div class="sl">Deadlift PR</div></div></div>`;
