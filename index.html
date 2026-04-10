@@ -206,9 +206,13 @@
 <!-- BARCODE SCANNER MODAL -->
 <div class="modal-bg" id="scannerModal"><div class="modal" style="text-align:center">
 <h2>📸 Scan Barcode</h2>
-<video id="scannerVideo" style="width:100%;max-height:300px;border-radius:10px;background:#000" playsinline></video>
-<p style="font-size:.72rem;color:var(--muted);margin-top:.5rem">Point camera at barcode</p>
-<div class="m-actions"><button class="m-cancel" onclick="closeScanner()">Cancel</button></div>
+<video id="scannerVideo" style="width:100%;max-height:250px;border-radius:10px;background:#000;display:none" playsinline></video>
+<p id="scannerStatus" style="font-size:.74rem;color:var(--muted);margin:.5rem 0">Starting camera...</p>
+<div id="scannerManualRow" class="food-search-bar" style="margin-top:.5rem">
+  <input type="text" id="scannerManualInput" class="auth-input" placeholder="Enter barcode number" style="margin:0;flex:1" inputmode="numeric" onkeydown="if(event.key==='Enter')scannerManualLookup()">
+  <button class="m-save-btn" style="flex:0 0 auto;padding:10px 14px;border-radius:8px;margin-left:6px" onclick="scannerManualLookup()">Look Up</button>
+</div>
+<div class="m-actions" style="margin-top:.6rem"><button class="m-cancel" onclick="closeScanner()">Cancel</button></div>
 </div></div>
 
 <!-- MACRO ADJUSTMENT MODAL -->
