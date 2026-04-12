@@ -85,6 +85,7 @@ async function openChat(friendUid){
     </div>`;
 
   if(chatListener)chatListener();
+  markChatRead(friendUid);
   chatListener=db.collection('chats').doc(chatId).collection('messages')
     .orderBy('ts','asc').limitToLast(100)
     .onSnapshot(snap=>{
@@ -115,6 +116,7 @@ async function sendMessage(){
     await db.collection('chats').doc(chatId).collection('messages').add({
       from:U.uid,text:text.slice(0,500),ts:firebase.firestore.FieldValue.serverTimestamp()
     });
+    unlockAch('chat_first');
   }catch(e){toast('Send failed: '+e.message)}
 }
 

@@ -513,3 +513,25 @@ input[type=checkbox]:checked::after{content:'✓';position:absolute;color:#fff;f
 .coach-q-btns{display:flex;flex-wrap:wrap;gap:5px}
 .coach-q-btns button{padding:7px 12px;border:1px solid var(--border);background:var(--surface);color:var(--text);border-radius:18px;font-size:.72rem;font-weight:600;cursor:pointer;transition:all .15s}
 .coach-q-btns button:hover{border-color:var(--accent);color:var(--accent);background:var(--surface2)}
+
+/* ── Streak Warning ── */
+.streak-warning{background:linear-gradient(135deg,rgba(251,191,36,.12),rgba(251,191,36,.04));border:1px solid rgba(251,191,36,.3);border-radius:10px;padding:.6rem .8rem;font-size:.78rem;color:var(--gold);margin:.5rem 0;text-align:center;animation:pulse-glow 2s ease infinite}
+.streak-warning.lost{background:linear-gradient(135deg,rgba(248,113,113,.12),rgba(248,113,113,.04));border-color:rgba(248,113,113,.3);color:var(--red);animation:none}
+@keyframes pulse-glow{0%,100%{opacity:1}50%{opacity:.7}}
+
+/* ── Chat Badge ── */
+.nav-icon{position:relative}
+.chat-badge{position:absolute;top:-6px;right:-8px;background:var(--red);color:#fff;font-size:.55rem;font-weight:800;font-family:var(--font-mono);min-width:16px;height:16px;border-radius:8px;display:flex;align-items:center;justify-content:center;padding:0 4px;line-height:1}
+
+/* ── Onboarding Tour ── */
+.tour-overlay{position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:9999;animation:fadeIn .25s ease}
+.tour-ring{position:fixed;border:2px solid var(--gold);border-radius:12px;box-shadow:0 0 0 4000px rgba(0,0,0,.7),0 0 20px var(--gold);z-index:10000;pointer-events:none;animation:tour-pulse 1.5s ease infinite}
+@keyframes tour-pulse{0%,100%{box-shadow:0 0 0 4000px rgba(0,0,0,.7),0 0 20px var(--gold)}50%{box-shadow:0 0 0 4000px rgba(0,0,0,.7),0 0 30px var(--gold),0 0 60px rgba(251,191,36,.3)}}
+.tour-tip{position:fixed;background:var(--surface);border:1px solid var(--gold);border-radius:14px;padding:1rem 1.2rem;max-width:300px;width:90vw;z-index:10001;box-shadow:0 8px 32px rgba(0,0,0,.5)}
+.tour-step-count{font-family:var(--font-mono);font-size:.6rem;color:var(--muted);margin-bottom:.3rem;letter-spacing:2px}
+.tour-title{font-family:var(--font-display);font-size:1.4rem;letter-spacing:2px;color:var(--gold);line-height:1}
+.tour-desc{font-size:.8rem;color:var(--text);margin:.5rem 0;line-height:1.5}
+.tour-actions{display:flex;justify-content:flex-end}
+.tour-btn{background:var(--gold);color:#000;border:none;border-radius:8px;padding:8px 20px;font-weight:700;font-size:.82rem;cursor:pointer;transition:all .15s}
+.tour-btn:hover{background:var(--accent2);color:#fff}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}

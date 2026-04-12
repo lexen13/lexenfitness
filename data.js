@@ -144,6 +144,20 @@ const ACHIEVEMENTS=[
   {id:'rank_b',icon:'🟣',name:'Passed the Iron Gate',desc:'B-Rank achieved',xp:0},
   {id:'rank_a',icon:'🟠',name:'Survived the Gauntlet',desc:'A-Rank achieved',xp:0},
   {id:'rank_s',icon:'🌟',name:'Awakened',desc:'S-Rank — the strongest',xp:0},
+  {id:'workouts_200',icon:'💎',name:'Diamond Grind',desc:'Log 200 workouts',xp:750},
+  {id:'streak_14',icon:'🔥',name:'Two Weeks Strong',desc:'14-day streak',xp:250},
+  {id:'streak_60',icon:'🏆',name:'Iron Will',desc:'60-day streak',xp:1000},
+  {id:'streak_90',icon:'👑',name:'Unbreakable',desc:'90-day streak',xp:1500},
+  {id:'heavy_500',icon:'🌋',name:'Volcanic Force',desc:'500+ lbs logged',xp:500},
+  {id:'full_week_10',icon:'💪',name:'Perfect Ten',desc:'10 perfect weeks',xp:600},
+  {id:'full_week_20',icon:'🗡️',name:'Relentless',desc:'20 perfect weeks',xp:1000},
+  {id:'friends_10',icon:'🎯',name:'Inner Circle',desc:'Add 10 friends',xp:250},
+  {id:'food_log_30',icon:'📊',name:'Nutrition Master',desc:'Log food 30 days',xp:400},
+  {id:'missions_streak_14',icon:'⚡',name:'Mission Legend',desc:'All missions 14 days straight',xp:500},
+  {id:'weekend_warrior',icon:'🌅',name:'Weekend Warrior',desc:'Log on Sat & Sun same week',xp:75},
+  {id:'pr_breaker',icon:'📈',name:'PR Breaker',desc:'Beat a logged weight',xp:100},
+  {id:'chat_first',icon:'💬',name:'Connected',desc:'Send your first message',xp:25},
+  {id:'tour_done',icon:'🗺️',name:'System Initiated',desc:'Complete the onboarding tour',xp:25},
 ];
 const GOALS=['Fat Loss','Muscle Gain','Build Strength','General Fitness','Athletic Performance','Body Recomp'];
 const EXPERIENCE=['Beginner (< 1 year)','Intermediate (1-3 years)','Advanced (3+ years)','Elite (5+ years)'];

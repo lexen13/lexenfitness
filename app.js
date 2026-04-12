@@ -79,23 +79,31 @@ async function doGoogleLogin(){
 const doLogout=()=>auth.signOut();
 function friendlyErr(c){return{'auth/invalid-email':'Invalid email','auth/user-not-found':'No account','auth/wrong-password':'Wrong password','auth/email-already-in-use':'Email taken','auth/weak-password':'Password 6+ chars','auth/invalid-credential':'Invalid email or password','auth/too-many-requests':'Too many attempts','auth/requires-recent-login':'Sign out and back in first','auth/popup-closed-by-user':'Sign-in cancelled','auth/cancelled-popup-request':'Sign-in cancelled'}[c]||'Something went wrong'}
 
+// Safety: if loading screen is still showing after 8 seconds, force show auth
+setTimeout(()=>{if($('loadingScreen').style.display!=='none'){$('loadingScreen').style.display='none';showScreen('authScreen')}},8000);
+
 auth.onAuthStateChanged(async u=>{
   if(authLock)return;
-  if(u){
-    U=u;isDev=(u.email===DEV_EMAIL);
-    const doc=await db.collection('users').doc(U.uid).get();
-    if(!doc.exists){
-      const fc=genFriendCode();
-      await db.collection('users').doc(U.uid).set({name:u.displayName||'',username:'',email:u.email,friendCode:fc,xp:0,achievements:[],stats:{},prs:{},profilePic:u.photoURL||'',class:'',subclass:'',programKey:'',program:[],friends:[],privacy:{hideName:false,hideStats:false},goal:'',experience:'',missionsCompleted:{},missionStreak:0,trialsCompleted:[],createdAt:firebase.firestore.FieldValue.serverTimestamp()});
-      await db.collection('friendCodes').doc(fc).set({uid:U.uid});
-    }
-    await loadUserData();
-    prevRankName=getEffectiveRank().name;
+  try{
+    if(u){
+      U=u;isDev=(u.email===DEV_EMAIL);
+      const doc=await db.collection('users').doc(U.uid).get();
+      if(!doc.exists){
+        const fc=genFriendCode();
+        await db.collection('users').doc(U.uid).set({name:u.displayName||'',username:'',email:u.email,friendCode:fc,xp:0,achievements:[],stats:{},prs:{},profilePic:u.photoURL||'',class:'',subclass:'',programKey:'',program:[],friends:[],privacy:{hideName:false,hideStats:false},goal:'',experience:'',missionsCompleted:{},missionStreak:0,trialsCompleted:[],createdAt:firebase.firestore.FieldValue.serverTimestamp()});
+        await db.collection('friendCodes').doc(fc).set({uid:U.uid});
+      }
+      await loadUserData();
+      prevRankName=getEffectiveRank().name;
+      $('loadingScreen').style.display='none';
+      if(!userData.username){showScreen('usernameScreen');return}
+      if(!userData.class){showScreen('classScreen');buildClassSelect()}
+      else{showScreen('appScreen');initApp();checkTour()}
+    }else{U=null;isDev=false;$('loadingScreen').style.display='none';showScreen('authScreen')}
+  }catch(e){
     $('loadingScreen').style.display='none';
-    if(!userData.username){showScreen('usernameScreen');return}
-    if(!userData.class){showScreen('classScreen');buildClassSelect()}
-    else{showScreen('appScreen');initApp()}
-  }else{U=null;isDev=false;$('loadingScreen').style.display='none';showScreen('authScreen')}
+    showScreen('authScreen');
+  }
 });
 function showScreen(id){['authScreen','classScreen','appScreen','usernameScreen'].forEach(s=>{$(s).classList.remove('active');$(s).style.display='none'});$(id).style.display='';$(id).classList.add('active')}
 
@@ -112,7 +120,7 @@ async function submitUsername(){
   await saveUser({username:uname});
   // Proceed to class select or app
   if(!userData.class){showScreen('classScreen');buildClassSelect()}
-  else{showScreen('appScreen');initApp()}
+  else{showScreen('appScreen');initApp();checkTour()}
 }
 
 // ═══════════ FIRESTORE ═══════════
@@ -203,11 +211,11 @@ async function confirmClass(){
   if(selectedProg==='blank'){prog=[{id:'day1',title:'DAY 1',subtitle:'Add exercises',exercises:[]},{id:'day2',title:'DAY 2',subtitle:'Add exercises',exercises:[]},{id:'day3',title:'DAY 3',subtitle:'Add exercises',exercises:[]},{id:'day4',title:'DAY 4',subtitle:'Add exercises',exercises:[]}]}
   else{const all=[...Object.values(CLASS_PROGRAMS).flat()];const found=all.find(p=>p.key===selectedProg);prog=found?JSON.parse(JSON.stringify(found.days)):[];}
   await saveUser({class:selectedClass,subclass:selectedSub||'',programKey:selectedProg,program:prog});
-  await saveLeaderboard();showScreen('appScreen');initApp();
+  await saveLeaderboard();showScreen('appScreen');initApp();checkTour();
 }
 
 // ═══════════ INIT ═══════════
-function initApp(){document.querySelectorAll('.nav-item').forEach(n=>n.addEventListener('click',()=>switchPage(n.dataset.page)));updateTopBar();syncAcceptedRequests();switchPage('profile')}
+function initApp(){document.querySelectorAll('.nav-item').forEach(n=>n.addEventListener('click',()=>switchPage(n.dataset.page)));updateTopBar();syncAcceptedRequests();checkUnreadChats();switchPage('profile')}
 function updateTopBar(){
   const r=getEffectiveRank(),info=getXpBarInfo(),cap=getXpCap();
   const capped=cap!==Infinity&&userData.xp>=cap;
@@ -253,7 +261,7 @@ function addXP(amount){
 }
 let xpCappedMsg='';
 function switchPage(p){currentPage=p;document.querySelectorAll('.nav-item').forEach(n=>n.classList.toggle('active',n.dataset.page===p));document.querySelectorAll('.page').forEach(pg=>pg.classList.remove('active'));$('page-'+p).classList.add('active');
-  if(p==='train')buildWorkout();if(p==='profile')renderProfile();if(p==='missions'){renderMissions();renderAchievements()}
+  if(p==='train')buildWorkout();if(p==='profile'){renderProfile();renderFriendsPage()}if(p==='missions'){renderMissions();renderAchievements()}
   if(p==='nutrition')renderNutritionPage();if(p==='ranks')renderLeaderboard();if(p==='chat')renderChatPage()}
 function switchSubTab(page,tab){
   const container=$('page-'+page);if(!container)return;
@@ -295,6 +303,7 @@ async function completeMission(mid){
   userData.missionsCompleted[today]=completed;
   userData.missionStreak=calcMissionStreak();
   if(userData.missionStreak>=7)unlockAch('mission_streak_7');
+  if(userData.missionStreak>=14)unlockAch('missions_streak_14');
   await saveUser({missionsCompleted:userData.missionsCompleted,missionStreak:userData.missionStreak,xp:userData.xp});
   await saveLeaderboard();updateTopBar();checkRankUp();renderMissions();
   toast(`${m.icon} ${m.name} +${m.xp} XP${bonusMsg}`);
@@ -521,12 +530,16 @@ async function logWorkout(){
   if(!hasData){toast('Fill in sets!');return}
   const ref=await db.collection('users').doc(U.uid).collection('log').add(entry);entry._id=ref.id;workoutLog.unshift(entry);
   let xp=50;if(allDone)xp+=50;const hr=new Date().getHours(),wc=workoutLog.length;
-  if(wc>=1)unlockAch('first_workout');if(wc>=10)unlockAch('workouts_10');if(wc>=25)unlockAch('workouts_25');if(wc>=50)unlockAch('workouts_50');if(wc>=100)unlockAch('workouts_100');
+  if(wc>=1)unlockAch('first_workout');if(wc>=10)unlockAch('workouts_10');if(wc>=25)unlockAch('workouts_25');if(wc>=50)unlockAch('workouts_50');if(wc>=100)unlockAch('workouts_100');if(wc>=200)unlockAch('workouts_200');
   if(hr<7)unlockAch('early_bird');if(hr>=21)unlockAch('night_owl');if(allDone)unlockAch('all_sets_done');
-  if(maxW>=200)unlockAch('heavy_day');if(maxW>=315)unlockAch('monster_lift');if(maxW>=405)unlockAch('titan_lift');
+  if(maxW>=200)unlockAch('heavy_day');if(maxW>=315)unlockAch('monster_lift');if(maxW>=405)unlockAch('titan_lift');if(maxW>=500)unlockAch('heavy_500');
   const dids=new Set(workoutLog.map(e=>e.dayId));if(dids.size>=4)unlockAch('variety');
-  const streak=calcStreak();if(streak>=7)unlockAch('streak_7');if(streak>=30)unlockAch('streak_30');
-  const fw=calcFullWeeks();if(fw>=1)unlockAch('full_week');if(fw>=5)unlockAch('full_week_5');
+  const streak=calcStreak();if(streak>=7)unlockAch('streak_7');if(streak>=14)unlockAch('streak_14');if(streak>=30)unlockAch('streak_30');if(streak>=60)unlockAch('streak_60');if(streak>=90)unlockAch('streak_90');
+  const fw=calcFullWeeks();if(fw>=1)unlockAch('full_week');if(fw>=5)unlockAch('full_week_5');if(fw>=10)unlockAch('full_week_10');if(fw>=20)unlockAch('full_week_20');
+  // Weekend warrior check
+  const dow=new Date().getDay();if(dow===0||dow===6){const thisWeekLogs=workoutLog.filter(e=>{const d=new Date(e.date);const wk=getMonday(d).toISOString().slice(0,10);return wk===getMonday(new Date()).toISOString().slice(0,10)});const wDays=new Set(thisWeekLogs.map(e=>new Date(e.date).getDay()));if(wDays.has(0)&&wDays.has(6))unlockAch('weekend_warrior')}
+  // PR breaker check
+  if(workoutLog.length>=2){const prevMax=Math.max(0,...workoutLog.slice(1).flatMap(e=>e.exercises.flatMap(ex=>ex.sets.map(s=>parseInt(s.weight)||0))));if(maxW>prevMax&&prevMax>0)unlockAch('pr_breaker')}
   const nx=userData.xp+xp;if(nx>=500)unlockAch('rank_d');if(nx>=1500)unlockAch('rank_c');
   const gained=addXP(xp);await saveUser({xp:userData.xp});await saveLeaderboard();updateTopBar();checkRankUp();
   let msg=day.title+' +'+gained+' XP';if(gained<xp)msg+=' (CAPPED — complete trial!)';if(xpCappedMsg)msg=xpCappedMsg;
@@ -545,7 +558,6 @@ function renderProfile(){
   let h=`<div class="profile-card"><div class="profile-pic-wrap" onclick="document.getElementById('picInput').click()">${userData.profilePic?'<img src="'+userData.profilePic+'">':'<div class="pp-placeholder">👤</div>'}</div>
     <div class="profile-name">@${userData.username||'???'}</div>
     <div class="profile-realname">${userData.name||''} <span style="font-size:.6rem;color:var(--dim)">(only you see this)</span></div>
-    <div class="profile-friend-code">Friend Code: <strong>${userData.friendCode||'------'}</strong></div>
     <div class="profile-class">${userData.class}${userData.subclass?' — '+userData.subclass:''}</div>
     <div class="profile-rank-badge" style="color:${r.color};background:${r.color}22;border:1px solid ${r.color}44">${r.name} — ${title}</div>
     <div class="xp-bar-wrap"><div class="xp-bar-label"><span>${info.label}</span><span>${info.sublabel}</span></div><div class="xp-bar"><div class="xp-bar-fill" style="width:${info.pct}%;background:linear-gradient(90deg,${r.color},${r.color}cc)"></div></div></div></div>`;
@@ -553,6 +565,10 @@ function renderProfile(){
   h+=`<div class="stats-grid"><div class="stat-card"><div class="sv">${st.height||'—'}</div><div class="sl">Height</div></div><div class="stat-card"><div class="sv">${st.weight?st.weight+' lbs':'—'}</div><div class="sl">Weight</div></div><div class="stat-card"><div class="sv">${st.age||'—'}</div><div class="sl">Age</div></div></div>`;
   h+=`<div class="stats-grid"><div class="stat-card"><div class="sv">${prs.bench||'—'}</div><div class="sl">Bench PR</div></div><div class="stat-card"><div class="sv">${prs.squat||'—'}</div><div class="sl">Squat PR</div></div><div class="stat-card"><div class="sv">${prs.deadlift||'—'}</div><div class="sl">Deadlift PR</div></div></div>`;
   h+=`<div class="stats-grid"><div class="stat-card"><div class="sv">${workoutLog.length}</div><div class="sl">Workouts</div></div><div class="stat-card"><div class="sv">${calcStreak()}</div><div class="sl">Streak</div></div><div class="stat-card"><div class="sv">${(userData.achievements||[]).length}</div><div class="sl">Achieve.</div></div></div>`;
+  // Streak warning
+  const streak=calcStreak();const lastW=workoutLog[0];const hoursSince=lastW?((Date.now()-new Date(lastW.date).getTime())/3600000):999;
+  if(streak>0&&hoursSince>20){h+=`<div class="streak-warning">🔥 <strong>${streak}-day streak at risk!</strong> Log a workout today to keep it alive.</div>`}
+  else if(streak===0&&workoutLog.length>0){h+=`<div class="streak-warning lost">💀 Streak broken. Get back in there — one workout restarts it.</div>`}
   h+=`<button class="edit-stats-btn" onclick="openSettings()">⚙️ Settings</button>`;
   h+=renderDevTools();
   $('profileContent').innerHTML=h;
@@ -577,6 +593,7 @@ function openSettings(){
   const st=userData.stats||{},prs=userData.prs||{},priv=userData.privacy||{};
   $('setUsername').value=userData.username||'';$('setDisplayName').value=userData.name||'';
   $('setHeight').value=st.height||'';$('setWeight').value=st.weight||'';$('setAge').value=st.age||'';$('setBodyFat').value=st.bodyFat||'';
+  $('setSex').value=st.sex||'male';
   $('setBench').value=prs.bench||'';$('setSquat').value=prs.squat||'';$('setDeadlift').value=prs.deadlift||'';$('setOhp').value=prs.ohp||'';
   $('setGoal').value=userData.goal||'';$('setExperience').value=userData.experience||'';
   $('setHideName').checked=!!priv.hideName;$('setHideStats').checked=!!priv.hideStats;
@@ -593,7 +610,7 @@ async function saveSettings(){
     if(userData.username)await db.collection('usernames').doc(userData.username).delete();
     await db.collection('usernames').doc(newUn).set({uid:U.uid});
   }
-  const stats={height:$('setHeight').value.trim(),weight:$('setWeight').value.trim(),age:$('setAge').value.trim(),bodyFat:$('setBodyFat').value.trim()};
+  const stats={height:$('setHeight').value.trim(),weight:$('setWeight').value.trim(),age:$('setAge').value.trim(),bodyFat:$('setBodyFat').value.trim(),sex:$('setSex').value};
   const prs={bench:$('setBench').value.trim(),squat:$('setSquat').value.trim(),deadlift:$('setDeadlift').value.trim(),ohp:$('setOhp').value.trim()};
   if(prs.bench&&prs.squat&&prs.deadlift&&prs.ohp)unlockAch('set_prs');
   const privacy={hideName:$('setHideName').checked,hideStats:$('setHideStats').checked};
@@ -654,20 +671,23 @@ async function sendFriendRequest(){
 
 async function loadFriendRequests(){
   const el=$('friendRequests');if(!el)return;
-  // Load incoming pending requests
-  const snap=await db.collection('friendRequests').where('to','==',U.uid).where('status','==','pending').get();
-  if(snap.empty){el.innerHTML='';return}
-  let h='<div style="font-size:.72rem;color:var(--gold);margin-bottom:.3rem;font-family:var(--font-mono)">PENDING REQUESTS</div>';
-  for(const doc of snap.docs){
-    const req=doc.data();
-    h+=`<div class="friend-request">
-      <div class="lb-pic">${req.fromPic?'<img src="'+req.fromPic+'">':'👤'}</div>
-      <div class="lb-info"><div class="lb-name">@${esc(req.fromUsername)}</div><div class="lb-class">wants to be friends</div></div>
-      <button class="fr-accept" onclick="acceptFriendRequest('${doc.id}','${req.from}')">✓</button>
-      <button class="fr-decline" onclick="declineFriendRequest('${doc.id}')">✕</button>
-    </div>`;
+  try{
+    const snap=await db.collection('friendRequests').where('to','==',U.uid).where('status','==','pending').get();
+    if(snap.empty){el.innerHTML='';return}
+    let h='<div style="font-size:.72rem;color:var(--gold);margin-bottom:.3rem;font-family:var(--font-mono)">PENDING REQUESTS</div>';
+    for(const doc of snap.docs){
+      const req=doc.data();
+      h+=`<div class="friend-request">
+        <div class="lb-pic">${req.fromPic?'<img src="'+req.fromPic+'">':'👤'}</div>
+        <div class="lb-info"><div class="lb-name">@${esc(req.fromUsername)}</div><div class="lb-class">wants to be friends</div></div>
+        <button class="fr-accept" onclick="acceptFriendRequest('${doc.id}','${req.from}')">✓</button>
+        <button class="fr-decline" onclick="declineFriendRequest('${doc.id}')">✕</button>
+      </div>`;
+    }
+    el.innerHTML=h;
+  }catch(e){
+    el.innerHTML=`<p style="color:var(--red);font-size:.7rem">Request load error: ${e.message}</p>`;
   }
-  el.innerHTML=h;
 }
 
 async function acceptFriendRequest(reqId,fromUid){
@@ -681,6 +701,7 @@ async function acceptFriendRequest(reqId,fromUid){
   // Note: the sender syncs their own list via syncAcceptedRequests() on their next login
   unlockAch('add_friend');
   if(friends.length>=5)unlockAch('friends_5');
+  if(friends.length>=10)unlockAch('friends_10');
   toast('Friend added!');loadFriendRequests();loadFriendsList();
 }
 
@@ -715,17 +736,22 @@ async function declineFriendRequest(reqId){
 
 async function loadFriendsList(){
   const list=$('friendsList');if(!list)return;
-  // Also load requests
   await loadFriendRequests();
   const friends=userData.friends||[];
   if(!friends.length){list.innerHTML='<p style="color:var(--muted);font-size:.76rem">No friends yet — share your code!</p>';return}
-  let h='';
+  let h='';let loaded=0;
   for(const fid of friends.slice(0,20)){
     try{
-      const d=await db.collection('users').doc(fid).get();if(!d.exists)continue;const f=d.data();const r=getRank(f.xp||0);
-      h+=`<div class="friend-row"><div class="lb-pic">${f.profilePic?'<img src="'+f.profilePic+'">':'👤'}</div><div class="lb-info"><div class="lb-name">@${f.username||'hunter'}</div><div class="lb-class">${f.class||''}</div></div><div class="lb-xp">${f.xp||0}</div><div class="lb-rank" style="color:${r.color}">${r.name}</div></div>`;
-    }catch(e){}
+      const d=await db.collection('users').doc(fid).get();
+      if(!d.exists){h+=`<div class="friend-row" style="opacity:.4"><div class="lb-pic">👤</div><div class="lb-info"><div class="lb-name">Deleted user</div></div></div>`;continue}
+      const f=d.data();const r=getRank(f.xp||0);
+      h+=`<div class="friend-row"><div class="lb-pic">${f.profilePic?'<img src="'+f.profilePic+'">':'👤'}</div><div class="lb-info"><div class="lb-name">@${esc(f.username||'hunter')}</div><div class="lb-class">${f.class||''}</div></div><div class="lb-xp">${f.xp||0}</div><div class="lb-rank" style="color:${r.color}">${r.name}</div></div>`;
+      loaded++;
+    }catch(e){
+      h+=`<div class="friend-row" style="opacity:.5"><div class="lb-pic">⚠️</div><div class="lb-info"><div class="lb-name" style="color:var(--red)">Load failed</div><div class="lb-class">${e.message}</div></div></div>`;
+    }
   }
+  if(!loaded&&friends.length)h+=`<p style="color:var(--gold);font-size:.72rem">Friends in your list but can't read their profiles. Update Firestore rules.</p>`;
   list.innerHTML=h;
 }
 
@@ -758,3 +784,91 @@ async function delLog(id){if(!confirm('Delete?'))return;await db.collection('use
 function getMonday(d){const dt=new Date(d);const day=dt.getDay();dt.setDate(dt.getDate()-day+(day===0?-6:1));dt.setHours(0,0,0,0);return dt}
 function getWeekNum(mon){if(!workoutLog.length)return 1;const dates=workoutLog.map(e=>getMonday(new Date(e.date)).getTime());return Math.round((mon-new Date(Math.min(...dates)))/(7*864e5))+1}
 function toast(m){const t=$('toast');t.textContent=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2500)}
+
+// ═══════════ ONBOARDING TOUR ═══════════
+const TOUR_STEPS=[
+  {target:'[data-page="train"]',title:'TRAIN',desc:'Your workout program lives here. Log weights, track sets, and earn XP every session.',pos:'top'},
+  {target:'[data-page="missions"]',title:'MISSIONS',desc:'Daily missions refresh each day. Complete all 5 for bonus XP. Build streaks for massive rewards.',pos:'top'},
+  {target:'[data-page="nutrition"]',title:'NUTRITION',desc:'Track calories & macros. Search foods, scan barcodes, or add manually. Your TDEE auto-calculates.',pos:'top'},
+  {target:'[data-page="chat"]',title:'CHAT',desc:'Message your friends and get advice from the AI Coach. Stay connected, stay accountable.',pos:'top'},
+  {target:'[data-page="ranks"]',title:'RANKS',desc:'Leaderboard and rank info. Climb from E-Rank to S-Rank by earning XP and passing trials.',pos:'top'},
+  {target:'[data-page="profile"]',title:'PROFILE',desc:'Your stats, PRs, settings, and friends. This is your hunter card.',pos:'top'},
+  {target:'.tb-xp',title:'XP BAR',desc:'Your experience points. Every workout, mission, and achievement earns XP toward your next rank.',pos:'bottom'}
+];
+let tourStep=0;
+function checkTour(){
+  if(userData.hasCompletedTour)return;
+  setTimeout(()=>startTour(),800);
+}
+function startTour(){
+  tourStep=0;showTourStep();
+}
+function showTourStep(){
+  let old=$('tourOverlay');if(old)old.remove();
+  if(tourStep>=TOUR_STEPS.length){finishTour();return}
+  const step=TOUR_STEPS[tourStep];
+  const el=document.querySelector(step.target);
+  const overlay=document.createElement('div');overlay.id='tourOverlay';overlay.className='tour-overlay';
+  // Highlight ring
+  if(el){
+    const r=el.getBoundingClientRect();
+    const ring=document.createElement('div');ring.className='tour-ring';
+    ring.style.cssText=`top:${r.top-4}px;left:${r.left-4}px;width:${r.width+8}px;height:${r.height+8}px`;
+    overlay.appendChild(ring);
+  }
+  // Tooltip
+  const tip=document.createElement('div');tip.className='tour-tip';
+  tip.innerHTML=`<div class="tour-step-count">${tourStep+1} / ${TOUR_STEPS.length}</div><div class="tour-title">${step.title}</div><div class="tour-desc">${step.desc}</div><div class="tour-actions"><button class="tour-btn" onclick="nextTourStep()">${tourStep<TOUR_STEPS.length-1?'Next →':'Finish ✓'}</button></div>`;
+  if(el){
+    const r=el.getBoundingClientRect();
+    if(step.pos==='bottom')tip.style.cssText=`top:${r.bottom+12}px;left:50%;transform:translateX(-50%)`;
+    else tip.style.cssText=`bottom:${window.innerHeight-r.top+12}px;left:50%;transform:translateX(-50%)`;
+  }else{tip.style.cssText='top:50%;left:50%;transform:translate(-50%,-50%)'}
+  overlay.appendChild(tip);document.body.appendChild(overlay);
+}
+function nextTourStep(){tourStep++;showTourStep()}
+async function finishTour(){
+  let old=$('tourOverlay');if(old)old.remove();
+  await saveUser({hasCompletedTour:true});
+  unlockAch('tour_done');
+  toast('🗺️ Tour complete! +25 XP');
+}
+
+// ═══════════ UNREAD CHAT BADGE ═══════════
+let unreadChatCount=0;
+async function checkUnreadChats(){
+  if(!U)return;
+  const friends=userData.friends||[];if(!friends.length){updateChatBadge(0);return}
+  const lastRead=userData.lastReadTimestamps||{};
+  let unread=0;
+  for(const fid of friends.slice(0,20)){
+    try{
+      const chatId=getChatId(U.uid,fid);
+      const lastMsg=await db.collection('chats').doc(chatId).collection('messages').orderBy('ts','desc').limit(1).get();
+      if(!lastMsg.empty){
+        const m=lastMsg.docs[0].data();
+        if(m.from!==U.uid&&m.ts){
+          const msgTime=m.ts.toDate().getTime();
+          const readTime=lastRead[fid]||0;
+          if(msgTime>readTime)unread++;
+        }
+      }
+    }catch(e){}
+  }
+  updateChatBadge(unread);
+}
+function updateChatBadge(count){
+  unreadChatCount=count;
+  const nav=document.querySelector('[data-page="chat"] .nav-icon');if(!nav)return;
+  let badge=nav.querySelector('.chat-badge');
+  if(count>0){
+    if(!badge){badge=document.createElement('span');badge.className='chat-badge';nav.appendChild(badge)}
+    badge.textContent=count>9?'9+':count;badge.style.display='';
+  }else{if(badge)badge.style.display='none'}
+}
+async function markChatRead(friendUid){
+  const lastRead=userData.lastReadTimestamps||{};
+  lastRead[friendUid]=Date.now();
+  await saveUser({lastReadTimestamps:lastRead});
+  checkUnreadChats();
+}

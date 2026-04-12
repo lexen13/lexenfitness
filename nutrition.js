@@ -11,7 +11,8 @@ function calcTDEE(){
   else if(hRaw.toLowerCase().includes('cm'))hCm=parseFloat(hRaw);
   else{const n=parseFloat(hRaw);hCm=n>100?n:n*2.54}
   if(!hCm)return null;
-  const wKg=w*0.453592,bmr=10*wKg+6.25*hCm-5*a+5;
+  const wKg=w*0.453592,sex=(st.sex||'male');
+  const bmr=sex==='female'?(10*wKg+6.25*hCm-5*a-161):(10*wKg+6.25*hCm-5*a+5);
   const al=ACTIVITY_LEVELS.find(x=>x.id===(userData.activityLevel||'moderate'))||ACTIVITY_LEVELS[2];
   const tdee=Math.round(bmr*al.mult);
   const goal=userData.goal||'';
@@ -202,6 +203,7 @@ async function saveFoodItem(food){
   if(userData.foodLog[today].length===1)unlockAch('food_log_1');
   const days=Object.keys(userData.foodLog).filter(k=>userData.foodLog[k].length>0).length;
   if(days>=7)unlockAch('food_log_7');
+  if(days>=30)unlockAch('food_log_30');
   renderNutritionPage();toast(`${food.name} logged!`);
 }
 
