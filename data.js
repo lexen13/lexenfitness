@@ -1,6 +1,41 @@
 // ═══════════════════════════════════════════
 //  LEXENFITNESS — DATA v4 (Solo Leveling)
 // ═══════════════════════════════════════════
+const APP_VERSION='1.5.0';
+const CHANGELOG=[
+  {version:'1.5.0',date:'Apr 2026',title:'Social & QoL Update',items:[
+    '💬 Chat unread badge — see new messages at a glance',
+    '🗺️ Onboarding tour — new users get a guided walkthrough',
+    '🔥 Streak warnings — alerts when your streak is at risk',
+    '⚙️ TDEE fix — added biological sex for accurate calorie calculations',
+    '🏆 15 new achievements — more dopamine, more grind',
+    '🔒 Tightened Firestore security rules'
+  ]},
+  {version:'1.4.0',date:'Mar 2026',title:'Chat & AI Coach',items:[
+    '💬 Friend-to-friend messaging',
+    '🤖 AI Coach with personalized advice',
+    '📸 Barcode scanner for food logging',
+    '🍽️ Serving size selector with unit conversion'
+  ]},
+  {version:'1.3.0',date:'Feb 2026',title:'Nutrition Tracker',items:[
+    '🍽️ Full nutrition tracking with TDEE/macro calculator',
+    '🔍 Food search via Open Food Facts',
+    '✏️ Manual food entry',
+    '📊 Daily macro progress bars'
+  ]},
+  {version:'1.2.0',date:'Feb 2026',title:'Social Features',items:[
+    '👥 Friends system with 6-character codes',
+    '🏅 Leaderboard (global + friends)',
+    '📋 Daily missions with streak tracking',
+    '⚔️ Rank-up trials (Iron Gate, Gauntlet, Awakening)'
+  ]},
+  {version:'1.0.0',date:'Jan 2026',title:'Launch',items:[
+    '🚀 LexenFitness goes live',
+    '🏋️ Class-based workout programs',
+    '📈 XP & ranking system (E through S rank)',
+    '📋 Workout logging with weekly progression'
+  ]}
+];
 const RANKS=[
   {name:'E-RANK',min:0,color:'#7c7c9a',auto:true,lore:'You have entered the System. The weakest hunters begin here. Prove yourself.',
     title:{Powerlifter:'Novice Lifter',Bodybuilder:'Untested Rookie',Strongman:'Raw Initiate',Athlete:'Unranked Prospect'}},

@@ -98,7 +98,7 @@ auth.onAuthStateChanged(async u=>{
       $('loadingScreen').style.display='none';
       if(!userData.username){showScreen('usernameScreen');return}
       if(!userData.class){showScreen('classScreen');buildClassSelect()}
-      else{showScreen('appScreen');initApp();checkTour()}
+      else{showScreen('appScreen');initApp();checkWhatsNew()}
     }else{U=null;isDev=false;$('loadingScreen').style.display='none';showScreen('authScreen')}
   }catch(e){
     $('loadingScreen').style.display='none';
@@ -120,7 +120,7 @@ async function submitUsername(){
   await saveUser({username:uname});
   // Proceed to class select or app
   if(!userData.class){showScreen('classScreen');buildClassSelect()}
-  else{showScreen('appScreen');initApp();checkTour()}
+  else{showScreen('appScreen');initApp();checkWhatsNew()}
 }
 
 // ═══════════ FIRESTORE ═══════════
@@ -211,7 +211,7 @@ async function confirmClass(){
   if(selectedProg==='blank'){prog=[{id:'day1',title:'DAY 1',subtitle:'Add exercises',exercises:[]},{id:'day2',title:'DAY 2',subtitle:'Add exercises',exercises:[]},{id:'day3',title:'DAY 3',subtitle:'Add exercises',exercises:[]},{id:'day4',title:'DAY 4',subtitle:'Add exercises',exercises:[]}]}
   else{const all=[...Object.values(CLASS_PROGRAMS).flat()];const found=all.find(p=>p.key===selectedProg);prog=found?JSON.parse(JSON.stringify(found.days)):[];}
   await saveUser({class:selectedClass,subclass:selectedSub||'',programKey:selectedProg,program:prog});
-  await saveLeaderboard();showScreen('appScreen');initApp();checkTour();
+  await saveLeaderboard();showScreen('appScreen');initApp();checkWhatsNew();
 }
 
 // ═══════════ INIT ═══════════
@@ -784,6 +784,39 @@ async function delLog(id){if(!confirm('Delete?'))return;await db.collection('use
 function getMonday(d){const dt=new Date(d);const day=dt.getDay();dt.setDate(dt.getDate()-day+(day===0?-6:1));dt.setHours(0,0,0,0);return dt}
 function getWeekNum(mon){if(!workoutLog.length)return 1;const dates=workoutLog.map(e=>getMonday(new Date(e.date)).getTime());return Math.round((mon-new Date(Math.min(...dates)))/(7*864e5))+1}
 function toast(m){const t=$('toast');t.textContent=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2500)}
+
+// ═══════════ WHAT'S NEW ═══════════
+function checkWhatsNew(){
+  const seen=userData.lastSeenVersion||'0.0.0';
+  if(seen===APP_VERSION){checkTour();return}
+  // Show entries newer than last seen
+  const newEntries=seen==='0.0.0'?[CHANGELOG[0]]:CHANGELOG.filter(e=>compareVer(e.version,seen)>0);
+  if(!newEntries.length){saveUser({lastSeenVersion:APP_VERSION});checkTour();return}
+  showWhatsNew(newEntries);
+}
+function compareVer(a,b){
+  const pa=a.split('.').map(Number),pb=b.split('.').map(Number);
+  for(let i=0;i<3;i++){if((pa[i]||0)>(pb[i]||0))return 1;if((pa[i]||0)<(pb[i]||0))return-1}return 0;
+}
+function showWhatsNew(entries){
+  let old=$('whatsNewOverlay');if(old)old.remove();
+  const overlay=document.createElement('div');overlay.id='whatsNewOverlay';overlay.className='wn-overlay';
+  let h=`<div class="wn-modal">`;
+  h+=`<div class="wn-header"><div class="wn-badge">NEW</div><div class="wn-title">What's New</div><div class="wn-ver">v${APP_VERSION}</div></div>`;
+  entries.forEach(e=>{
+    h+=`<div class="wn-section"><div class="wn-section-title">${e.title} <span class="wn-date">${e.date}</span></div>`;
+    h+=`<ul class="wn-list">${e.items.map(i=>`<li>${i}</li>`).join('')}</ul></div>`;
+  });
+  h+=`<button class="wn-btn" id="wnDismiss">Got it</button></div>`;
+  overlay.innerHTML=h;
+  document.body.appendChild(overlay);
+  document.getElementById('wnDismiss').addEventListener('click',async()=>{
+    overlay.classList.add('closing');
+    setTimeout(()=>{overlay.remove()},250);
+    await saveUser({lastSeenVersion:APP_VERSION});
+    checkTour();
+  });
+}
 
 // ═══════════ ONBOARDING TOUR ═══════════
 const TOUR_STEPS=[
