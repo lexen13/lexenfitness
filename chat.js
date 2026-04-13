@@ -9,9 +9,11 @@ function renderChatPage(){
   let h=`<div class="sub-tabs" id="chatTabs">
     <div class="stab active" data-st="friendchat" onclick="switchSubTab('chat','friendchat')">Friends</div>
     <div class="stab" data-st="aicoach" onclick="switchSubTab('chat','aicoach')">AI Coach</div>
+    <div class="stab" data-st="updates" onclick="switchSubTab('chat','updates')">Updates</div>
   </div>`;
   h+=`<div class="sub-page active" id="sp-friendchat"><div id="chatListContent"></div></div>`;
   h+=`<div class="sub-page" id="sp-aicoach"><div id="aiCoachContent"></div></div>`;
+  h+=`<div class="sub-page" id="sp-updates"><div id="updatesContent"></div></div>`;
   $('chatPageContent').innerHTML=h;
   renderChatList();
 }
@@ -269,4 +271,24 @@ function getMotivation(){
   ];
   const today=getTodayStr();let seed=0;for(let i=0;i<today.length;i++)seed+=today.charCodeAt(i);
   return'<em>"'+messages[seed%messages.length]+'"</em>';
+}
+
+// ═══════════ UPDATES / CHANGELOG TAB ═══════════
+function renderUpdatesTab(){
+  const el=$('updatesContent');if(!el)return;
+  let h=`<div class="page-title" style="display:flex;align-items:center;gap:.5rem">SYSTEM UPDATES <span class="updates-ver">v${APP_VERSION}</span></div>`;
+  h+=`<div class="page-sub">Patch notes & version history</div>`;
+  CHANGELOG.forEach((entry,i)=>{
+    const isCurrent=entry.version===APP_VERSION;
+    h+=`<div class="update-card${isCurrent?' current':''}">
+      <div class="update-header">
+        <div class="update-version">${entry.version}</div>
+        <div class="update-title">${entry.title}</div>
+        <div class="update-date">${entry.date}</div>
+      </div>
+      <ul class="update-items">${entry.items.map(item=>`<li>${item}</li>`).join('')}</ul>
+      ${isCurrent?'<div class="update-current-badge">CURRENT</div>':''}
+    </div>`;
+  });
+  el.innerHTML=h;
 }

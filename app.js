@@ -275,6 +275,7 @@ function switchSubTab(page,tab){
   if(tab==='log')renderLog();if(tab==='rankinfo')$('rankInfoContent').innerHTML=renderRankInfo();if(tab==='leaderboard')renderLeaderboard();
   if(tab==='aicoach')renderAICoach();if(tab==='friendchat')renderChatList();
   if(tab==='friends')renderFriendsPage();if(tab==='mystats')renderProfile();
+  if(tab==='updates')renderUpdatesTab();
 }
 
 // ═══════════ DAILY MISSIONS ═══════════
