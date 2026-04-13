@@ -215,7 +215,11 @@ async function confirmClass(){
 }
 
 // ═══════════ INIT ═══════════
-function initApp(){document.querySelectorAll('.nav-item').forEach(n=>n.addEventListener('click',()=>switchPage(n.dataset.page)));updateTopBar();syncAcceptedRequests();checkUnreadChats();switchPage('profile')}
+function initApp(){document.querySelectorAll('.nav-item').forEach(n=>n.addEventListener('click',()=>switchPage(n.dataset.page)));updateTopBar();syncAcceptedRequests();checkUnreadChats();
+  // Handle PWA shortcut ?page= param
+  const params=new URLSearchParams(window.location.search);const startPage=params.get('page');
+  switchPage(startPage&&['train','missions','nutrition','chat','ranks','profile'].includes(startPage)?startPage:'profile');
+}
 function updateTopBar(){
   const r=getEffectiveRank(),info=getXpBarInfo(),cap=getXpCap();
   const capped=cap!==Infinity&&userData.xp>=cap;

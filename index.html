@@ -4,8 +4,15 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 <meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Lexen">
 <meta name="theme-color" content="#08080d">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self' https://*.googleapis.com https://*.gstatic.com https://*.firebaseapp.com https://*.firebaseio.com https://world.openfoodfacts.org; script-src 'self' 'unsafe-inline' https://*.gstatic.com https://unpkg.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src https://*.googleapis.com https://*.firebaseio.com https://*.firebaseapp.com https://world.openfoodfacts.org; media-src * blob: data:">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="application-name" content="Lexen">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icons/icon-192x192.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192x192.png">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self' https://*.googleapis.com https://*.gstatic.com https://*.firebaseapp.com https://*.firebaseio.com https://world.openfoodfacts.org; script-src 'self' 'unsafe-inline' https://*.gstatic.com https://unpkg.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src https://*.googleapis.com https://*.firebaseio.com https://*.firebaseapp.com https://world.openfoodfacts.org; media-src * blob: data:; worker-src 'self'; manifest-src 'self'">
 <title>LexenFitness</title>
 <link rel="stylesheet" href="style.css">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -272,6 +279,22 @@
 <input type="file" id="picInput" accept="image/*" style="display:none">
 <div class="toast" id="toast"></div>
 
+<!-- PWA Install Banner -->
+<div class="pwa-banner" id="pwaBanner" style="display:none">
+  <div class="pwa-banner-content">
+    <img src="icons/icon-96x96.png" class="pwa-banner-icon" alt="Lexen">
+    <div class="pwa-banner-text">
+      <strong>Install LexenFitness</strong>
+      <span id="pwaDesc">Add to home screen for the full experience</span>
+    </div>
+  </div>
+  <div id="pwaInstructions" style="display:none"></div>
+  <div class="pwa-banner-actions">
+    <button class="pwa-btn-dismiss" onclick="dismissInstall()">Later</button>
+    <button class="pwa-btn-install" id="pwaInstallBtn" onclick="doInstall()">Install</button>
+  </div>
+</div>
+
 <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <script src="data.js"></script>
 <script src="app.js"></script>
@@ -280,6 +303,77 @@
 <script>
 GOALS.forEach(g=>{const o=document.createElement('option');o.value=g;o.textContent=g;document.getElementById('setGoal').appendChild(o)});
 EXPERIENCE.forEach(e=>{const o=document.createElement('option');o.value=e;o.textContent=e;document.getElementById('setExperience').appendChild(o)});
+
+// ── Service Worker Registration ──
+if('serviceWorker' in navigator){
+  navigator.serviceWorker.register('sw.js').then(reg=>{
+    reg.addEventListener('updatefound',()=>{
+      const nw=reg.installing;
+      nw.addEventListener('statechange',()=>{
+        if(nw.state==='activated'&&navigator.serviceWorker.controller){
+          // New version available — could show a toast
+        }
+      });
+    });
+  }).catch(err=>console.log('SW registration failed:',err));
+}
+
+// ── PWA Install Prompt (Android + iOS) ──
+let deferredPrompt=null;
+const isIOS=/iPad|iPhone|iPod/.test(navigator.userAgent)&&!window.MSStream;
+const isAndroid=/Android/.test(navigator.userAgent);
+const isStandalone=window.matchMedia('(display-mode: standalone)').matches||window.navigator.standalone;
+
+window.addEventListener('beforeinstallprompt',e=>{
+  e.preventDefault();
+  deferredPrompt=e;
+  setTimeout(()=>showInstallBanner('android'),3000);
+});
+
+function showInstallBanner(platform){
+  if(isStandalone)return; // Already installed
+  if(!document.getElementById('appScreen').classList.contains('active'))return;
+  const dismissed=localStorage.getItem('pwa_dismiss');
+  if(dismissed&&Date.now()-parseInt(dismissed)<7*86400000)return; // 7 day cooldown
+
+  const banner=document.getElementById('pwaBanner');
+  const desc=document.getElementById('pwaDesc');
+  const instructions=document.getElementById('pwaInstructions');
+  const btn=document.getElementById('pwaInstallBtn');
+
+  if(platform==='ios'){
+    desc.textContent='No browser bar, full screen, app icon';
+    instructions.style.display='';
+    instructions.innerHTML='<div class="pwa-ios-steps"><span>Tap <strong>Share</strong> <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle"><path d="M4 12v8a2 2 0 002 2h12a2 2 0 002-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg> then <strong>"Add to Home Screen"</strong></span></div>';
+    btn.textContent='Got it';
+    btn.onclick=function(){dismissInstall()};
+  } else {
+    desc.textContent='Add to home screen for the full experience';
+    instructions.style.display='none';
+    btn.textContent='Install';
+    btn.onclick=function(){doInstall()};
+  }
+  banner.style.display='';
+}
+
+// iOS: show banner after delay since beforeinstallprompt won't fire
+if(isIOS&&!isStandalone){
+  window.addEventListener('load',()=>{setTimeout(()=>showInstallBanner('ios'),4000)});
+}
+
+function doInstall(){
+  if(!deferredPrompt)return;
+  document.getElementById('pwaBanner').style.display='none';
+  deferredPrompt.prompt();
+  deferredPrompt.userChoice.then(r=>{
+    if(r.outcome==='accepted'){if(typeof toast==='function')toast('Welcome to LexenFitness!')}
+    deferredPrompt=null;
+  });
+}
+function dismissInstall(){
+  document.getElementById('pwaBanner').style.display='none';
+  localStorage.setItem('pwa_dismiss',Date.now().toString());
+}
 </script>
 </body>
 </html>

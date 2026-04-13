@@ -551,3 +551,20 @@ input[type=checkbox]:checked::after{content:'✓';position:absolute;color:#fff;f
 .wn-list li{font-size:.78rem;color:var(--muted);padding:3px 0;padding-left:.2rem;line-height:1.4}
 .wn-btn{width:100%;padding:12px;background:var(--accent);color:#fff;border:none;border-radius:10px;font-weight:700;font-size:.9rem;cursor:pointer;margin-top:.6rem;transition:all .15s}
 .wn-btn:hover{background:var(--accent2)}
+
+/* ── PWA Install Banner ── */
+.pwa-banner{position:fixed;bottom:70px;left:.7rem;right:.7rem;background:var(--surface);border:1px solid var(--accent);border-radius:14px;padding:.8rem 1rem;z-index:900;box-shadow:0 -4px 24px rgba(0,0,0,.5);animation:slideUp .3s ease}
+@keyframes slideUp{from{transform:translateY(100%);opacity:0}to{transform:translateY(0);opacity:1}}
+.pwa-banner-content{display:flex;align-items:center;gap:.7rem;margin-bottom:.6rem}
+.pwa-banner-icon{width:40px;height:40px;border-radius:10px;flex-shrink:0}
+.pwa-banner-text{display:flex;flex-direction:column;gap:1px}
+.pwa-banner-text strong{font-size:.85rem;color:var(--text)}
+.pwa-banner-text span{font-size:.7rem;color:var(--muted)}
+.pwa-banner-actions{display:flex;gap:.5rem;justify-content:flex-end}
+.pwa-btn-dismiss{background:none;border:1px solid var(--border);color:var(--muted);padding:7px 16px;border-radius:8px;font-size:.78rem;font-weight:600;cursor:pointer}
+.pwa-btn-install{background:var(--accent);border:none;color:#fff;padding:7px 20px;border-radius:8px;font-size:.78rem;font-weight:700;cursor:pointer}
+.pwa-btn-install:hover{background:var(--accent2)}
+
+/* ── iOS Install Steps ── */
+.pwa-ios-steps{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:.5rem .7rem;margin-bottom:.5rem;font-size:.76rem;color:var(--text);line-height:1.6}
+.pwa-ios-steps svg{color:var(--cyan)}
