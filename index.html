@@ -304,18 +304,31 @@
 GOALS.forEach(g=>{const o=document.createElement('option');o.value=g;o.textContent=g;document.getElementById('setGoal').appendChild(o)});
 EXPERIENCE.forEach(e=>{const o=document.createElement('option');o.value=e;o.textContent=e;document.getElementById('setExperience').appendChild(o)});
 
-// ── Service Worker Registration ──
+// ── Service Worker Registration + Update Detection ──
 if('serviceWorker' in navigator){
   navigator.serviceWorker.register('sw.js').then(reg=>{
+    // Check for updates every 30 minutes while app is open
+    setInterval(()=>reg.update(),30*60*1000);
     reg.addEventListener('updatefound',()=>{
       const nw=reg.installing;
       nw.addEventListener('statechange',()=>{
-        if(nw.state==='activated'&&navigator.serviceWorker.controller){
-          // New version available — could show a toast
+        if(nw.state==='installed'&&navigator.serviceWorker.controller){
+          // New version ready — show update banner
+          showUpdateBanner();
         }
       });
     });
   }).catch(err=>console.log('SW registration failed:',err));
+  // If the SW takes control (after skipWaiting+claim), reload to get fresh files
+  let refreshing=false;
+  navigator.serviceWorker.addEventListener('controllerchange',()=>{
+    if(!refreshing){refreshing=true;window.location.reload()}
+  });
+}
+function showUpdateBanner(){
+  const b=document.createElement('div');b.className='update-banner';
+  b.innerHTML='<span>🔄 New version available!</span><button onclick="this.parentElement.remove();navigator.serviceWorker.getRegistration().then(r=>{if(r&&r.waiting)r.waiting.postMessage({type:\'SKIP_WAITING\'})})">Update Now</button>';
+  document.body.appendChild(b);
 }
 
 // ── PWA Install Prompt (Android + iOS) ──

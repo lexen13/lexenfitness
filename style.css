@@ -580,3 +580,8 @@ input[type=checkbox]:checked::after{content:'✓';position:absolute;color:#fff;f
 .update-items{list-style:none;padding:0;margin:0}
 .update-items li{font-size:.76rem;color:var(--muted);padding:2px 0;line-height:1.5}
 .update-current-badge{position:absolute;top:.6rem;right:.8rem;font-family:var(--font-mono);font-size:.5rem;font-weight:800;letter-spacing:2px;color:var(--green);background:rgba(52,211,153,.1);padding:2px 8px;border-radius:8px;border:1px solid rgba(52,211,153,.3)}
+
+/* ── SW Update Banner ── */
+.update-banner{position:fixed;top:0;left:0;right:0;background:linear-gradient(135deg,var(--accent),#5b3cc4);color:#fff;display:flex;align-items:center;justify-content:space-between;padding:10px 16px;z-index:9999;font-size:.82rem;font-weight:600;animation:slideDown .3s ease}
+@keyframes slideDown{from{transform:translateY(-100%)}to{transform:translateY(0)}}
+.update-banner button{background:#fff;color:var(--accent);border:none;padding:6px 14px;border-radius:6px;font-weight:700;font-size:.78rem;cursor:pointer}

@@ -1,5 +1,6 @@
 // ═══════════════════════════════════════════
 //  LEXENFITNESS — Service Worker
+//  IMPORTANT: Bump CACHE_NAME with every deploy
 // ═══════════════════════════════════════════
 const CACHE_NAME = 'lexen-v1.5.0';
 const STATIC_ASSETS = [
@@ -17,7 +18,7 @@ const STATIC_ASSETS = [
   '/lexenfitness/icons/icon-512x512-maskable.png'
 ];
 
-// Install — cache app shell
+// Install — cache app shell, immediately take over
 self.addEventListener('install', e => {
   e.waitUntil(
     caches.open(CACHE_NAME)
@@ -26,7 +27,12 @@ self.addEventListener('install', e => {
   );
 });
 
-// Activate — clean old caches
+// Listen for skip waiting message from app
+self.addEventListener('message', e => {
+  if (e.data && e.data.type === 'SKIP_WAITING') self.skipWaiting();
+});
+
+// Activate — clean ALL old caches, take control of all tabs
 self.addEventListener('activate', e => {
   e.waitUntil(
     caches.keys().then(keys =>
@@ -35,11 +41,11 @@ self.addEventListener('activate', e => {
   );
 });
 
-// Fetch — network first for API/Firebase, cache first for static assets
+// Fetch — NETWORK FIRST for app files, cache as fallback (offline only)
 self.addEventListener('fetch', e => {
   const url = new URL(e.request.url);
 
-  // Always go network for Firebase, APIs, auth
+  // Skip: let Firebase, APIs, CDNs go straight to network
   if (
     url.hostname.includes('googleapis.com') ||
     url.hostname.includes('firebaseio.com') ||
@@ -48,22 +54,21 @@ self.addEventListener('fetch', e => {
     url.hostname.includes('openfoodfacts.org') ||
     url.hostname.includes('unpkg.com')
   ) {
-    return; // Let browser handle normally
+    return;
   }
 
-  // Static assets — cache first, fallback to network
+  // Everything else: try network first, fall back to cache if offline
   e.respondWith(
-    caches.match(e.request).then(cached => {
-      const fetched = fetch(e.request).then(response => {
-        // Update cache with fresh copy
-        if (response.ok) {
-          const clone = response.clone();
-          caches.open(CACHE_NAME).then(cache => cache.put(e.request, clone));
-        }
-        return response;
-      }).catch(() => cached); // Offline fallback to cache
-
-      return cached || fetched;
+    fetch(e.request).then(response => {
+      // Got a fresh response — update cache and serve it
+      if (response.ok) {
+        const clone = response.clone();
+        caches.open(CACHE_NAME).then(cache => cache.put(e.request, clone));
+      }
+      return response;
+    }).catch(() => {
+      // Network failed (offline) — serve from cache
+      return caches.match(e.request);
     })
   );
 });
