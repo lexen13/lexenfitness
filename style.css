@@ -122,6 +122,7 @@ input[type=checkbox]:checked::after{content:'✓';position:absolute;color:#fff;f
 .workout-actions{display:flex;gap:7px;margin-top:.8rem}
 .workout-actions button{flex:1;padding:11px;border:none;border-radius:9px;font-weight:700;font-size:.8rem}
 .wa-log{background:var(--green);color:#000}
+.wa-log-all{background:var(--gold);color:#000}
 .wa-save{background:var(--accent);color:#fff}
 .wa-clear{background:var(--surface2);color:var(--muted);border:1px solid var(--border)!important}
 

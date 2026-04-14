@@ -471,7 +471,7 @@ function buildWorkout(){
   if(!prog.length){$('dayTabs').innerHTML='';$('dayContent').innerHTML='<p style="color:var(--muted);font-size:.82rem">No days in your program.</p><button class="add-ex" onclick="addWorkoutDay()" style="margin-top:.5rem">+ Add Workout Day</button>';return}
   if(!prog.find(d=>d.id===currentDay))currentDay=prog[0].id;
   $('dayTabs').innerHTML=prog.map(d=>`<div class="dtab${d.id===currentDay?' active':''}" data-d="${d.id}" onclick="switchDay('${d.id}')">${d.title}</div>`).join('')+`<div class="dtab" style="color:var(--green);border-color:var(--green)" onclick="addWorkoutDay()">+</div>`;
-  renderDay();
+  renderDay();updateLogBtn();
 }
 async function addWorkoutDay(){
   const prog=userData.program||[];
@@ -505,7 +505,7 @@ async function renameWorkoutDay(){
   await saveUser({program:prog});
   buildWorkout();toast('Day renamed!');
 }
-function switchDay(id){currentDay=id;document.querySelectorAll('.dtab').forEach(t=>t.classList.toggle('active',t.dataset.d===id));renderDay()}
+function switchDay(id){currentDay=id;document.querySelectorAll('.dtab').forEach(t=>t.classList.toggle('active',t.dataset.d===id));renderDay();updateLogBtn()}
 function renderDay(){const prog=userData.program||[],day=prog.find(d=>d.id===currentDay);if(!day)return;const di=prog.indexOf(day);let h='';
   day.exercises.forEach((ex,ei)=>{h+=`<div class="exercise"><div class="ex-header"><span class="ex-num">${ei+1}</span><span class="ex-name">${ex.name}</span><button class="ex-edit" onclick="openEdit(${di},${ei})">✏️</button></div><div class="sets-grid">`;
     for(let s=0;s<ex.sets;s++){const wK=day.id+'_e'+ei+'_s'+s+'_w',rK=day.id+'_e'+ei+'_s'+s+'_r',cK=day.id+'_e'+ei+'_s'+s+'_c';
@@ -548,7 +548,44 @@ async function logWorkout(){
   const nx=userData.xp+xp;if(nx>=500)unlockAch('rank_d');if(nx>=1500)unlockAch('rank_c');
   const gained=addXP(xp);await saveUser({xp:userData.xp});await saveLeaderboard();updateTopBar();checkRankUp();
   let msg=day.title+' +'+gained+' XP';if(gained<xp)msg+=' (CAPPED — complete trial!)';if(xpCappedMsg)msg=xpCappedMsg;
+  // Clear this day's inputs after logging
+  day.exercises.forEach((ex,ei)=>{for(let s=0;s<ex.sets;s++){delete savedInputs[day.id+'_e'+ei+'_s'+s+'_w'];delete savedInputs[day.id+'_e'+ei+'_s'+s+'_r'];delete savedInputs[day.id+'_e'+ei+'_s'+s+'_c']}});
+  await db.collection('users').doc(U.uid).collection('meta').doc('inputs').set({data:savedInputs});
+  renderDay();
   toast(msg)}
+function updateLogBtn(){const prog=userData.program||[];const day=prog.find(d=>d.id===currentDay);const btn=$('logDayBtn');if(btn&&day)btn.textContent='📋 Log '+day.title}
+async function logAllDays(){
+  const prog=userData.program||[];if(!prog.length){toast('No program!');return}
+  captureInputs();
+  let logged=0,totalXp=0;
+  for(const day of prog){
+    // Check if this day has any filled-in data in savedInputs
+    let hasData=false;
+    day.exercises.forEach((ex,ei)=>{for(let s=0;s<ex.sets;s++){const wK=day.id+'_e'+ei+'_s'+s+'_w',rK=day.id+'_e'+ei+'_s'+s+'_r';if(savedInputs[wK]||savedInputs[rK])hasData=true}});
+    if(!hasData)continue;
+    // Build entry from savedInputs
+    const entry={dayId:day.id,dayTitle:day.title,date:new Date().toISOString(),exercises:[]};let allDone=true,maxW=0;
+    day.exercises.forEach((ex,ei)=>{const sets=[];for(let s=0;s<ex.sets;s++){const w=savedInputs[day.id+'_e'+ei+'_s'+s+'_w']||'',r=savedInputs[day.id+'_e'+ei+'_s'+s+'_r']||'',d=!!savedInputs[day.id+'_e'+ei+'_s'+s+'_c'];if(!d)allDone=false;if(parseInt(w)>maxW)maxW=parseInt(w);sets.push({weight:w,reps:r,done:d,isTime:!!ex.isTime})}entry.exercises.push({name:ex.name,sets})});
+    const ref=await db.collection('users').doc(U.uid).collection('log').add(entry);entry._id=ref.id;workoutLog.unshift(entry);
+    let xp=50;if(allDone)xp+=50;totalXp+=xp;logged++;
+    // Clear savedInputs for this day after logging
+    day.exercises.forEach((ex,ei)=>{for(let s=0;s<ex.sets;s++){delete savedInputs[day.id+'_e'+ei+'_s'+s+'_w'];delete savedInputs[day.id+'_e'+ei+'_s'+s+'_r'];delete savedInputs[day.id+'_e'+ei+'_s'+s+'_c']}});
+  }
+  if(!logged){toast('No filled-in days to log!');return}
+  // Save cleared inputs
+  await db.collection('users').doc(U.uid).collection('meta').doc('inputs').set({data:savedInputs});
+  // XP + achievements (run once at end)
+  const wc=workoutLog.length;const hr=new Date().getHours();
+  if(wc>=1)unlockAch('first_workout');if(wc>=10)unlockAch('workouts_10');if(wc>=25)unlockAch('workouts_25');if(wc>=50)unlockAch('workouts_50');if(wc>=100)unlockAch('workouts_100');if(wc>=200)unlockAch('workouts_200');
+  if(hr<7)unlockAch('early_bird');if(hr>=21)unlockAch('night_owl');
+  const dids=new Set(workoutLog.map(e=>e.dayId));if(dids.size>=4)unlockAch('variety');
+  const streak=calcStreak();if(streak>=7)unlockAch('streak_7');if(streak>=14)unlockAch('streak_14');if(streak>=30)unlockAch('streak_30');if(streak>=60)unlockAch('streak_60');if(streak>=90)unlockAch('streak_90');
+  const fw=calcFullWeeks();if(fw>=1)unlockAch('full_week');if(fw>=5)unlockAch('full_week_5');if(fw>=10)unlockAch('full_week_10');if(fw>=20)unlockAch('full_week_20');
+  const gained=addXP(totalXp);await saveUser({xp:userData.xp});await saveLeaderboard();updateTopBar();checkRankUp();
+  // Clear visible inputs and re-render
+  renderDay();
+  toast(`${logged} day${logged>1?'s':''} logged! +${gained} XP`);
+}
 function calcStreak(){const dates=[...new Set(workoutLog.map(e=>new Date(e.date).toDateString()))].sort((a,b)=>new Date(b)-new Date(a));let s=0;for(let i=0;i<dates.length;i++){const exp=new Date();exp.setDate(exp.getDate()-i);if(dates[i]===exp.toDateString())s++;else break}return s}
 function calcFullWeeks(){const w={};workoutLog.forEach(e=>{const m=getMonday(new Date(e.date)).toISOString().slice(0,10);if(!w[m])w[m]=new Set();w[m].add(e.dayId)});return Object.values(w).filter(s=>s.size>=4).length}
 
