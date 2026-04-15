@@ -376,6 +376,9 @@ function renderDevTools(){
       <button class="dev-btn" onclick="devResetTrials()">Reset Trials</button>
       <button class="dev-btn" style="color:var(--red)" onclick="devResetAll()">Full Reset</button>
     </div>
+    <div class="dev-row" style="margin-top:.3rem;border-top:1px dashed var(--border);padding-top:.4rem">
+      <button class="dev-btn" style="color:var(--green)" onclick="devPushProgram()">Push Program to User</button>
+    </div>
   </div>`;
 }
 async function devSetXP(xp){
@@ -461,6 +464,23 @@ function devTriggerSplash(){
   const r=getEffectiveRank();const ri=RANKS.findIndex(x=>x.name===r.name);
   const next=ri<RANKS.length-1?RANKS[ri+1]:RANKS[RANKS.length-1];
   showRankUpSplash(next);
+}
+async function devPushProgram(){
+  const username=prompt('Username to push program to (lowercase):');if(!username)return;
+  // Look up user by username
+  const snap=await db.collection('usernames').doc(username.toLowerCase().trim()).get();
+  if(!snap.exists){toast('Username not found: '+username);return}
+  const uid=snap.data().uid;
+  // Pick program
+  const allProgs=[...SHARED_PROGRAMS,...Object.values(CLASS_PROGRAMS).flat()];
+  const keys=allProgs.map(p=>p.key+' — '+p.name);
+  const choice=prompt('Program key to push:\n\n'+keys.join('\n')+'\n\nEnter key:','fb_abc');
+  if(!choice)return;
+  const prog=allProgs.find(p=>p.key===choice.trim());
+  if(!prog){toast('Program not found: '+choice);return}
+  const programData=JSON.parse(JSON.stringify(prog.days));
+  await db.collection('users').doc(uid).update({programKey:prog.key,program:programData});
+  toast('Pushed "'+prog.name+'" to @'+username);
 }
 
 // ═══════════ WORKOUT ═══════════

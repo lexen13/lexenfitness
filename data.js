@@ -134,6 +134,36 @@ const CLASS_PROGRAMS={
       {id:'day4',title:'ENDURANCE',subtitle:'Friday',exercises:[{name:'Sled Push',sets:4,reps:'30m'},{name:'KB Swings',sets:4,reps:'20'},{name:'Rowing',sets:4,reps:'500m'},{name:'Burpees',sets:3,reps:'12'},{name:'Farmer Walks',sets:3,reps:'40m'}]}]}
   ]
 };
+const SHARED_PROGRAMS=[
+  {key:'fb_abc',name:'Full Body ABC',desc:'3-day full body — strength & hypertrophy',icon:'🅰️',days:[
+    {id:'day1',title:'WORKOUT A',subtitle:'Full Body',exercises:[
+      {name:'Squats (Barbell or Goblet)',sets:4,reps:'4-8'},
+      {name:'Bench Press (Barbell/Dumbbell)',sets:4,reps:'4-8'},
+      {name:'Bent-Over Rows (Barbell/Dumbbell)',sets:3,reps:'4-8'},
+      {name:'Overhead Press (Dumbbell/Machine)',sets:3,reps:'4-8'},
+      {name:'Romanian Deadlifts',sets:3,reps:'4-8'},
+      {name:'Plank',sets:3,reps:'20-30s',isTime:true}
+    ]},
+    {id:'day2',title:'WORKOUT B',subtitle:'Full Body',exercises:[
+      {name:'Romanian Deadlifts',sets:4,reps:'4-8'},
+      {name:'Incline Press (Dumbbell)',sets:4,reps:'4-8'},
+      {name:'Pull-Ups or Lat Pulldowns',sets:3,reps:'4-8'},
+      {name:'Leg Extensions',sets:3,reps:'4-8'},
+      {name:'Tricep Extensions',sets:3,reps:'4-8'},
+      {name:'Leg Raises (Optional Core)',sets:3,reps:'8-12'}
+    ]},
+    {id:'day3',title:'WORKOUT C',subtitle:'Full Body',exercises:[
+      {name:'Front Squats (Barbell or Dumbbell)',sets:4,reps:'4-8'},
+      {name:'Dumbbell Bench Press',sets:4,reps:'4-8'},
+      {name:'Seated Rows (Cable or Machine)',sets:3,reps:'4-8'},
+      {name:'Arnold Press (Dumbbell)',sets:3,reps:'4-8'},
+      {name:'Good Mornings or Hamstring Curls',sets:3,reps:'4-8'},
+      {name:'Bicycle Crunches (Optional Core)',sets:3,reps:'10-15/side'}
+    ]}
+  ]}
+];
+// Append shared programs to all classes
+Object.keys(CLASS_PROGRAMS).forEach(k=>CLASS_PROGRAMS[k]=[...CLASS_PROGRAMS[k],...SHARED_PROGRAMS]);
 const UNIVERSAL_MISSIONS=[
   {id:'water_8',icon:'💧',name:'Hydrate',desc:'Drink 8 glasses of water',xp:15},
   {id:'protein',icon:'🥩',name:'Protein Goal',desc:'Hit your protein target',xp:15},
