@@ -94,13 +94,7 @@ function renderNutritionPage(){
 
   let h='';
 
-  // ── TDEE SETUP (if not configured) ──
-  if(!t){
-    h+=renderTDEESetup();
-    $('nutritionContent').innerHTML=h;return;
-  }
-
-  // ── Header + Date Nav ──
+  // ── Header + Date Nav (always show) ──
   h+=`<div class="page-title" style="display:flex;justify-content:space-between;align-items:center">NUTRITION <span style="font-family:var(--font-mono);font-size:.65rem;color:var(--muted)">${dateLabel}</span></div>`;
   h+=`<div class="date-nav">
     <button class="date-btn" onclick="shiftFoodDate(-1)">◄</button>
@@ -108,7 +102,13 @@ function renderNutritionPage(){
     <button class="date-btn" onclick="shiftFoodDate(1)" ${isToday?'disabled':''}>►</button>
   </div>`;
 
-  // ── TDEE Summary Card ──
+  // ── TDEE Card or Setup Prompt ──
+  if(!t){
+    h+=`<div class="tdee-card" style="text-align:center">
+      <div class="tdee-empty">Set up your body stats to get calorie & macro targets</div>
+      <button class="auth-btn primary" onclick="openMacroModal()" style="margin-top:.6rem;max-width:280px;margin-left:auto;margin-right:auto">⚙️ Set Up Nutrition</button>
+    </div>`;
+  }else{
   const calPct=Math.min(100,(totals.cal/t.target)*100);
   const pPct=Math.min(100,(totals.p/t.proteinG)*100);
   const cPct=Math.min(100,(totals.c/t.carbG)*100);
@@ -124,6 +124,7 @@ function renderNutritionPage(){
     </div>
     <div class="tdee-btns"><button class="tdee-adjust-btn" onclick="openMacroModal()">⚙️ Adjust Targets</button><button class="tdee-adjust-btn" onclick="openMealCountModal()">🍽️ ${mealCount} Meals</button></div>
   </div>`;
+  } // end TDEE if/else
 
   // ── MEAL SECTIONS ──
   for(let m=1;m<=mealCount;m++){
@@ -442,24 +443,30 @@ async function removeMealItem(meal,idx){
 
 // ── MACRO ADJUSTMENT MODAL ──
 function openMacroModal(){
-  const t=calcTDEE();if(!t)return;const cm=userData.customMacros||{};
-  let h=`<h2>⚙️ Adjust Targets</h2>
-  <div class="m-field"><label>Activity Level</label><select id="macroActivity">${ACTIVITY_LEVELS.map(a=>`<option value="${a.id}"${(userData.activityLevel||'moderate')===a.id?' selected':''}>${a.name} — ${a.desc}</option>`).join('')}</select></div>
-  <div class="m-field"><label>Daily Steps Estimate</label><select id="macroSteps">
-    <option value="2000"${(userData.dailySteps||'')==='2000'?' selected':''}>~2,000</option>
-    <option value="4000"${(userData.dailySteps||'')==='4000'?' selected':''}>~4,000</option>
-    <option value="6000"${(userData.dailySteps||'6000')==='6000'?' selected':''}>~6,000</option>
-    <option value="8000"${(userData.dailySteps||'')==='8000'?' selected':''}>~8,000</option>
-    <option value="10000"${(userData.dailySteps||'')==='10000'?' selected':''}>~10,000</option>
+  const t=calcTDEE();const cm=userData.customMacros||{};const st=userData.stats||{};
+  let h=`<h2>⚙️ Nutrition Settings</h2>`;
+  h+=`<div class="settings-section" style="margin-top:0">BODY STATS</div>`;
+  h+=`<div class="settings-row-fields"><div class="m-field" style="flex:1"><label>Height</label><input type="text" id="macroHeight" value="${st.height||''}" placeholder="5'10&quot;"></div><div class="m-field" style="flex:1"><label>Weight (lbs)</label><input type="number" id="macroWeight" value="${st.weight||''}"></div></div>`;
+  h+=`<div class="settings-row-fields"><div class="m-field" style="flex:1"><label>Age</label><input type="number" id="macroAge" value="${st.age||''}"></div><div class="m-field" style="flex:1"><label>Sex</label><select id="macroSex"><option value="male"${(st.sex||'male')==='male'?' selected':''}>Male</option><option value="female"${st.sex==='female'?' selected':''}>Female</option></select></div></div>`;
+  h+=`<div class="settings-section">ACTIVITY & GOAL</div>`;
+  h+=`<div class="m-field"><label>Activity Level</label><select id="macroActivity">${ACTIVITY_LEVELS.map(a=>`<option value="${a.id}"${(userData.activityLevel||'moderate')===a.id?' selected':''}>${a.name} — ${a.desc}</option>`).join('')}</select></div>`;
+  h+=`<div class="m-field"><label>Daily Steps Estimate</label><select id="macroSteps">
+    <option value="2000"${(userData.dailySteps||'')==='2000'?' selected':''}>~2,000 (mostly sitting)</option>
+    <option value="4000"${(userData.dailySteps||'')==='4000'?' selected':''}>~4,000 (some walking)</option>
+    <option value="6000"${(userData.dailySteps||'6000')==='6000'?' selected':''}>~6,000 (moderate)</option>
+    <option value="8000"${(userData.dailySteps||'')==='8000'?' selected':''}>~8,000 (active)</option>
+    <option value="10000"${(userData.dailySteps||'')==='10000'?' selected':''}>~10,000 (very active)</option>
     <option value="12000"${(userData.dailySteps||'')==='12000'?' selected':''}>~12,000+</option>
-  </select></div>
-  <div class="m-field"><label>Goal</label><select id="macroGoal">
+  </select></div>`;
+  h+=`<div class="m-field"><label>Goal</label><select id="macroGoal">
     ${['Maintenance','Fat Loss','Aggressive Cut','Lean Bulk','Bulk','Recomp'].map(g=>`<option value="${g}"${(userData.nutritionGoal||userData.goal||'')==g?' selected':''}>${g}</option>`).join('')}
-  </select></div>
-  <label class="toggle-row" style="margin:.6rem 0"><input type="checkbox" class="toggle-cb" id="macroCustomToggle" onchange="toggleMacroFields()" ${cm&&cm.enabled?'checked':''}><span>Override with custom macros</span></label>
-  <div class="macro-custom-field"><div class="m-field"><label>Calories</label><input type="number" id="macroCalories" value="${cm.calories||t.target}"></div></div>
-  <div class="settings-row-fields macro-custom-field"><div class="m-field" style="flex:1"><label>Protein (g)</label><input type="number" id="macroProtein" value="${cm.protein||t.proteinG}"></div><div class="m-field" style="flex:1"><label>Carbs (g)</label><input type="number" id="macroCarbs" value="${cm.carbs||t.carbG}"></div><div class="m-field" style="flex:1"><label>Fat (g)</label><input type="number" id="macroFat" value="${cm.fat||t.fatG}"></div></div>
-  <div class="m-actions"><button class="m-cancel" onclick="closeMacroModal()">Cancel</button><button class="m-save-btn" onclick="saveMacroSettings()">Save</button></div>`;
+  </select></div>`;
+  h+=`<div class="settings-section">CUSTOM OVERRIDES</div>`;
+  h+=`<label class="toggle-row" style="margin:.3rem 0"><input type="checkbox" class="toggle-cb" id="macroCustomToggle" onchange="toggleMacroFields()" ${cm&&cm.enabled?'checked':''}><span>Override auto-calculated macros</span></label>`;
+  h+=`<div class="macro-custom-field"><div class="m-field"><label>Calories</label><input type="number" id="macroCalories" value="${cm.calories||(t?t.target:2000)}"></div></div>`;
+  h+=`<div class="settings-row-fields macro-custom-field"><div class="m-field" style="flex:1"><label>Protein (g)</label><input type="number" id="macroProtein" value="${cm.protein||(t?t.proteinG:150)}"></div><div class="m-field" style="flex:1"><label>Carbs (g)</label><input type="number" id="macroCarbs" value="${cm.carbs||(t?t.carbG:200)}"></div><div class="m-field" style="flex:1"><label>Fat (g)</label><input type="number" id="macroFat" value="${cm.fat||(t?t.fatG:60)}"></div></div>`;
+  if(t){h+=`<div style="font-family:var(--font-mono);font-size:.62rem;color:var(--muted);margin-top:.4rem;text-align:center">BMR: ${t.bmr} · TDEE: ${t.tdee}${t.stepBonus?' (+'+t.stepBonus+' steps)':''} · Target: ${t.target}</div>`}
+  h+=`<div class="m-actions" style="margin-top:.8rem"><button class="m-cancel" onclick="closeMacroModal()">Cancel</button><button class="m-save-btn" onclick="saveMacroSettings()">Save</button></div>`;
   $('macroModal').querySelector('.modal').innerHTML=h;
   toggleMacroFields();
   $('macroModal').classList.add('open');
@@ -467,9 +474,15 @@ function openMacroModal(){
 function closeMacroModal(){$('macroModal').classList.remove('open')}
 function toggleMacroFields(){const c=$('macroCustomToggle').checked;document.querySelectorAll('.macro-custom-field').forEach(el=>el.style.opacity=c?'1':'.4');document.querySelectorAll('.macro-custom-field input').forEach(el=>el.disabled=!c)}
 async function saveMacroSettings(){
+  const stats={...(userData.stats||{}),
+    height:$('macroHeight').value.trim(),
+    weight:$('macroWeight').value.trim(),
+    age:$('macroAge').value.trim(),
+    sex:$('macroSex').value
+  };
   const cm=$('macroCustomToggle').checked?{enabled:true,calories:parseInt($('macroCalories').value)||0,protein:parseInt($('macroProtein').value)||0,carbs:parseInt($('macroCarbs').value)||0,fat:parseInt($('macroFat').value)||0}:{enabled:false};
-  await saveUser({activityLevel:$('macroActivity').value,dailySteps:$('macroSteps').value,nutritionGoal:$('macroGoal').value,customMacros:cm});
-  closeMacroModal();renderNutritionPage();toast('Targets updated!');
+  await saveUser({stats,activityLevel:$('macroActivity').value,dailySteps:$('macroSteps').value,nutritionGoal:$('macroGoal').value,customMacros:cm});
+  closeMacroModal();renderNutritionPage();toast('Nutrition settings saved!');
 }
 
 // ── RANK INFO ──

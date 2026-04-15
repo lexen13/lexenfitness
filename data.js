@@ -1,8 +1,16 @@
 // ═══════════════════════════════════════════
 //  LEXENFITNESS — DATA v4 (Solo Leveling)
 // ═══════════════════════════════════════════
-const APP_VERSION='1.8.0';
+const APP_VERSION='1.9.0';
+const WELCOME_MESSAGE=`Welcome to Lexen Fitness! A Solo-Leveling inspired, gamified Fitness App to help friends and family stay motivated by giving fitness a game-like experience.\n\nThis app is developed by one person, and is very much still in the testing phase. Not everything will be perfect, but please bear with me. If you have any suggestions, feel free to pass them along as I continue to make this the best app that I can, before I actually have to start buying dev rights with Apple and Google.\n\nFeel free to share this with your own family and friends as we build a community that becomes healthier together!\n\n— Gavin (founder)`;
 const CHANGELOG=[
+  {version:'1.9.0',date:'Apr 2026',title:'Polish & Community',items:[
+    '⚙️ Full TDEE editor on Nutrition page — height, weight, sex, steps, all in one place',
+    '👋 Welcome message for all new users from the founder',
+    '🏆 Achievement filtering — toggle locked/unlocked, collapsible sections',
+    '🤫 Secret achievements — hidden until unlocked',
+    '📧 Welcome email on signup'
+  ]},
   {version:'1.8.0',date:'Apr 2026',title:'Progression System',items:[
     '🎮 CoD-style progression tracks — 3 tiers per class',
     '🎪 Random event missions — bonus XP with ~30% daily chance',
@@ -329,6 +337,15 @@ const ACHIEVEMENTS=[
   {id:'xp_1k',icon:'⭐',name:'1K Club',desc:'Reach 1,000 XP',xp:0},
   {id:'xp_5k',icon:'⭐',name:'5K Club',desc:'Reach 5,000 XP',xp:0},
   {id:'xp_10k',icon:'🌟',name:'10K Club',desc:'Reach 10,000 XP',xp:0},
+  // ── Secret Achievements ──
+  {id:'secret_founder',icon:'🔑',name:'Founder\'s Circle',desc:'Found by those who look closely...',xp:50,secret:true},
+  {id:'secret_5am',icon:'🌑',name:'5AM Club',desc:'Log a workout at exactly 5 AM',xp:25,secret:true},
+  {id:'secret_404',icon:'👻',name:'404 Not Found',desc:'Reach exactly 404 XP',xp:25,secret:true},
+  {id:'secret_palindrome',icon:'🪞',name:'Mirror',desc:'Log on a palindrome date',xp:25,secret:true},
+  {id:'secret_lucky7',icon:'🎰',name:'Lucky 7s',desc:'7 workouts, 7-week streak, 7 friends',xp:50,secret:true},
+  {id:'secret_100pct',icon:'💯',name:'Completionist',desc:'Unlock 50 achievements',xp:75,secret:true},
+  {id:'secret_night_shift',icon:'🦇',name:'Night Shift',desc:'Log 5 workouts between midnight and 5 AM',xp:40,secret:true},
+  {id:'secret_og',icon:'👑',name:'OG Hunter',desc:'Account created before May 2026',xp:50,secret:true},
 ];
 // ═══════════ COD-STYLE PROGRESSION TRACKS ═══════════
 const PROGRESSION_TRACKS={

@@ -660,3 +660,32 @@ input[type=checkbox]:checked::after{content:'✓';position:absolute;color:#fff;f
 /* ── XP Multiplier ── */
 .xp-mult-banner{background:linear-gradient(90deg,var(--gold),var(--orange));color:#000;font-family:var(--font-mono);font-size:.65rem;font-weight:800;letter-spacing:1px;text-align:center;padding:4px 8px;display:none}
 .xp-mult-badge{background:linear-gradient(135deg,rgba(251,191,36,.15),rgba(251,191,36,.05));border:1px solid var(--gold);border-radius:8px;text-align:center;font-family:var(--font-mono);font-size:.7rem;font-weight:700;color:var(--gold);padding:6px 10px;margin-bottom:.6rem}
+
+/* ── Welcome Modal ── */
+.welcome-modal{max-width:360px}
+.welcome-header{text-align:center;margin-bottom:.8rem}
+.welcome-icon{font-size:2.4rem;margin-bottom:.3rem}
+.welcome-body{font-size:.78rem;color:var(--muted);line-height:1.7;padding:.5rem;background:var(--surface2);border-radius:10px;margin-bottom:.8rem;white-space:pre-line}
+
+/* ── Achievement Categories ── */
+.ach-category{margin-bottom:.5rem}
+.ach-cat-header{display:flex;justify-content:space-between;align-items:center;padding:.5rem .6rem;background:var(--surface);border:1px solid var(--border);border-radius:8px;cursor:pointer;font-weight:700;font-size:.8rem;transition:all .15s}
+.ach-cat-header:hover{border-color:var(--accent)}
+.ach-cat-count{font-family:var(--font-mono);font-size:.62rem;color:var(--muted);font-weight:400;margin-left:6px}
+.ach-cat-toggle{color:var(--dim);font-size:.7rem}
+.ach-cat-body{overflow:visible;transition:max-height .3s ease}
+.ach-cat-body.ach-grid{padding-top:.4rem}
+
+/* ── Secret Achievement ── */
+.ach-card.secret{opacity:.5;border-style:dashed;background:var(--surface)}
+.ach-card.secret .ach-icon{filter:grayscale(1)}
+
+/* ── Founder Card (Updates tab) ── */
+.founder-card{background:linear-gradient(135deg,rgba(123,92,255,.08),rgba(251,191,36,.04));border:1px solid var(--accent);border-radius:14px;padding:1rem;margin-bottom:.8rem}
+.founder-header{display:flex;align-items:center;gap:.5rem;margin-bottom:.5rem}
+.founder-icon{font-size:1.2rem}
+.founder-name{font-weight:800;font-size:.85rem;color:var(--accent2)}
+.founder-body{font-size:.76rem;color:var(--muted);line-height:1.6;white-space:pre-line}
+
+/* ── Achievement Filters ── */
+.ach-filters{margin-bottom:.6rem}

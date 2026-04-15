@@ -56,6 +56,8 @@ async function doSignup(){
     // 3. All good — write everything
     const dn=f+(l?' '+l:'');
     await cred.user.updateProfile({displayName:dn});
+    // Send welcome/verification email
+    try{await cred.user.sendEmailVerification()}catch(e){}
     const fc=genFriendCode();
     await db.collection('users').doc(cred.user.uid).set({name:dn,username:uname,email:e,friendCode:fc,xp:0,achievements:[],stats:{},prs:{},profilePic:'',class:'',subclass:'',programKey:'',program:[],friends:[],privacy:{hideName:false,hideStats:false},goal:'',experience:'',missionsCompleted:{},missionStreak:0,trialsCompleted:[],createdAt:firebase.firestore.FieldValue.serverTimestamp()});
     await db.collection('usernames').doc(uname).set({uid:cred.user.uid});
@@ -215,7 +217,11 @@ async function confirmClass(){
 }
 
 // ═══════════ INIT ═══════════
-function initApp(){document.querySelectorAll('.nav-item').forEach(n=>n.addEventListener('click',()=>switchPage(n.dataset.page)));updateTopBar();syncAcceptedRequests();checkUnreadChats();checkPassiveAchievements();initNotifications();
+function initApp(){
+  let tapCount=0,tapTimer=null;
+  const logo=document.querySelector('.top-bar h1');
+  if(logo)logo.addEventListener('click',()=>{tapCount++;clearTimeout(tapTimer);tapTimer=setTimeout(()=>tapCount=0,2000);if(tapCount>=10){unlockAch('secret_founder');toast('🔑 You found it...');tapCount=0}});
+  document.querySelectorAll('.nav-item').forEach(n=>n.addEventListener('click',()=>switchPage(n.dataset.page)));updateTopBar();syncAcceptedRequests();checkUnreadChats();checkPassiveAchievements();initNotifications();
   // Handle PWA shortcut ?page= param
   const params=new URLSearchParams(window.location.search);const startPage=params.get('page');
   switchPage(startPage&&['train','missions','nutrition','chat','ranks','profile'].includes(startPage)?startPage:'profile');
@@ -576,6 +582,7 @@ async function logWorkout(){
   let xp=50;if(allDone)xp+=50;const hr=new Date().getHours(),wc=workoutLog.length;
   if(wc>=1)unlockAch('first_workout');if(wc>=10)unlockAch('workouts_10');if(wc>=25)unlockAch('workouts_25');if(wc>=50)unlockAch('workouts_50');if(wc>=100)unlockAch('workouts_100');if(wc>=200)unlockAch('workouts_200');
   if(hr<7)unlockAch('early_bird');if(hr>=21)unlockAch('night_owl');if(allDone)unlockAch('all_sets_done');
+  if(hr===5)unlockAch('secret_5am');
   if(maxW>=200)unlockAch('heavy_day');if(maxW>=315)unlockAch('monster_lift');if(maxW>=405)unlockAch('titan_lift');if(maxW>=500)unlockAch('heavy_500');
   const dids=new Set(workoutLog.map(e=>e.dayId));if(dids.size>=4)unlockAch('variety');
   const wkStreak=calcWeeklyStreak();
@@ -654,7 +661,61 @@ function calcFullWeeks(){const w={};workoutLog.forEach(e=>{const m=getMonday(new
 
 // ═══════════ ACHIEVEMENTS ═══════════
 async function unlockAch(id){if(userData.achievements.includes(id))return;userData.achievements.push(id);const a=ACHIEVEMENTS.find(x=>x.id===id);if(a&&a.xp>0)addXP(a.xp);await saveUser({achievements:userData.achievements,xp:userData.xp});await saveLeaderboard();updateTopBar()}
-function renderAchievements(){const ul=userData.achievements||[];$('achSub').textContent=ul.length+' / '+ACHIEVEMENTS.length+' unlocked';$('achGrid').innerHTML=ACHIEVEMENTS.map(a=>{const u=ul.includes(a.id);return`<div class="ach-card${u?' unlocked':''}"><span class="ach-icon">${a.icon}</span><div class="ach-info"><div class="ach-name">${a.name}</div><div class="ach-desc">${a.desc}</div>${a.xp?'<div class="ach-xp">+'+a.xp+' XP</div>':''}</div></div>`}).join('')}
+let achFilter='all';
+function renderAchievements(){
+  const ul=userData.achievements||[];
+  const visible=ACHIEVEMENTS.filter(a=>!a.secret||ul.includes(a.id));
+  const secretCount=ACHIEVEMENTS.filter(a=>a.secret).length;
+  const secretUnlocked=ACHIEVEMENTS.filter(a=>a.secret&&ul.includes(a.id)).length;
+  const totalUnlocked=ul.length;
+  const totalVisible=visible.length;
+
+  $('achSub').textContent=`${totalUnlocked} / ${ACHIEVEMENTS.length} unlocked${secretCount?' · '+secretUnlocked+'/'+secretCount+' secrets':''}`;
+
+  // Filter controls
+  $('achFilters').innerHTML=`<div class="log-filters"><div class="log-filter${achFilter==='all'?' active':''}" onclick="achFilter='all';renderAchievements()">All (${totalVisible})</div><div class="log-filter${achFilter==='unlocked'?' active':''}" onclick="achFilter='unlocked';renderAchievements()">Unlocked (${totalUnlocked})</div><div class="log-filter${achFilter==='locked'?' active':''}" onclick="achFilter='locked';renderAchievements()">Locked (${totalVisible-totalUnlocked})</div></div>`;
+
+  // Group achievements by category
+  const categories=[
+    {name:'Getting Started',test:a=>['first_workout','tour_done','customize','set_bio','set_pic','set_prs'].includes(a.id)},
+    {name:'Workout Milestones',test:a=>a.id.startsWith('workouts_')},
+    {name:'Streaks',test:a=>a.id.startsWith('wk_streak_')},
+    {name:'Perfect Weeks',test:a=>a.id.startsWith('full_week')},
+    {name:'Lifting',test:a=>['early_bird','night_owl','midnight','all_sets_done','heavy_day','monster_lift','titan_lift','heavy_500','variety','weekend_warrior','pr_breaker'].includes(a.id)},
+    {name:'Social',test:a=>['add_friend','friends_5','friends_10','chat_first','chat_10'].includes(a.id)},
+    {name:'Missions',test:a=>a.id.startsWith('mission')||a.id.startsWith('event')},
+    {name:'Nutrition',test:a=>['food_log_1','food_log_7','food_log_14','food_log_30','food_log_60','scan_1','scan_5','all_meals','protein_hit'].includes(a.id)},
+    {name:'Rank',test:a=>a.id.startsWith('rank_')||a.id.startsWith('xp_')},
+    {name:'Secrets',test:a=>!!a.secret}
+  ];
+
+  let h='';
+  for(const cat of categories){
+    let items=visible.filter(cat.test);
+    if(achFilter==='unlocked')items=items.filter(a=>ul.includes(a.id));
+    if(achFilter==='locked')items=items.filter(a=>!ul.includes(a.id));
+    if(!items.length)continue;
+    const unlockedInCat=items.filter(a=>ul.includes(a.id)).length;
+    h+=`<div class="ach-category"><div class="ach-cat-header" onclick="toggleAchCat(this)"><span>${cat.name} <span class="ach-cat-count">${unlockedInCat}/${items.length}</span></span><span class="ach-cat-toggle">▼</span></div><div class="ach-cat-body ach-grid">`;
+    h+=items.map(a=>{
+      const u=ul.includes(a.id);
+      if(a.secret&&!u)return`<div class="ach-card secret"><span class="ach-icon">❓</span><div class="ach-info"><div class="ach-name">???</div><div class="ach-desc">Secret achievement</div></div></div>`;
+      return`<div class="ach-card${u?' unlocked':''}"><span class="ach-icon">${a.icon}</span><div class="ach-info"><div class="ach-name">${a.name}</div><div class="ach-desc">${a.desc}</div>${a.xp?'<div class="ach-xp">+'+a.xp+' XP</div>':''}</div></div>`;
+    }).join('');
+    h+=`</div></div>`;
+  }
+
+  // Hidden secret count hint
+  const hiddenSecrets=secretCount-secretUnlocked;
+  if(hiddenSecrets>0&&achFilter!=='unlocked')h+=`<div style="text-align:center;font-family:var(--font-mono);font-size:.62rem;color:var(--dim);margin-top:.5rem">${hiddenSecrets} secret${hiddenSecrets>1?'s':''} remain hidden...</div>`;
+
+  $('achGrid').innerHTML=h;
+}
+function toggleAchCat(el){
+  const body=el.nextElementSibling;const toggle=el.querySelector('.ach-cat-toggle');
+  if(body.style.maxHeight&&body.style.maxHeight!=='0px'){body.style.maxHeight='0px';body.style.overflow='hidden';toggle.textContent='▶'}
+  else{body.style.maxHeight=body.scrollHeight+'px';body.style.overflow='visible';toggle.textContent='▼'}
+}
 
 // ═══════════ PROFILE ═══════════
 function renderProfile(){
@@ -954,8 +1015,28 @@ function getMonday(d){const dt=new Date(d);const day=dt.getDay();dt.setDate(dt.g
 function getWeekNum(mon){if(!workoutLog.length)return 1;const dates=workoutLog.map(e=>getMonday(new Date(e.date)).getTime());return Math.round((mon-new Date(Math.min(...dates)))/(7*864e5))+1}
 function toast(m){const t=$('toast');t.textContent=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2500)}
 
+// ═══════════ WELCOME MESSAGE ═══════════
+function showWelcomeMessage(){
+  let old=$('welcomeOverlay');if(old)old.remove();
+  const overlay=document.createElement('div');overlay.id='welcomeOverlay';overlay.className='wn-overlay';
+  let h=`<div class="wn-modal welcome-modal">
+    <div class="welcome-header"><div class="welcome-icon">⚔️</div><div class="wn-title">Welcome, Hunter</div></div>
+    <div class="welcome-body">${WELCOME_MESSAGE.replace(/\n/g,'<br>')}</div>
+    <button class="wn-btn" id="welcomeDismiss">Enter the System</button>
+  </div>`;
+  overlay.innerHTML=h;document.body.appendChild(overlay);
+  document.getElementById('welcomeDismiss').addEventListener('click',async()=>{
+    overlay.classList.add('closing');
+    setTimeout(()=>overlay.remove(),250);
+    await saveUser({hasSeenWelcome:true});
+    checkWhatsNew();
+  });
+}
+
 // ═══════════ WHAT'S NEW ═══════════
 function checkWhatsNew(){
+  // Welcome message for first-time users
+  if(!userData.hasSeenWelcome){showWelcomeMessage();return}
   const seen=userData.lastSeenVersion||'0.0.0';
   if(seen===APP_VERSION){checkTour();return}
   // Show entries newer than last seen
@@ -1186,6 +1267,20 @@ async function checkPassiveAchievements(){
   // Message count
   const msgCount=parseInt(userData.messageCount)||0;
   if(msgCount>=1)unlockAch('chat_first');if(msgCount>=10)unlockAch('chat_10');
+  // ── Secret Achievements ──
+  // OG Hunter — account created before May 2026
+  if(userData.createdAt){const created=userData.createdAt.toDate?userData.createdAt.toDate():new Date(userData.createdAt);if(created<new Date('2026-05-01'))unlockAch('secret_og')}
+  // 404 Not Found — exactly 404 XP
+  if(userData.xp===404)unlockAch('secret_404');
+  // Palindrome date
+  const todayPal=getTodayStr().replace(/-/g,'');if(todayPal===todayPal.split('').reverse().join(''))unlockAch('secret_palindrome');
+  // Lucky 7s — 7 workouts, 7-week streak, 7 friends
+  if(wc>=7&&ws>=7&&fc>=7)unlockAch('secret_lucky7');
+  // Completionist — 50 achievements
+  if(userData.achievements.length>=50)unlockAch('secret_100pct');
+  // Night shift — 5 workouts between midnight and 5 AM
+  const nightLogs=workoutLog.filter(e=>{const h=new Date(e.date).getHours();return h>=0&&h<5}).length;
+  if(nightLogs>=5)unlockAch('secret_night_shift');
 }
 
 // ═══════════ NOTIFICATIONS ═══════════

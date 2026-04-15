@@ -279,6 +279,8 @@ function renderUpdatesTab(){
   const el=$('updatesContent');if(!el)return;
   let h=`<div class="page-title" style="display:flex;align-items:center;gap:.5rem">SYSTEM UPDATES <span class="updates-ver">v${APP_VERSION}</span></div>`;
   h+=`<div class="page-sub">Patch notes & version history</div>`;
+  // Founder message (always at top)
+  h+=`<div class="founder-card"><div class="founder-header"><span class="founder-icon">⚔️</span><span class="founder-name">Message from the Founder</span></div><div class="founder-body">${WELCOME_MESSAGE.replace(/\n/g,'<br>')}</div></div>`;
   CHANGELOG.forEach((entry,i)=>{
     const isCurrent=entry.version===APP_VERSION;
     h+=`<div class="update-card${isCurrent?' current':''}">
