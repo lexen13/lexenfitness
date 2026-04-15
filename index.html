@@ -200,6 +200,8 @@
 <div class="settings-section">PREFERENCES</div>
 <div class="m-field"><label>Goal</label><select id="setGoal"><option value="">Select...</option></select></div>
 <div class="m-field"><label>Experience</label><select id="setExperience"><option value="">Select...</option></select></div>
+<div class="settings-section">BIO / ABOUT ME</div>
+<div class="m-field"><label>Bio (200 chars max — shows on your profile)</label><textarea id="setBio" class="auth-input" rows="3" maxlength="200" placeholder="Tell other hunters about yourself..." style="resize:vertical;min-height:60px"></textarea></div>
 <div class="settings-section">PRIVACY</div>
 <label class="toggle-row"><input type="checkbox" class="toggle-cb" id="setHideName"><span>Hide real name everywhere (username only)</span></label>
 <label class="toggle-row"><input type="checkbox" class="toggle-cb" id="setHideStats"><span>Hide body stats from others</span></label>
@@ -275,6 +277,9 @@
 <div class="settings-row-fields macro-custom-field"><div class="m-field" style="flex:1"><label>Protein (g)</label><input type="number" id="macroProtein"></div><div class="m-field" style="flex:1"><label>Carbs (g)</label><input type="number" id="macroCarbs"></div><div class="m-field" style="flex:1"><label>Fat (g)</label><input type="number" id="macroFat"></div></div>
 <div class="m-actions"><button class="m-cancel" onclick="closeMacroModal()">Cancel</button><button class="m-save-btn" onclick="saveMacroSettings()">Save</button></div>
 </div></div>
+
+<!-- PROFILE CARD MODAL -->
+<div class="modal-bg" id="profileCardModal"><div class="modal" style="max-width:340px"></div></div>
 
 <input type="file" id="picInput" accept="image/*" style="display:none">
 <div class="toast" id="toast"></div>

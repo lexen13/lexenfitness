@@ -119,8 +119,8 @@ input[type=checkbox]:checked{background:var(--accent);border-color:var(--accent)
 input[type=checkbox]:checked::after{content:'✓';position:absolute;color:#fff;font-size:12px;top:50%;left:50%;transform:translate(-50%,-50%);font-weight:700}
 .add-ex{width:100%;padding:11px;border:2px dashed var(--border);background:transparent;color:var(--dim);border-radius:11px;font-weight:600;font-size:.78rem;margin-top:.2rem}
 .add-ex:hover{border-color:var(--accent);color:var(--accent)}
-.workout-actions{display:flex;gap:7px;margin-top:.8rem}
-.workout-actions button{flex:1;padding:11px;border:none;border-radius:9px;font-weight:700;font-size:.8rem}
+.workout-actions{display:flex;flex-wrap:wrap;gap:7px;margin-top:.8rem}
+.workout-actions button{flex:1;min-width:calc(50% - 4px);padding:11px;border:none;border-radius:9px;font-weight:700;font-size:.8rem}
 .wa-log{background:var(--green);color:#000}
 .wa-log-all{background:var(--gold);color:#000}
 .wa-save{background:var(--accent);color:#fff}
@@ -586,3 +586,27 @@ input[type=checkbox]:checked::after{content:'✓';position:absolute;color:#fff;f
 .update-banner{position:fixed;top:0;left:0;right:0;background:linear-gradient(135deg,var(--accent),#5b3cc4);color:#fff;display:flex;align-items:center;justify-content:space-between;padding:10px 16px;z-index:9999;font-size:.82rem;font-weight:600;animation:slideDown .3s ease}
 @keyframes slideDown{from{transform:translateY(-100%)}to{transform:translateY(0)}}
 .update-banner button{background:#fff;color:var(--accent);border:none;padding:6px 14px;border-radius:6px;font-weight:700;font-size:.78rem;cursor:pointer}
+
+/* ── Profile Card (leaderboard tap) ── */
+.pc-header{display:flex;align-items:center;gap:.8rem;margin-bottom:.6rem}
+.pc-pic{width:60px;height:60px;border-radius:14px;overflow:hidden;flex-shrink:0;background:var(--surface2)}
+.pc-pic img{width:100%;height:100%;object-fit:cover}
+.pc-username{font-weight:800;font-size:1rem}
+.pc-class{font-size:.76rem;color:var(--muted);margin-top:1px}
+.pc-rank{font-family:var(--font-display);font-size:.9rem;letter-spacing:1px;margin-top:2px}
+.pc-bio{font-size:.78rem;color:var(--muted);line-height:1.5;padding:.5rem .6rem;background:var(--surface2);border-radius:8px;margin-bottom:.6rem;font-style:italic}
+.pc-stats{display:grid;grid-template-columns:1fr 1fr 1fr;gap:.4rem;margin-bottom:.6rem}
+.pc-stat{background:var(--surface2);border-radius:8px;padding:.5rem;text-align:center}
+.pc-stat-val{font-family:var(--font-mono);font-weight:800;font-size:1rem;color:var(--text)}
+.pc-stat-label{font-size:.6rem;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-top:1px}
+.pc-friend-status{text-align:center;font-size:.8rem;color:var(--green);padding:.5rem;background:rgba(52,211,153,.08);border:1px solid rgba(52,211,153,.2);border-radius:8px}
+.pc-add-btn{width:100%;padding:10px;background:var(--accent);color:#fff;border:none;border-radius:8px;font-weight:700;font-size:.85rem;cursor:pointer;transition:all .15s}
+.pc-add-btn:hover{background:var(--accent2)}
+.lb-row{cursor:pointer}
+
+/* ── Profile Bio ── */
+.profile-bio{font-size:.78rem;color:var(--muted);line-height:1.5;margin-top:.4rem;font-style:italic;max-width:280px;margin-left:auto;margin-right:auto;text-align:center}
+
+/* ── Copy Friend Code ── */
+.copy-code-btn{background:var(--surface2);border:1px solid var(--border);color:var(--muted);padding:4px 10px;border-radius:6px;font-size:.68rem;font-weight:600;cursor:pointer;margin-left:6px;vertical-align:middle;transition:all .15s}
+.copy-code-btn:hover,.copy-code-btn:active{border-color:var(--gold);color:var(--gold)}

@@ -1,8 +1,17 @@
 // ═══════════════════════════════════════════
 //  LEXENFITNESS — DATA v4 (Solo Leveling)
 // ═══════════════════════════════════════════
-const APP_VERSION='1.5.0';
+const APP_VERSION='1.6.0';
 const CHANGELOG=[
+  {version:'1.6.0',date:'Apr 2026',title:'Class Missions & Social',items:[
+    '🎯 Class-specific daily missions — tailored to your class',
+    '👤 Tap leaderboard users to view profile & add friend',
+    '📝 Bio / About Me — show off your story',
+    '📋 Copy friend code with one tap',
+    '🛡️ XP exploit fix — no more double-logging',
+    '📋 "Log All Days" — log multiple workout days at once',
+    '📋 Log button now shows which day you\'re logging'
+  ]},
   {version:'1.5.0',date:'Apr 2026',title:'Social & QoL Update',items:[
     '💬 Chat unread badge — see new messages at a glance',
     '🗺️ Onboarding tour — new users get a guided walkthrough',
@@ -125,17 +134,13 @@ const CLASS_PROGRAMS={
       {id:'day4',title:'ENDURANCE',subtitle:'Friday',exercises:[{name:'Sled Push',sets:4,reps:'30m'},{name:'KB Swings',sets:4,reps:'20'},{name:'Rowing',sets:4,reps:'500m'},{name:'Burpees',sets:3,reps:'12'},{name:'Farmer Walks',sets:3,reps:'40m'}]}]}
   ]
 };
-const DAILY_MISSION_POOL=[
+const UNIVERSAL_MISSIONS=[
   {id:'water_8',icon:'💧',name:'Hydrate',desc:'Drink 8 glasses of water',xp:15},
-  {id:'steps_10k',icon:'🚶',name:'Step It Up',desc:'Walk 10,000 steps',xp:20},
   {id:'protein',icon:'🥩',name:'Protein Goal',desc:'Hit your protein target',xp:15},
   {id:'sleep_7',icon:'😴',name:'Recovery',desc:'Get 7+ hours of sleep',xp:15},
   {id:'stretch',icon:'🧘',name:'Limber Up',desc:'5 min of stretching',xp:10},
-  {id:'pushups_50',icon:'💪',name:'Push-Up Challenge',desc:'50 push-ups throughout the day',xp:20},
-  {id:'cardio_20',icon:'🏃',name:'Cardio Burst',desc:'20 min of any cardio',xp:20},
   {id:'veggies',icon:'🥗',name:'Eat Your Greens',desc:'3+ servings of vegetables',xp:10},
   {id:'no_junk',icon:'🚫',name:'Clean Eater',desc:'No junk food today',xp:15},
-  {id:'cold_shower',icon:'🧊',name:'Ice Cold',desc:'Take a cold shower',xp:15},
   {id:'read_15',icon:'📖',name:'Brain Gains',desc:'Read for 15 minutes',xp:10},
   {id:'stairs',icon:'🪜',name:'Elevate',desc:'Take the stairs all day',xp:10},
   {id:'cook',icon:'🍳',name:'Chef Mode',desc:'Cook a meal from scratch',xp:10},
@@ -144,9 +149,62 @@ const DAILY_MISSION_POOL=[
   {id:'walk_15',icon:'🌳',name:'Fresh Air',desc:'15-min outdoor walk',xp:10},
   {id:'posture',icon:'🧍',name:'Stand Tall',desc:'Focus on posture all day',xp:10},
   {id:'meal_prep',icon:'🥡',name:'Prep Master',desc:'Meal prep for tomorrow',xp:15},
-  {id:'abs_5min',icon:'🔥',name:'Core Blast',desc:'5-min ab routine',xp:10},
-  {id:'no_phone',icon:'📵',name:'Unplug',desc:'No phone 30 min before bed',xp:10}
+  {id:'no_phone',icon:'📵',name:'Unplug',desc:'No phone 30 min before bed',xp:10},
+  {id:'steps_10k',icon:'🚶',name:'Step It Up',desc:'Walk 10,000 steps',xp:20},
+  {id:'abs_5min',icon:'🔥',name:'Core Blast',desc:'5-min ab routine',xp:10}
 ];
+const CLASS_MISSIONS={
+  Powerlifter:[
+    {id:'pl_heavy_single',icon:'🏋️',name:'Heavy Single',desc:'Work up to a heavy single on any compound',xp:25},
+    {id:'pl_pause_reps',icon:'⏸️',name:'Pause Reps',desc:'3 sets of paused reps on squat, bench, or deadlift',xp:20},
+    {id:'pl_pr_attempt',icon:'📈',name:'PR Attempt',desc:'Attempt a new PR on any lift',xp:30},
+    {id:'pl_mobility',icon:'🧘',name:'Squat Mobility',desc:'10 min hip & ankle mobility work',xp:15},
+    {id:'pl_accessories',icon:'🔧',name:'Weak Point Work',desc:'Extra accessory work on your weakest lift',xp:15},
+    {id:'pl_tempo',icon:'⏱️',name:'Tempo Work',desc:'3 sets with 3-sec eccentrics on a compound',xp:20},
+    {id:'pl_belt_squat',icon:'🦵',name:'Volume Legs',desc:'100 total reps of leg work (any exercise)',xp:20},
+    {id:'pl_grip',icon:'✊',name:'Grip Training',desc:'5 min of grip/forearm work',xp:10},
+    {id:'pl_walkout',icon:'🚶',name:'Heavy Walkout',desc:'Unrack and hold 100%+ of your squat max',xp:15},
+    {id:'pl_cardio',icon:'🏃',name:'Active Recovery',desc:'20 min light cardio (walk, bike, swim)',xp:15}
+  ],
+  Bodybuilder:[
+    {id:'bb_pump',icon:'💪',name:'Pump Finisher',desc:'100-rep burnout set on any muscle group',xp:20},
+    {id:'bb_posing',icon:'🪞',name:'Posing Practice',desc:'10 min practicing poses',xp:15},
+    {id:'bb_slow_ecc',icon:'⏬',name:'Slow Eccentrics',desc:'4-sec negatives on every set this session',xp:25},
+    {id:'bb_dropsets',icon:'📉',name:'Drop Set City',desc:'3 exercises with drop sets today',xp:20},
+    {id:'bb_mmc',icon:'🧠',name:'Mind-Muscle',desc:'One exercise with eyes closed, pure feel',xp:15},
+    {id:'bb_supersets',icon:'⚡',name:'Superset Session',desc:'Pair 3+ exercises as supersets',xp:20},
+    {id:'bb_calves',icon:'🦵',name:'Calf Priority',desc:'4 sets of calves (they need it)',xp:10},
+    {id:'bb_rear_delts',icon:'🎯',name:'Rear Delt Work',desc:'3 sets of rear delt isolation',xp:10},
+    {id:'bb_cardio',icon:'🚶',name:'Incline Walk',desc:'20 min incline treadmill walk',xp:15},
+    {id:'bb_flex',icon:'💪',name:'Progress Photo',desc:'Take a progress photo for comparison',xp:10}
+  ],
+  Strongman:[
+    {id:'sm_carry',icon:'🧱',name:'Loaded Carry',desc:'Farmer walks or sandbag carry — 4 sets',xp:25},
+    {id:'sm_conditioning',icon:'🫁',name:'Conditioning',desc:'10-min EMOM or Tabata circuit',xp:25},
+    {id:'sm_grip',icon:'✊',name:'Grip Work',desc:'Dead hangs, plate pinches, or fat grips',xp:15},
+    {id:'sm_events',icon:'🏟️',name:'Event Practice',desc:'Practice a strongman event (tire, stone, sled)',xp:25},
+    {id:'sm_sled',icon:'🛷',name:'Sled Work',desc:'Sled push or drag — 6 rounds',xp:20},
+    {id:'sm_overhead',icon:'🏋️',name:'Overhead Volume',desc:'50 total overhead press reps',xp:20},
+    {id:'sm_core',icon:'🔥',name:'Braced Core',desc:'Heavy carries + planks — brace like competition',xp:15},
+    {id:'sm_cardio',icon:'🚣',name:'Row or Bike',desc:'15 min on rower or assault bike',xp:15},
+    {id:'sm_stones',icon:'🪨',name:'Atlas Stone Work',desc:'Stone loads or heavy ball slams',xp:20},
+    {id:'sm_yoke',icon:'🏗️',name:'Yoke Walk',desc:'Yoke or heavy barbell walk — 4 sets',xp:20}
+  ],
+  Athlete:[
+    {id:'ath_sprints',icon:'🏃',name:'Sprint Intervals',desc:'6-8 sprints, 30 sec on / 60 sec off',xp:25},
+    {id:'ath_agility',icon:'🔀',name:'Agility Drill',desc:'Ladder, cone, or shuttle drill — 10 min',xp:20},
+    {id:'ath_sport',icon:'🏆',name:'Sport Practice',desc:'30+ min of sport-specific practice',xp:25},
+    {id:'ath_plyo',icon:'💥',name:'Plyometrics',desc:'Box jumps, bounds, or depth jumps — 4 sets',xp:20},
+    {id:'ath_footwork',icon:'👟',name:'Footwork Drill',desc:'10 min footwork or coordination drill',xp:15},
+    {id:'ath_conditioning',icon:'🫁',name:'Game Conditioning',desc:'Sport-simulated conditioning (intervals at game pace)',xp:25},
+    {id:'ath_flexibility',icon:'🧘',name:'Dynamic Stretch',desc:'15 min dynamic stretching routine',xp:15},
+    {id:'ath_jump',icon:'🦘',name:'Vertical Jump',desc:'Test or train your vertical — 20 max jumps',xp:15},
+    {id:'ath_reaction',icon:'⚡',name:'Reaction Drill',desc:'Reaction ball, partner drill, or visual cue work',xp:15},
+    {id:'ath_cardio',icon:'🏃',name:'Tempo Run',desc:'20-min steady-state run at moderate pace',xp:20}
+  ]
+};
+// Backwards compat — flat pool for any edge cases
+const DAILY_MISSION_POOL=UNIVERSAL_MISSIONS;
 const ACHIEVEMENTS=[
   {id:'first_workout',icon:'🎯',name:'First Blood',desc:'Complete first workout',xp:50},
   {id:'workouts_10',icon:'💪',name:'Dedicated',desc:'Log 10 workouts',xp:100},
@@ -206,5 +264,14 @@ const ACTIVITY_LEVELS=[
 function getRank(xp){for(let i=RANKS.length-1;i>=0;i--)if(xp>=RANKS[i].min)return RANKS[i];return RANKS[0]}
 function getNextRank(xp){for(let i=0;i<RANKS.length;i++)if(xp<RANKS[i].min)return RANKS[i];return null}
 function genFriendCode(){const c='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';let r='';for(let i=0;i<6;i++)r+=c[Math.floor(Math.random()*c.length)];return r}
-function getDailyMissions(dateStr){let seed=0;for(let i=0;i<dateStr.length;i++)seed=((seed<<5)-seed)+dateStr.charCodeAt(i);seed=Math.abs(seed);const pool=[...DAILY_MISSION_POOL];const picked=[];for(let i=0;i<5;i++){const idx=seed%(pool.length);picked.push(pool.splice(idx,1)[0]);seed=Math.abs((seed*16807)%2147483647)}return picked}
+function getDailyMissions(dateStr,cls){
+  let seed=0;for(let i=0;i<dateStr.length;i++)seed=((seed<<5)-seed)+dateStr.charCodeAt(i);seed=Math.abs(seed);
+  // Pick 3 universal + 2 class-specific (or 5 universal if no class)
+  const uPool=[...UNIVERSAL_MISSIONS];const picked=[];
+  const cPool=cls&&CLASS_MISSIONS[cls]?[...CLASS_MISSIONS[cls]]:[];
+  const uCount=cPool.length?3:5;const cCount=cPool.length?2:0;
+  for(let i=0;i<uCount&&uPool.length;i++){const idx=seed%uPool.length;picked.push(uPool.splice(idx,1)[0]);seed=Math.abs((seed*16807)%2147483647)}
+  for(let i=0;i<cCount&&cPool.length;i++){const idx=seed%cPool.length;picked.push(cPool.splice(idx,1)[0]);seed=Math.abs((seed*16807)%2147483647)}
+  return picked;
+}
 function getTodayStr(){const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')}
