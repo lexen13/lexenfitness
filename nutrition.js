@@ -23,9 +23,11 @@ function calcTDEE(){
   const st=userData.stats||{};const w=parseFloat(st.weight),a=parseFloat(st.age),hRaw=st.height||'';
   if(!w||!a||!hRaw)return null;
   let hCm=0;
-  if(hRaw.includes("'")){const p=hRaw.replace(/"/g,'').split("'");hCm=(parseInt(p[0])*12+parseInt(p[1]||0))*2.54}
-  else if(hRaw.toLowerCase().includes('cm'))hCm=parseFloat(hRaw);
-  else{const n=parseFloat(hRaw);hCm=n>100?n:n*2.54}
+  // Normalize smart quotes/apostrophes from mobile keyboards
+  const hNorm=hRaw.replace(/[\u2018\u2019\u0060\u00B4]/g,"'").replace(/[\u201C\u201D]/g,'"').trim();
+  if(hNorm.includes("'")){const p=hNorm.replace(/"/g,'').split("'");const ft=parseInt(p[0])||0;const inch=parseInt(p[1])||0;hCm=(ft*12+inch)*2.54}
+  else if(hNorm.toLowerCase().includes('cm'))hCm=parseFloat(hNorm);
+  else{const n=parseFloat(hNorm);if(!n)return null;hCm=n>100?n:n>10?n*2.54:(n*12)*2.54} // >100=cm, 10-100=inches, <10=feet
   if(!hCm)return null;
   const wKg=w*0.453592,sex=(st.sex||'male');
   const bmr=sex==='female'?(10*wKg+6.25*hCm-5*a-161):(10*wKg+6.25*hCm-5*a+5);
@@ -465,7 +467,7 @@ function openMacroModal(){
   h+=`<label class="toggle-row" style="margin:.3rem 0"><input type="checkbox" class="toggle-cb" id="macroCustomToggle" onchange="toggleMacroFields()" ${cm&&cm.enabled?'checked':''}><span>Override auto-calculated macros</span></label>`;
   h+=`<div class="macro-custom-field"><div class="m-field"><label>Calories</label><input type="number" id="macroCalories" value="${cm.calories||(t?t.target:2000)}"></div></div>`;
   h+=`<div class="settings-row-fields macro-custom-field"><div class="m-field" style="flex:1"><label>Protein (g)</label><input type="number" id="macroProtein" value="${cm.protein||(t?t.proteinG:150)}"></div><div class="m-field" style="flex:1"><label>Carbs (g)</label><input type="number" id="macroCarbs" value="${cm.carbs||(t?t.carbG:200)}"></div><div class="m-field" style="flex:1"><label>Fat (g)</label><input type="number" id="macroFat" value="${cm.fat||(t?t.fatG:60)}"></div></div>`;
-  if(t){h+=`<div style="font-family:var(--font-mono);font-size:.62rem;color:var(--muted);margin-top:.4rem;text-align:center">BMR: ${t.bmr} · TDEE: ${t.tdee}${t.stepBonus?' (+'+t.stepBonus+' steps)':''} · Target: ${t.target}</div>`}
+  if(t){h+=`<div style="font-family:var(--font-mono);font-size:.62rem;color:var(--muted);margin-top:.4rem;text-align:center">BMR: ${Math.round(t.bmr)} · TDEE: ${t.tdee}${t.stepBonus?' (+'+t.stepBonus+' steps)':''} · Target: ${t.target}</div>`}
   h+=`<div class="m-actions" style="margin-top:.8rem"><button class="m-cancel" onclick="closeMacroModal()">Cancel</button><button class="m-save-btn" onclick="saveMacroSettings()">Save</button></div>`;
   $('macroModal').querySelector('.modal').innerHTML=h;
   toggleMacroFields();
