@@ -215,7 +215,7 @@ async function confirmClass(){
 }
 
 // ═══════════ INIT ═══════════
-function initApp(){document.querySelectorAll('.nav-item').forEach(n=>n.addEventListener('click',()=>switchPage(n.dataset.page)));updateTopBar();syncAcceptedRequests();checkUnreadChats();
+function initApp(){document.querySelectorAll('.nav-item').forEach(n=>n.addEventListener('click',()=>switchPage(n.dataset.page)));updateTopBar();syncAcceptedRequests();checkUnreadChats();checkPassiveAchievements();initNotifications();
   // Handle PWA shortcut ?page= param
   const params=new URLSearchParams(window.location.search);const startPage=params.get('page');
   switchPage(startPage&&['train','missions','nutrition','chat','ranks','profile'].includes(startPage)?startPage:'profile');
@@ -225,7 +225,10 @@ function updateTopBar(){
   const capped=cap!==Infinity&&userData.xp>=cap;
   $('tbXp').textContent=capped?userData.xp+' XP 🔒':userData.xp+' XP';
   $('tbXp').style.color=capped?'var(--red)':'';
-  const rb=$('tbRank');rb.textContent=r.name;rb.style.color=r.color;rb.style.background=r.color+'22';rb.style.border='1px solid '+r.color+'44';
+  const rb=$('tbRank');rb.textContent=r.name;
+  // XP Multiplier banner
+  let mb=$('xpMultBanner');if(!mb){mb=document.createElement('div');mb.id='xpMultBanner';mb.className='xp-mult-banner';const tb=document.querySelector('.top-bar');if(tb)tb.after(mb)}
+  const xm=getXpMultiplier();mb.style.display=xm.label?'':'none';mb.textContent=xm.label||'';rb.style.color=r.color;rb.style.background=r.color+'22';rb.style.border='1px solid '+r.color+'44';
   const bar=$('tbXpBar');if(bar){bar.style.width=info.pct+'%';bar.style.background=capped?'var(--red)':`linear-gradient(90deg,${r.color},${r.color}cc)`}
 }
 function getEffectiveRank(){
@@ -252,8 +255,10 @@ function getXpCap(){
 }
 function addXP(amount){
   const cap=getXpCap();
+  const {mult}=getXpMultiplier();
+  const boosted=Math.round(amount*mult);
   const before=userData.xp;
-  userData.xp=Math.min(userData.xp+amount,cap);
+  userData.xp=Math.min(userData.xp+boosted,cap);
   const gained=userData.xp-before;
   if(gained<amount&&amount>0){
     // XP was capped — notify
@@ -284,16 +289,27 @@ function renderMissions(){
   const completed=userData.missionsCompleted[today]||[];
   const allDone=missions.every(m=>completed.includes(m.id));
   const cap=getXpCap();const capped=cap!==Infinity&&userData.xp>=cap;
+  const {mult,label:multLabel}=getXpMultiplier();
   let h=`<div class="page-title">DAILY MISSIONS</div><div class="page-sub">${completed.length}/${missions.length} complete · Streak: ${userData.missionStreak} days</div>`;
-  // Gate locked warning
+  if(multLabel)h+=`<div class="xp-mult-badge">${multLabel}</div>`;
   if(capped){const trial=getAvailableTrial();h+=`<div class="gate-locked-banner">🔒 GATE LOCKED<br><span style="font-size:.72rem;font-family:var(--font-body);letter-spacing:0">XP capped at ${cap}. Complete the trial below to break through.</span></div>`}
   const trialInfo=getAvailableTrial();
   if(trialInfo)h+=renderTrialBanner(trialInfo);
+  // ── Event Mission ──
+  const evt=getEventMission(today);
+  if(evt){
+    const evtDone=(userData.eventsCompleted||{})[today];
+    if(evtDone)h+=`<div class="event-card done"><div class="event-label">⚡ EVENT</div><div class="mission-icon">${evt.icon}</div><div class="mission-info"><div class="mission-name">${evt.name}</div><div class="mission-desc">${evt.desc}</div></div><div class="mission-xp locked">DONE</div></div>`;
+    else h+=`<div class="event-card" onclick="completeEvent()"><div class="event-label">⚡ EVENT</div><div class="mission-icon">${evt.icon}</div><div class="mission-info"><div class="mission-name">${evt.name}</div><div class="mission-desc">${evt.desc}</div></div><div class="mission-xp">${capped?'🔒':'+'+Math.round(evt.xp*mult)+' XP'}</div></div>`;
+  }
+  // ── Daily Missions ──
   h+=missions.map(m=>{const done=completed.includes(m.id);
     if(done)return`<div class="mission-card done"><div class="mission-check">✅</div><div class="mission-icon">${m.icon}</div><div class="mission-info"><div class="mission-name">${m.name}</div><div class="mission-desc">${m.desc}</div></div><div class="mission-xp locked">DONE</div></div>`;
-    return`<div class="mission-card" onclick="completeMission('${m.id}')"><div class="mission-check">⬜</div><div class="mission-icon">${m.icon}</div><div class="mission-info"><div class="mission-name">${m.name}</div><div class="mission-desc">${m.desc}</div></div><div class="mission-xp">${capped?'🔒':'+'+m.xp+' XP'}</div></div>`;
+    return`<div class="mission-card" onclick="completeMission('${m.id}')"><div class="mission-check">⬜</div><div class="mission-icon">${m.icon}</div><div class="mission-info"><div class="mission-name">${m.name}</div><div class="mission-desc">${m.desc}</div></div><div class="mission-xp">${capped?'🔒':'+'+Math.round(m.xp*mult)+' XP'}</div></div>`;
   }).join('');
   if(allDone)h+=`<div class="mission-bonus">🌟 ALL MISSIONS COMPLETE! ${capped?'(XP capped)':'+50 BONUS XP'} 🌟</div>`;
+  // ── Progression Track ──
+  h+=renderProgressionTrack();
   $('missionsContent').innerHTML=h;
 }
 async function completeMission(mid){
@@ -327,7 +343,7 @@ function renderTrialBanner(info){
   h+=`</div>`;return h;
 }
 function getTrialProgress(trial){return trial.tasks.map(task=>{switch(task.id){
-  case 'perfect_weeks_3':return calcPerfectWeeks();case 'streak_14':case 'streak_30':return calcStreak();
+  case 'perfect_weeks_3':return calcPerfectWeeks();case 'streak_14':case 'streak_30':return calcDayStreak();
   case 'log_pr':return Math.max(0,...workoutLog.flatMap(e=>e.exercises.flatMap(ex=>ex.sets.map(s=>parseInt(s.weight)||0))));
   case 'missions_7':return userData.missionStreak;case 'workouts_50':return workoutLog.length;default:return 0}})}
 function calcPerfectWeeks(){const w={};workoutLog.forEach(e=>{const m=getMonday(new Date(e.date)).toISOString().slice(0,10);if(!w[m])w[m]={days:new Set(),allDone:true};w[m].days.add(e.dayId);if(!e.exercises.every(ex=>ex.sets.every(s=>s.done)))w[m].allDone=false});return Object.values(w).filter(wk=>wk.days.size>=4&&wk.allDone).length}
@@ -562,7 +578,10 @@ async function logWorkout(){
   if(hr<7)unlockAch('early_bird');if(hr>=21)unlockAch('night_owl');if(allDone)unlockAch('all_sets_done');
   if(maxW>=200)unlockAch('heavy_day');if(maxW>=315)unlockAch('monster_lift');if(maxW>=405)unlockAch('titan_lift');if(maxW>=500)unlockAch('heavy_500');
   const dids=new Set(workoutLog.map(e=>e.dayId));if(dids.size>=4)unlockAch('variety');
-  const streak=calcStreak();if(streak>=7)unlockAch('streak_7');if(streak>=14)unlockAch('streak_14');if(streak>=30)unlockAch('streak_30');if(streak>=60)unlockAch('streak_60');if(streak>=90)unlockAch('streak_90');
+  const wkStreak=calcWeeklyStreak();
+  if(wkStreak>=2)unlockAch('wk_streak_2');if(wkStreak>=4)unlockAch('wk_streak_4');if(wkStreak>=8)unlockAch('wk_streak_8');
+  if(wkStreak>=12)unlockAch('wk_streak_12');if(wkStreak>=26)unlockAch('wk_streak_26');if(wkStreak>=52)unlockAch('wk_streak_52');
+  const hr2=new Date().getHours();if(hr2>=0&&hr2<4)unlockAch('midnight');
   const fw=calcFullWeeks();if(fw>=1)unlockAch('full_week');if(fw>=5)unlockAch('full_week_5');if(fw>=10)unlockAch('full_week_10');if(fw>=20)unlockAch('full_week_20');
   // Weekend warrior check
   const dow=new Date().getDay();if(dow===0||dow===6){const thisWeekLogs=workoutLog.filter(e=>{const d=new Date(e.date);const wk=getMonday(d).toISOString().slice(0,10);return wk===getMonday(new Date()).toISOString().slice(0,10)});const wDays=new Set(thisWeekLogs.map(e=>new Date(e.date).getDay()));if(wDays.has(0)&&wDays.has(6))unlockAch('weekend_warrior')}
@@ -604,7 +623,10 @@ async function logAllDays(){
   if(wc>=1)unlockAch('first_workout');if(wc>=10)unlockAch('workouts_10');if(wc>=25)unlockAch('workouts_25');if(wc>=50)unlockAch('workouts_50');if(wc>=100)unlockAch('workouts_100');if(wc>=200)unlockAch('workouts_200');
   if(hr<7)unlockAch('early_bird');if(hr>=21)unlockAch('night_owl');
   const dids=new Set(workoutLog.map(e=>e.dayId));if(dids.size>=4)unlockAch('variety');
-  const streak=calcStreak();if(streak>=7)unlockAch('streak_7');if(streak>=14)unlockAch('streak_14');if(streak>=30)unlockAch('streak_30');if(streak>=60)unlockAch('streak_60');if(streak>=90)unlockAch('streak_90');
+  const wkStreak=calcWeeklyStreak();
+  if(wkStreak>=2)unlockAch('wk_streak_2');if(wkStreak>=4)unlockAch('wk_streak_4');if(wkStreak>=8)unlockAch('wk_streak_8');
+  if(wkStreak>=12)unlockAch('wk_streak_12');if(wkStreak>=26)unlockAch('wk_streak_26');if(wkStreak>=52)unlockAch('wk_streak_52');
+  const hr2=new Date().getHours();if(hr2>=0&&hr2<4)unlockAch('midnight');
   const fw=calcFullWeeks();if(fw>=1)unlockAch('full_week');if(fw>=5)unlockAch('full_week_5');if(fw>=10)unlockAch('full_week_10');if(fw>=20)unlockAch('full_week_20');
   const gained=addXP(totalXp);await saveUser({xp:userData.xp});await saveLeaderboard();updateTopBar();checkRankUp();
   // Clear visible inputs and re-render
@@ -612,7 +634,22 @@ async function logAllDays(){
   toast(`${logged} day${logged>1?'s':''} logged! +${gained} XP`);
   }finally{logLock=false}
 }
-function calcStreak(){const dates=[...new Set(workoutLog.map(e=>new Date(e.date).toDateString()))].sort((a,b)=>new Date(b)-new Date(a));let s=0;for(let i=0;i<dates.length;i++){const exp=new Date();exp.setDate(exp.getDate()-i);if(dates[i]===exp.toDateString())s++;else break}return s}
+function calcDayStreak(){const dates=[...new Set(workoutLog.map(e=>new Date(e.date).toDateString()))].sort((a,b)=>new Date(b)-new Date(a));let s=0;for(let i=0;i<dates.length;i++){const exp=new Date();exp.setDate(exp.getDate()-i);if(dates[i]===exp.toDateString())s++;else break}return s}
+function calcWeeklyStreak(){
+  // Streak = consecutive weeks with 3+ sessions
+  const weeks={};workoutLog.forEach(e=>{const m=getMonday(new Date(e.date)).toISOString().slice(0,10);if(!weeks[m])weeks[m]=0;weeks[m]++});
+  const thisMonday=getMonday(new Date()).toISOString().slice(0,10);
+  let streak=0;const d=new Date();
+  for(let i=0;i<104;i++){
+    const wk=new Date(d);wk.setDate(wk.getDate()-(7*i));
+    const key=getMonday(wk).toISOString().slice(0,10);
+    // Current week: don't break streak if it's still in progress
+    if(key===thisMonday){if((weeks[key]||0)>0)streak++;continue}
+    if((weeks[key]||0)>=3)streak++;else break;
+  }
+  return streak;
+}
+function calcStreak(){return calcWeeklyStreak()}
 function calcFullWeeks(){const w={};workoutLog.forEach(e=>{const m=getMonday(new Date(e.date)).toISOString().slice(0,10);if(!w[m])w[m]=new Set();w[m].add(e.dayId)});return Object.values(w).filter(s=>s.size>=4).length}
 
 // ═══════════ ACHIEVEMENTS ═══════════
@@ -633,11 +670,11 @@ function renderProfile(){
   // Stats
   h+=`<div class="stats-grid"><div class="stat-card"><div class="sv">${st.height||'—'}</div><div class="sl">Height</div></div><div class="stat-card"><div class="sv">${st.weight?st.weight+' lbs':'—'}</div><div class="sl">Weight</div></div><div class="stat-card"><div class="sv">${st.age||'—'}</div><div class="sl">Age</div></div></div>`;
   h+=`<div class="stats-grid"><div class="stat-card"><div class="sv">${prs.bench||'—'}</div><div class="sl">Bench PR</div></div><div class="stat-card"><div class="sv">${prs.squat||'—'}</div><div class="sl">Squat PR</div></div><div class="stat-card"><div class="sv">${prs.deadlift||'—'}</div><div class="sl">Deadlift PR</div></div></div>`;
-  h+=`<div class="stats-grid"><div class="stat-card"><div class="sv">${workoutLog.length}</div><div class="sl">Workouts</div></div><div class="stat-card"><div class="sv">${calcStreak()}</div><div class="sl">Streak</div></div><div class="stat-card"><div class="sv">${(userData.achievements||[]).length}</div><div class="sl">Achieve.</div></div></div>`;
+  h+=`<div class="stats-grid"><div class="stat-card"><div class="sv">${workoutLog.length}</div><div class="sl">Workouts</div></div><div class="stat-card"><div class="sv">${calcWeeklyStreak()}w</div><div class="sl">Wk Streak</div></div><div class="stat-card"><div class="sv">${(userData.achievements||[]).length}</div><div class="sl">Achieve.</div></div></div>`;
   // Streak warning
-  const streak=calcStreak();const lastW=workoutLog[0];const hoursSince=lastW?((Date.now()-new Date(lastW.date).getTime())/3600000):999;
-  if(streak>0&&hoursSince>20){h+=`<div class="streak-warning">🔥 <strong>${streak}-day streak at risk!</strong> Log a workout today to keep it alive.</div>`}
-  else if(streak===0&&workoutLog.length>0){h+=`<div class="streak-warning lost">💀 Streak broken. Get back in there — one workout restarts it.</div>`}
+  const wkStreakP=calcWeeklyStreak();const thisWeekCount=workoutLog.filter(e=>{const m=getMonday(new Date(e.date)).toISOString().slice(0,10);return m===getMonday(new Date()).toISOString().slice(0,10)}).length;
+  if(wkStreakP>0&&thisWeekCount<3){const need=3-thisWeekCount;h+=`<div class="streak-warning">🔥 <strong>${wkStreakP}-week streak!</strong> Need ${need} more session${need>1?'s':''} this week to keep it.</div>`}
+  else if(wkStreakP===0&&workoutLog.length>0){h+=`<div class="streak-warning lost">💀 Streak broken. Get 3 sessions this week to start a new one.</div>`}
   h+=`<button class="edit-stats-btn" onclick="openSettings()">⚙️ Settings</button>`;
   h+=renderDevTools();
   $('profileContent').innerHTML=h;
@@ -952,13 +989,13 @@ function showWhatsNew(entries){
 
 // ═══════════ ONBOARDING TOUR ═══════════
 const TOUR_STEPS=[
-  {target:'[data-page="train"]',title:'TRAIN',desc:'Your workout program lives here. Log weights, track sets, and earn XP every session.',pos:'top'},
-  {target:'[data-page="missions"]',title:'MISSIONS',desc:'Daily missions refresh each day. Complete all 5 for bonus XP. Build streaks for massive rewards.',pos:'top'},
-  {target:'[data-page="nutrition"]',title:'NUTRITION',desc:'Track calories & macros. Search foods, scan barcodes, or add manually. Your TDEE auto-calculates.',pos:'top'},
-  {target:'[data-page="chat"]',title:'CHAT',desc:'Message your friends and get advice from the AI Coach. Stay connected, stay accountable.',pos:'top'},
-  {target:'[data-page="ranks"]',title:'RANKS',desc:'Leaderboard and rank info. Climb from E-Rank to S-Rank by earning XP and passing trials.',pos:'top'},
-  {target:'[data-page="profile"]',title:'PROFILE',desc:'Your stats, PRs, settings, and friends. This is your hunter card.',pos:'top'},
-  {target:'.tb-xp',title:'XP BAR',desc:'Your experience points. Every workout, mission, and achievement earns XP toward your next rank.',pos:'bottom'}
+  {target:'.top-bar',title:'XP & RANK',desc:'Your rank and XP bar are always visible. Every workout, mission, and achievement earns XP. Hit rank gates to unlock trials.',pos:'bottom'},
+  {target:'[data-page="train"]',title:'TRAIN',desc:'Your workout program. Fill in weights & reps, then Log the day. Use "Log All Days" if you trained multiple.',pos:'top'},
+  {target:'[data-page="missions"]',title:'MISSIONS',desc:'5 daily missions — 3 universal + 2 tailored to your class. Complete all 5 for bonus XP. Build streaks!',pos:'top'},
+  {target:'[data-page="nutrition"]',title:'NUTRITION',desc:'TDEE calculator, macro tracking, and meal-based food logging. Search foods, scan barcodes, or add manually.',pos:'top'},
+  {target:'[data-page="chat"]',title:'CHAT',desc:'Message friends, get AI Coach advice, and check patch notes in the Updates tab.',pos:'top'},
+  {target:'[data-page="ranks"]',title:'RANKS',desc:'Leaderboard and rank info. Tap any hunter to view their profile and add them as a friend.',pos:'top'},
+  {target:'[data-page="profile"]',title:'PROFILE',desc:'Your stats, PRs, bio, friends list, and settings. Set your bio so other hunters know who you are.',pos:'top'}
 ];
 let tourStep=0;
 function checkTour(){
@@ -1036,4 +1073,158 @@ async function markChatRead(friendUid){
   lastRead[friendUid]=Date.now();
   await saveUser({lastReadTimestamps:lastRead});
   checkUnreadChats();
+}
+
+// ═══════════ EVENT MISSION ═══════════
+async function completeEvent(){
+  const today=getTodayStr();const evt=getEventMission(today);if(!evt)return;
+  if((userData.eventsCompleted||{})[today])return;
+  if(!confirm(`⚡ Complete "${evt.name}"?\n\n${evt.desc}`))return;
+  const ec=userData.eventsCompleted||{};ec[today]=true;
+  const evtCount=Object.keys(ec).length;
+  const gained=addXP(evt.xp);
+  unlockAch('event_first');if(evtCount>=5)unlockAch('event_5');
+  await saveUser({eventsCompleted:ec,xp:userData.xp});await saveLeaderboard();
+  updateTopBar();checkRankUp();renderMissions();
+  toast(`⚡ ${evt.name} +${gained} XP`);
+}
+
+// ═══════════ PROGRESSION TRACKS ═══════════
+function getTrackProgress(task){
+  switch(task.check){
+    case 'workouts':return workoutLog.length;
+    case 'maxlift':return Math.max(0,...workoutLog.flatMap(e=>e.exercises.flatMap(ex=>ex.sets.map(s=>parseInt(s.weight)||0))));
+    case 'full_weeks':return calcFullWeeks();
+    case 'wk_streak':return calcWeeklyStreak();
+    case 'class_missions':{
+      // Count completed class-specific missions across all days
+      let count=0;const cm=CLASS_MISSIONS[userData.class]||[];const cmIds=cm.map(m=>m.id);
+      Object.values(userData.missionsCompleted||{}).forEach(arr=>{(arr||[]).forEach(id=>{if(cmIds.includes(id))count++})});
+      return count;
+    }
+    default:return 0;
+  }
+}
+function renderProgressionTrack(){
+  const cls=userData.class;if(!cls||!PROGRESSION_TRACKS[cls])return'';
+  const tracks=PROGRESSION_TRACKS[cls];
+  const completed=userData.tracksCompleted||[];
+  let h=`<div class="section-title" style="margin:1rem 0 .3rem">CLASS TRACK — ${cls.toUpperCase()}</div>`;
+  for(const track of tracks){
+    // Check if requires previous track
+    if(track.requires&&!completed.includes(track.requires)){
+      h+=`<div class="track-card locked"><div class="track-header"><span class="track-icon">🔒</span><div><div class="track-name">${track.name}</div><div class="track-desc">Complete previous tier to unlock</div></div></div></div>`;
+      continue;
+    }
+    if(completed.includes(track.id)){
+      h+=`<div class="track-card completed"><div class="track-header"><span class="track-icon">✅</span><div><div class="track-name">${track.name}</div><div class="track-desc">COMPLETED</div></div></div></div>`;
+      continue;
+    }
+    const allDone=track.tasks.every(t=>getTrackProgress(t)>=t.target);
+    h+=`<div class="track-card${allDone?' ready':''}"><div class="track-header"><span class="track-icon">${track.icon}</span><div><div class="track-name">${track.name}</div><div class="track-desc">${track.desc}</div></div></div>`;
+    track.tasks.forEach(t=>{
+      const p=Math.min(getTrackProgress(t),t.target);const pct=Math.min(100,(p/t.target)*100);
+      h+=`<div class="track-task"><div class="track-task-desc">${t.desc}</div><div class="trial-bar"><div class="trial-bar-fill" style="width:${pct}%"></div></div><div class="trial-task-num">${p}/${t.target} · +${t.xp} XP</div></div>`;
+    });
+    if(allDone)h+=`<button class="trial-claim" onclick="claimTrack('${track.id}')">🏆 CLAIM ${track.name.toUpperCase()}</button>`;
+    h+=`</div>`;
+  }
+  return h;
+}
+async function claimTrack(trackId){
+  const cls=userData.class;if(!cls)return;
+  const tracks=PROGRESSION_TRACKS[cls]||[];
+  const track=tracks.find(t=>t.id===trackId);if(!track)return;
+  const completed=userData.tracksCompleted||[];
+  if(completed.includes(trackId))return;
+  completed.push(trackId);
+  let totalXp=0;track.tasks.forEach(t=>totalXp+=t.xp);
+  addXP(totalXp);
+  await saveUser({tracksCompleted:completed,xp:userData.xp});await saveLeaderboard();
+  updateTopBar();checkRankUp();renderMissions();
+  toast(`🏆 ${track.name} complete! +${totalXp} XP`);
+}
+
+// ═══════════ PASSIVE ACHIEVEMENT CHECKER ═══════════
+async function checkPassiveAchievements(){
+  let dirty=false;
+  // Bio & pic
+  if(userData.bio&&userData.bio.trim())unlockAch('set_bio');
+  if(userData.profilePic)unlockAch('set_pic');
+  // XP milestones
+  if(userData.xp>=1000)unlockAch('xp_1k');
+  if(userData.xp>=5000)unlockAch('xp_5k');
+  if(userData.xp>=10000)unlockAch('xp_10k');
+  // Workout milestones
+  const wc=workoutLog.length;
+  if(wc>=1)unlockAch('first_workout');if(wc>=10)unlockAch('workouts_10');if(wc>=25)unlockAch('workouts_25');
+  if(wc>=50)unlockAch('workouts_50');if(wc>=100)unlockAch('workouts_100');if(wc>=200)unlockAch('workouts_200');
+  if(wc>=300)unlockAch('workouts_300');if(wc>=500)unlockAch('workouts_500');
+  // Weekly streak
+  const ws=calcWeeklyStreak();
+  if(ws>=2)unlockAch('wk_streak_2');if(ws>=4)unlockAch('wk_streak_4');if(ws>=8)unlockAch('wk_streak_8');
+  if(ws>=12)unlockAch('wk_streak_12');if(ws>=26)unlockAch('wk_streak_26');if(ws>=52)unlockAch('wk_streak_52');
+  // Full weeks
+  const fw=calcFullWeeks();
+  if(fw>=1)unlockAch('full_week');if(fw>=5)unlockAch('full_week_5');if(fw>=10)unlockAch('full_week_10');if(fw>=20)unlockAch('full_week_20');
+  // Total missions
+  let totalMissions=0;Object.values(userData.missionsCompleted||{}).forEach(arr=>totalMissions+=(arr||[]).length);
+  if(totalMissions>=25)unlockAch('missions_total_25');if(totalMissions>=100)unlockAch('missions_total_100');
+  // Event count
+  const evtCount=Object.keys(userData.eventsCompleted||{}).length;
+  if(evtCount>=1)unlockAch('event_first');if(evtCount>=5)unlockAch('event_5');
+  // Food days
+  const foodDays=Object.keys(userData.foodLog||{}).filter(k=>{const d=userData.foodLog[k];if(Array.isArray(d))return d.length>0;if(d&&d.meals)return Object.values(d.meals).some(m=>m&&m.length>0);return false}).length;
+  if(foodDays>=1)unlockAch('food_log_1');if(foodDays>=7)unlockAch('food_log_7');if(foodDays>=14)unlockAch('food_log_14');
+  if(foodDays>=30)unlockAch('food_log_30');if(foodDays>=60)unlockAch('food_log_60');
+  // Friends
+  const fc=(userData.friends||[]).length;
+  if(fc>=1)unlockAch('add_friend');if(fc>=5)unlockAch('friends_5');if(fc>=10)unlockAch('friends_10');
+  // Scan count
+  const scanCount=parseInt(userData.scanCount)||0;
+  if(scanCount>=1)unlockAch('scan_1');if(scanCount>=5)unlockAch('scan_5');
+  // Message count
+  const msgCount=parseInt(userData.messageCount)||0;
+  if(msgCount>=1)unlockAch('chat_first');if(msgCount>=10)unlockAch('chat_10');
+}
+
+// ═══════════ NOTIFICATIONS ═══════════
+let notifPermission='default';
+function initNotifications(){
+  const isStandalone=window.matchMedia('(display-mode: standalone)').matches||window.navigator.standalone;
+  if(!isStandalone)return; // Only push for installed app
+  if(!('Notification' in window))return;
+  notifPermission=Notification.permission;
+  if(notifPermission==='default'){
+    // Ask after a delay so it doesn't block first experience
+    setTimeout(()=>{
+      Notification.requestPermission().then(p=>{notifPermission=p});
+    },10000);
+  }
+  // Schedule check — remind to train if no workout today
+  scheduleTrainReminder();
+}
+function scheduleTrainReminder(){
+  // Check every hour if app is open
+  setInterval(()=>{
+    if(notifPermission!=='granted')return;
+    const hr=new Date().getHours();
+    if(hr<16||hr>21)return; // Only remind 4-9 PM
+    const todayLogs=workoutLog.filter(e=>{const d=new Date(e.date);return d.toDateString()===new Date().toDateString()});
+    if(todayLogs.length>0)return; // Already trained
+    const lastNotif=localStorage.getItem('lastTrainNotif');
+    const today=getTodayStr();
+    if(lastNotif===today)return; // Already notified today
+    localStorage.setItem('lastTrainNotif',today);
+    const ws=calcWeeklyStreak();
+    const {label}=getXpMultiplier();
+    let body='The System is watching. Don\'t let your streak die.';
+    if(ws>0)body=`${ws}-week streak on the line. Get in there.`;
+    if(label)body+=` ${label}`;
+    new Notification('LexenFitness',{body,icon:'icons/icon-192x192.png',badge:'icons/icon-96x96.png'});
+  },3600000); // Every hour
+}
+function sendNotif(title,body){
+  if(notifPermission!=='granted')return;
+  try{new Notification(title,{body,icon:'icons/icon-192x192.png'})}catch(e){}
 }

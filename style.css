@@ -610,3 +610,53 @@ input[type=checkbox]:checked::after{content:'✓';position:absolute;color:#fff;f
 /* ── Copy Friend Code ── */
 .copy-code-btn{background:var(--surface2);border:1px solid var(--border);color:var(--muted);padding:4px 10px;border-radius:6px;font-size:.68rem;font-weight:600;cursor:pointer;margin-left:6px;vertical-align:middle;transition:all .15s}
 .copy-code-btn:hover,.copy-code-btn:active{border-color:var(--gold);color:var(--gold)}
+
+/* ── Meal Sections ── */
+.meal-section{background:var(--surface);border:1px solid var(--border);border-radius:12px;margin-bottom:.5rem;overflow:hidden}
+.meal-header{display:flex;align-items:center;gap:.5rem;padding:.7rem .8rem;cursor:pointer;flex-wrap:wrap}
+.meal-title{font-family:var(--font-display);font-size:.95rem;letter-spacing:1px;color:var(--text);white-space:nowrap}
+.meal-summary{font-family:var(--font-mono);font-size:.6rem;color:var(--muted);flex:1;text-align:right;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.meal-toggle{color:var(--dim);font-size:.7rem;margin-left:4px;flex-shrink:0}
+.meal-mini-bar{width:100%;height:3px;background:var(--surface2);border-radius:2px;margin-top:4px}
+.meal-mini-fill{height:100%;background:var(--green);border-radius:2px;transition:width .3s;max-width:100%}
+.meal-body{padding:0 .8rem .6rem;overflow:visible;transition:max-height .3s ease}
+.meal-add-btns{margin-top:.4rem}
+.food-btn.sm{padding:7px 6px;font-size:.68rem}
+.tdee-cal.over{background:linear-gradient(135deg,var(--red),var(--orange));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.remaining-hint{text-align:center;font-family:var(--font-mono);font-size:.68rem;color:var(--muted);padding:.5rem;margin:.4rem 0;background:var(--surface);border:1px dashed var(--border);border-radius:8px}
+.tdee-btns{display:flex;gap:6px;margin-top:.5rem}
+.tdee-btns .tdee-adjust-btn{flex:1;margin-top:0}
+
+/* ── TDEE Setup Wizard ── */
+.tdee-setup{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:1.2rem;margin-top:.5rem}
+.tdee-setup .m-field{margin-bottom:.5rem}
+.tdee-setup label{font-size:.72rem;color:var(--muted);margin-bottom:3px;display:block}
+.tdee-setup select,.tdee-setup input{width:100%;background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:10px 12px;font-size:.85rem;outline:none}
+.tdee-setup select:focus,.tdee-setup input:focus{border-color:var(--accent)}
+
+/* ── Meal Count Modal ── */
+.meal-count-grid{display:flex;gap:8px;justify-content:center;margin:.8rem 0}
+.meal-count-opt{width:48px;height:48px;border:2px solid var(--border);background:var(--surface);color:var(--text);border-radius:12px;font-size:1.2rem;font-weight:800;font-family:var(--font-display);cursor:pointer;transition:all .15s}
+.meal-count-opt.active,.meal-count-opt:hover{border-color:var(--accent);color:var(--accent);background:var(--accent)11}
+
+/* ── Event Mission Card ── */
+.event-card{display:flex;align-items:center;gap:.5rem;background:linear-gradient(135deg,rgba(251,191,36,.08),rgba(251,191,36,.02));border:2px solid var(--gold);border-radius:12px;padding:.7rem;margin-bottom:.6rem;cursor:pointer;position:relative;overflow:hidden;animation:event-glow 2s ease infinite}
+.event-card.done{opacity:.6;cursor:default;animation:none;border-style:dashed}
+@keyframes event-glow{0%,100%{box-shadow:0 0 8px rgba(251,191,36,.15)}50%{box-shadow:0 0 16px rgba(251,191,36,.3)}}
+.event-label{position:absolute;top:4px;right:8px;font-family:var(--font-mono);font-size:.5rem;font-weight:800;letter-spacing:2px;color:var(--gold)}
+
+/* ── Progression Track Cards ── */
+.track-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:.8rem;margin-bottom:.5rem}
+.track-card.locked{opacity:.4}
+.track-card.completed{border-color:var(--green);background:rgba(52,211,153,.04)}
+.track-card.ready{border-color:var(--gold);animation:event-glow 2s ease infinite}
+.track-header{display:flex;align-items:center;gap:.6rem;margin-bottom:.4rem}
+.track-icon{font-size:1.2rem}
+.track-name{font-weight:800;font-size:.85rem}
+.track-desc{font-size:.7rem;color:var(--muted)}
+.track-task{margin-top:.4rem}
+.track-task-desc{font-size:.72rem;color:var(--text);margin-bottom:2px}
+
+/* ── XP Multiplier ── */
+.xp-mult-banner{background:linear-gradient(90deg,var(--gold),var(--orange));color:#000;font-family:var(--font-mono);font-size:.65rem;font-weight:800;letter-spacing:1px;text-align:center;padding:4px 8px;display:none}
+.xp-mult-badge{background:linear-gradient(135deg,rgba(251,191,36,.15),rgba(251,191,36,.05));border:1px solid var(--gold);border-radius:8px;text-align:center;font-family:var(--font-mono);font-size:.7rem;font-weight:700;color:var(--gold);padding:6px 10px;margin-bottom:.6rem}

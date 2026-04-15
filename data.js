@@ -1,8 +1,27 @@
 // ═══════════════════════════════════════════
 //  LEXENFITNESS — DATA v4 (Solo Leveling)
 // ═══════════════════════════════════════════
-const APP_VERSION='1.6.0';
+const APP_VERSION='1.8.0';
 const CHANGELOG=[
+  {version:'1.8.0',date:'Apr 2026',title:'Progression System',items:[
+    '🎮 CoD-style progression tracks — 3 tiers per class',
+    '🎪 Random event missions — bonus XP with ~30% daily chance',
+    '🔥 Weekend 1.5x XP + First of Month 2x XP',
+    '📅 Weekly streak system (3+ sessions/week = streak continues)',
+    '🏆 65+ achievements rebalanced with sane XP values',
+    '🔔 Smart notifications (push if installed, badges if not)',
+    '📊 XP milestone achievements (1K, 5K, 10K)',
+    '📝 New achievements: bio, profile pic, barcode pro, chatty, and more'
+  ]},
+  {version:'1.7.0',date:'Apr 2026',title:'Nutrition Overhaul',items:[
+    '🍽️ Meal-based food logging — Meal 1, Meal 2, etc. with per-meal macro tracking',
+    '⚙️ TDEE Setup Wizard — configure everything right on the Nutrition page',
+    '🚶 Daily steps estimation factored into calorie calculations',
+    '🎯 Nutrition goals — Cut, Lean Bulk, Recomp, Maintenance & more',
+    '📊 Per-meal mini progress bars and remaining macro hints',
+    '🗺️ Improved onboarding tour covering all features',
+    '🅰️ Full Body ABC program template (shared across all classes)'
+  ]},
   {version:'1.6.0',date:'Apr 2026',title:'Class Missions & Social',items:[
     '🎯 Class-specific daily missions — tailored to your class',
     '👤 Tap leaderboard users to view profile & add friend',
@@ -236,52 +255,168 @@ const CLASS_MISSIONS={
 // Backwards compat — flat pool for any edge cases
 const DAILY_MISSION_POOL=UNIVERSAL_MISSIONS;
 const ACHIEVEMENTS=[
-  {id:'first_workout',icon:'🎯',name:'First Blood',desc:'Complete first workout',xp:50},
-  {id:'workouts_10',icon:'💪',name:'Dedicated',desc:'Log 10 workouts',xp:100},
-  {id:'workouts_25',icon:'🔥',name:'On Fire',desc:'Log 25 workouts',xp:200},
-  {id:'workouts_50',icon:'⚡',name:'Unstoppable',desc:'Log 50 workouts',xp:300},
-  {id:'workouts_100',icon:'👑',name:'Centurion',desc:'Log 100 workouts',xp:500},
-  {id:'streak_7',icon:'📅',name:'Week Warrior',desc:'7-day streak',xp:150},
-  {id:'streak_30',icon:'🗓️',name:'Iron Discipline',desc:'30-day streak',xp:500},
-  {id:'full_week',icon:'✅',name:'Perfect Week',desc:'All sessions in one week',xp:200},
-  {id:'full_week_5',icon:'🏅',name:'Consistency King',desc:'5 perfect weeks',xp:400},
-  {id:'early_bird',icon:'🌅',name:'Early Bird',desc:'Log before 7 AM',xp:75},
-  {id:'night_owl',icon:'🌙',name:'Night Owl',desc:'Log after 9 PM',xp:75},
-  {id:'all_sets_done',icon:'💯',name:'No Excuses',desc:'Every set checked',xp:100},
-  {id:'heavy_day',icon:'🦾',name:'Heavy Hitter',desc:'200+ lbs logged',xp:100},
-  {id:'monster_lift',icon:'🏔️',name:'Mountain Mover',desc:'315+ lbs logged',xp:200},
-  {id:'titan_lift',icon:'⚔️',name:'Titan Strength',desc:'405+ lbs logged',xp:300},
-  {id:'variety',icon:'🎨',name:'Well Rounded',desc:'All workout days logged',xp:100},
-  {id:'customize',icon:'🔧',name:'My Way',desc:'Customize an exercise',xp:50},
-  {id:'add_friend',icon:'🤝',name:'Stronger Together',desc:'Add a friend',xp:75},
-  {id:'friends_5',icon:'👥',name:'Squad Goals',desc:'Add 5 friends',xp:150},
-  {id:'set_prs',icon:'📊',name:'Know Your Numbers',desc:'Record all 4 PR lifts',xp:75},
-  {id:'missions_3',icon:'📋',name:'Mission Ready',desc:'3 missions in one day',xp:50},
-  {id:'missions_all',icon:'🌟',name:'Mission Complete',desc:'All missions in one day',xp:100},
-  {id:'mission_streak_7',icon:'🎖️',name:'Mission Master',desc:'All missions 7 days straight',xp:300},
-  {id:'food_log_1',icon:'🍽️',name:'Fuel Up',desc:'Log your first meal',xp:50},
-  {id:'food_log_7',icon:'📝',name:'Nutrition Tracker',desc:'Log food 7 days',xp:150},
-  {id:'scan_1',icon:'📸',name:'Scanner',desc:'Scan your first barcode',xp:25},
+  // ── Getting Started (10-25 XP) ──
+  {id:'first_workout',icon:'🎯',name:'First Blood',desc:'Complete first workout',xp:25},
+  {id:'tour_done',icon:'🗺️',name:'System Initiated',desc:'Complete the onboarding tour',xp:10},
+  {id:'customize',icon:'🔧',name:'My Way',desc:'Customize an exercise',xp:10},
+  {id:'set_bio',icon:'📝',name:'Identity',desc:'Set your bio',xp:10},
+  {id:'set_pic',icon:'📸',name:'Face Reveal',desc:'Upload a profile picture',xp:10},
+  {id:'set_prs',icon:'📊',name:'Know Your Numbers',desc:'Record all 4 PR lifts',xp:15},
+  // ── Workout Milestones (15-100 XP) ──
+  {id:'workouts_10',icon:'💪',name:'Dedicated',desc:'Log 10 workouts',xp:25},
+  {id:'workouts_25',icon:'🔥',name:'On Fire',desc:'Log 25 workouts',xp:40},
+  {id:'workouts_50',icon:'⚡',name:'Unstoppable',desc:'Log 50 workouts',xp:50},
+  {id:'workouts_100',icon:'👑',name:'Centurion',desc:'Log 100 workouts',xp:75},
+  {id:'workouts_200',icon:'💎',name:'Diamond Grind',desc:'Log 200 workouts',xp:75},
+  {id:'workouts_300',icon:'🏛️',name:'Legendary',desc:'Log 300 workouts',xp:100},
+  {id:'workouts_500',icon:'🌌',name:'Mythic',desc:'Log 500 workouts',xp:100},
+  // ── Weekly Streaks (15-100 XP) ──
+  {id:'wk_streak_2',icon:'📅',name:'Two Weeks',desc:'2-week training streak',xp:15},
+  {id:'wk_streak_4',icon:'🔥',name:'Month Strong',desc:'4-week streak',xp:25},
+  {id:'wk_streak_8',icon:'💪',name:'Two Months',desc:'8-week streak',xp:40},
+  {id:'wk_streak_12',icon:'🗓️',name:'Iron Discipline',desc:'12-week streak',xp:50},
+  {id:'wk_streak_26',icon:'🏆',name:'Half Year',desc:'26-week streak',xp:75},
+  {id:'wk_streak_52',icon:'👑',name:'Unbreakable',desc:'52-week streak',xp:100},
+  // ── Perfect Weeks ──
+  {id:'full_week',icon:'✅',name:'Perfect Week',desc:'All sessions in one week',xp:25},
+  {id:'full_week_5',icon:'🏅',name:'Consistency King',desc:'5 perfect weeks',xp:40},
+  {id:'full_week_10',icon:'💪',name:'Perfect Ten',desc:'10 perfect weeks',xp:50},
+  {id:'full_week_20',icon:'🗡️',name:'Relentless',desc:'20 perfect weeks',xp:75},
+  // ── Lifting ──
+  {id:'early_bird',icon:'🌅',name:'Early Bird',desc:'Log before 7 AM',xp:15},
+  {id:'night_owl',icon:'🌙',name:'Night Owl',desc:'Log after 9 PM',xp:15},
+  {id:'midnight',icon:'🕛',name:'Midnight Grind',desc:'Log between 12-4 AM',xp:15},
+  {id:'all_sets_done',icon:'💯',name:'No Excuses',desc:'Every set checked',xp:20},
+  {id:'heavy_day',icon:'🦾',name:'Heavy Hitter',desc:'200+ lbs logged',xp:20},
+  {id:'monster_lift',icon:'🏔️',name:'Mountain Mover',desc:'315+ lbs logged',xp:30},
+  {id:'titan_lift',icon:'⚔️',name:'Titan Strength',desc:'405+ lbs logged',xp:50},
+  {id:'heavy_500',icon:'🌋',name:'Volcanic Force',desc:'500+ lbs logged',xp:75},
+  {id:'variety',icon:'🎨',name:'Well Rounded',desc:'All workout days logged',xp:20},
+  {id:'weekend_warrior',icon:'🌅',name:'Weekend Warrior',desc:'Log on Sat & Sun same week',xp:15},
+  {id:'pr_breaker',icon:'📈',name:'PR Breaker',desc:'Beat a logged weight',xp:25},
+  // ── Social ──
+  {id:'add_friend',icon:'🤝',name:'Stronger Together',desc:'Add a friend',xp:15},
+  {id:'friends_5',icon:'👥',name:'Squad Goals',desc:'Add 5 friends',xp:25},
+  {id:'friends_10',icon:'🎯',name:'Inner Circle',desc:'Add 10 friends',xp:40},
+  {id:'chat_first',icon:'💬',name:'Connected',desc:'Send first message',xp:10},
+  {id:'chat_10',icon:'💬',name:'Chatty',desc:'Send 10 messages',xp:15},
+  // ── Missions ──
+  {id:'missions_3',icon:'📋',name:'Mission Ready',desc:'3 missions in one day',xp:10},
+  {id:'missions_all',icon:'🌟',name:'Mission Complete',desc:'All missions in one day',xp:20},
+  {id:'missions_total_25',icon:'🎖️',name:'Mission Grinder',desc:'Complete 25 total missions',xp:25},
+  {id:'missions_total_100',icon:'🎖️',name:'Mission Veteran',desc:'Complete 100 total missions',xp:50},
+  {id:'mission_streak_7',icon:'🎖️',name:'Mission Master',desc:'All missions 7 days straight',xp:40},
+  {id:'missions_streak_14',icon:'⚡',name:'Mission Legend',desc:'All missions 14 days straight',xp:50},
+  {id:'event_first',icon:'🎪',name:'Lucky Day',desc:'Complete a random event mission',xp:15},
+  {id:'event_5',icon:'🎪',name:'Fortune Hunter',desc:'Complete 5 event missions',xp:25},
+  // ── Nutrition ──
+  {id:'food_log_1',icon:'🍽️',name:'Fuel Up',desc:'Log your first meal',xp:10},
+  {id:'food_log_7',icon:'📝',name:'Nutrition Tracker',desc:'Log food 7 days',xp:20},
+  {id:'food_log_14',icon:'📝',name:'Two Weeks Tracking',desc:'Log food 14 days',xp:30},
+  {id:'food_log_30',icon:'📊',name:'Nutrition Master',desc:'Log food 30 days',xp:50},
+  {id:'food_log_60',icon:'🥇',name:'Nutrition Elite',desc:'Log food 60 days',xp:75},
+  {id:'scan_1',icon:'📸',name:'Scanner',desc:'Scan your first barcode',xp:10},
+  {id:'scan_5',icon:'📸',name:'Barcode Pro',desc:'Scan 5 barcodes',xp:15},
+  {id:'all_meals',icon:'🍽️',name:'Full Day',desc:'Log food in every meal slot',xp:15},
+  {id:'protein_hit',icon:'🥩',name:'Protein Target',desc:'Hit daily protein target',xp:15},
+  // ── Rank (0 XP) ──
   {id:'rank_d',icon:'🟢',name:'D-Rank Hunter',desc:'Reach D-Rank',xp:0},
   {id:'rank_c',icon:'🔵',name:'C-Rank Hunter',desc:'Reach C-Rank',xp:0},
   {id:'rank_b',icon:'🟣',name:'Passed the Iron Gate',desc:'B-Rank achieved',xp:0},
   {id:'rank_a',icon:'🟠',name:'Survived the Gauntlet',desc:'A-Rank achieved',xp:0},
-  {id:'rank_s',icon:'🌟',name:'Awakened',desc:'S-Rank — the strongest',xp:0},
-  {id:'workouts_200',icon:'💎',name:'Diamond Grind',desc:'Log 200 workouts',xp:750},
-  {id:'streak_14',icon:'🔥',name:'Two Weeks Strong',desc:'14-day streak',xp:250},
-  {id:'streak_60',icon:'🏆',name:'Iron Will',desc:'60-day streak',xp:1000},
-  {id:'streak_90',icon:'👑',name:'Unbreakable',desc:'90-day streak',xp:1500},
-  {id:'heavy_500',icon:'🌋',name:'Volcanic Force',desc:'500+ lbs logged',xp:500},
-  {id:'full_week_10',icon:'💪',name:'Perfect Ten',desc:'10 perfect weeks',xp:600},
-  {id:'full_week_20',icon:'🗡️',name:'Relentless',desc:'20 perfect weeks',xp:1000},
-  {id:'friends_10',icon:'🎯',name:'Inner Circle',desc:'Add 10 friends',xp:250},
-  {id:'food_log_30',icon:'📊',name:'Nutrition Master',desc:'Log food 30 days',xp:400},
-  {id:'missions_streak_14',icon:'⚡',name:'Mission Legend',desc:'All missions 14 days straight',xp:500},
-  {id:'weekend_warrior',icon:'🌅',name:'Weekend Warrior',desc:'Log on Sat & Sun same week',xp:75},
-  {id:'pr_breaker',icon:'📈',name:'PR Breaker',desc:'Beat a logged weight',xp:100},
-  {id:'chat_first',icon:'💬',name:'Connected',desc:'Send your first message',xp:25},
-  {id:'tour_done',icon:'🗺️',name:'System Initiated',desc:'Complete the onboarding tour',xp:25},
+  {id:'rank_s',icon:'🌟',name:'Awakened',desc:'S-Rank',xp:0},
+  // ── XP Milestones (0 XP) ──
+  {id:'xp_1k',icon:'⭐',name:'1K Club',desc:'Reach 1,000 XP',xp:0},
+  {id:'xp_5k',icon:'⭐',name:'5K Club',desc:'Reach 5,000 XP',xp:0},
+  {id:'xp_10k',icon:'🌟',name:'10K Club',desc:'Reach 10,000 XP',xp:0},
 ];
+// ═══════════ COD-STYLE PROGRESSION TRACKS ═══════════
+const PROGRESSION_TRACKS={
+  Powerlifter:[
+    {id:'pl_t1',name:'Iron Foundation',icon:'🔩',desc:'Establish your base',tasks:[
+      {id:'pl_t1_1',desc:'Log 5 compound lift sessions',check:'workouts',target:5,xp:15},
+      {id:'pl_t1_2',desc:'Hit 135 lbs on any lift',check:'maxlift',target:135,xp:15},
+      {id:'pl_t1_3',desc:'Complete all program days in one week',check:'full_weeks',target:1,xp:20}]},
+    {id:'pl_t2',name:'Strength Protocol',icon:'🔗',desc:'Build real strength',requires:'pl_t1',tasks:[
+      {id:'pl_t2_1',desc:'Log 20 sessions',check:'workouts',target:20,xp:20},
+      {id:'pl_t2_2',desc:'Hit 225 lbs on any lift',check:'maxlift',target:225,xp:25},
+      {id:'pl_t2_3',desc:'4-week training streak',check:'wk_streak',target:4,xp:25}]},
+    {id:'pl_t3',name:'Iron Mastery',icon:'⚔️',desc:'Enter the elite',requires:'pl_t2',tasks:[
+      {id:'pl_t3_1',desc:'Log 50 sessions',check:'workouts',target:50,xp:30},
+      {id:'pl_t3_2',desc:'Hit 315 lbs on any lift',check:'maxlift',target:315,xp:40},
+      {id:'pl_t3_3',desc:'10 perfect weeks',check:'full_weeks',target:10,xp:50}]}
+  ],
+  Bodybuilder:[
+    {id:'bb_t1',name:'Volume I',icon:'💪',desc:'Learn the pump',tasks:[
+      {id:'bb_t1_1',desc:'Log 5 sessions',check:'workouts',target:5,xp:15},
+      {id:'bb_t1_2',desc:'Complete all program days in one week',check:'full_weeks',target:1,xp:15},
+      {id:'bb_t1_3',desc:'Complete 5 class missions',check:'class_missions',target:5,xp:20}]},
+    {id:'bb_t2',name:'Volume II',icon:'🔥',desc:'Chase the pump',requires:'bb_t1',tasks:[
+      {id:'bb_t2_1',desc:'Log 25 sessions',check:'workouts',target:25,xp:20},
+      {id:'bb_t2_2',desc:'4-week training streak',check:'wk_streak',target:4,xp:25},
+      {id:'bb_t2_3',desc:'Complete 15 class missions',check:'class_missions',target:15,xp:25}]},
+    {id:'bb_t3',name:'Aesthetic Elite',icon:'🏆',desc:'Sculpted physique',requires:'bb_t2',tasks:[
+      {id:'bb_t3_1',desc:'Log 75 sessions',check:'workouts',target:75,xp:30},
+      {id:'bb_t3_2',desc:'12-week training streak',check:'wk_streak',target:12,xp:40},
+      {id:'bb_t3_3',desc:'Complete 40 class missions',check:'class_missions',target:40,xp:50}]}
+  ],
+  Strongman:[
+    {id:'sm_t1',name:'Raw Power',icon:'🪨',desc:'Build the foundation',tasks:[
+      {id:'sm_t1_1',desc:'Log 5 sessions',check:'workouts',target:5,xp:15},
+      {id:'sm_t1_2',desc:'Hit 200 lbs on any lift',check:'maxlift',target:200,xp:15},
+      {id:'sm_t1_3',desc:'Complete 5 class missions',check:'class_missions',target:5,xp:20}]},
+    {id:'sm_t2',name:'Brute Force',icon:'⚡',desc:'Unleash the beast',requires:'sm_t1',tasks:[
+      {id:'sm_t2_1',desc:'Log 25 sessions',check:'workouts',target:25,xp:20},
+      {id:'sm_t2_2',desc:'Hit 315 lbs on any lift',check:'maxlift',target:315,xp:25},
+      {id:'sm_t2_3',desc:'4-week training streak',check:'wk_streak',target:4,xp:25}]},
+    {id:'sm_t3',name:'Colossus',icon:'🏗️',desc:'Unbreakable',requires:'sm_t2',tasks:[
+      {id:'sm_t3_1',desc:'Log 75 sessions',check:'workouts',target:75,xp:30},
+      {id:'sm_t3_2',desc:'Hit 405 lbs on any lift',check:'maxlift',target:405,xp:40},
+      {id:'sm_t3_3',desc:'12-week training streak',check:'wk_streak',target:12,xp:50}]}
+  ],
+  Athlete:[
+    {id:'ath_t1',name:'Prospect',icon:'🏃',desc:'Enter the arena',tasks:[
+      {id:'ath_t1_1',desc:'Log 5 sessions',check:'workouts',target:5,xp:15},
+      {id:'ath_t1_2',desc:'Complete 5 class missions',check:'class_missions',target:5,xp:15},
+      {id:'ath_t1_3',desc:'Complete all program days in one week',check:'full_weeks',target:1,xp:20}]},
+    {id:'ath_t2',name:'Competitor',icon:'🏅',desc:'Sharpen your edge',requires:'ath_t1',tasks:[
+      {id:'ath_t2_1',desc:'Log 25 sessions',check:'workouts',target:25,xp:20},
+      {id:'ath_t2_2',desc:'4-week training streak',check:'wk_streak',target:4,xp:25},
+      {id:'ath_t2_3',desc:'Complete 15 class missions',check:'class_missions',target:15,xp:25}]},
+    {id:'ath_t3',name:'Apex Predator',icon:'👑',desc:'Top of the food chain',requires:'ath_t2',tasks:[
+      {id:'ath_t3_1',desc:'Log 75 sessions',check:'workouts',target:75,xp:30},
+      {id:'ath_t3_2',desc:'12-week training streak',check:'wk_streak',target:12,xp:40},
+      {id:'ath_t3_3',desc:'Complete 40 class missions',check:'class_missions',target:40,xp:50}]}
+  ]
+};
+// ═══════════ RANDOM EVENT MISSIONS ═══════════
+const EVENT_MISSION_POOL=[
+  {id:'evt_double',icon:'⚡',name:'DOUBLE DOWN',desc:'Log 2 separate workouts today',xp:40},
+  {id:'evt_protein',icon:'🥩',name:'PROTEIN OVERLOAD',desc:'Hit 150% of your protein target',xp:35},
+  {id:'evt_social',icon:'💬',name:'SOCIAL BUTTERFLY',desc:'Send 3 messages to friends',xp:25},
+  {id:'evt_allmeals',icon:'🍽️',name:'EVERY BITE COUNTS',desc:'Log food in all meal slots',xp:30},
+  {id:'evt_speedrun',icon:'⏱️',name:'SPEED RUN',desc:'Log a workout before 8 AM',xp:35},
+  {id:'evt_heavy',icon:'🏋️',name:'HEAVY DAY',desc:'Log a set with 200+ lbs',xp:30},
+  {id:'evt_volume',icon:'📊',name:'VOLUME CHECK',desc:'Log 20+ total sets in one workout',xp:35},
+  {id:'evt_clean',icon:'🥗',name:'CLEAN SWEEP',desc:'No food over 500 cal in a single entry',xp:25},
+  {id:'evt_streak_saver',icon:'🔥',name:'STREAK SAVER',desc:'Train today (any workout)',xp:20},
+  {id:'evt_mission_rush',icon:'🎯',name:'MISSION RUSH',desc:'Complete all daily missions',xp:30},
+  {id:'evt_midnight',icon:'🌙',name:'MIDNIGHT OIL',desc:'Log a workout after 10 PM',xp:30},
+  {id:'evt_explore',icon:'🔍',name:'FOOD EXPLORER',desc:'Scan a new barcode today',xp:25}
+];
+function getEventMission(dateStr){
+  let seed=0;for(let i=0;i<dateStr.length;i++)seed=((seed<<5)-seed)+dateStr.charCodeAt(i)+7;seed=Math.abs(seed);
+  if(seed%100>=30)return null;
+  return EVENT_MISSION_POOL[seed%EVENT_MISSION_POOL.length];
+}
+// ═══════════ XP MULTIPLIERS ═══════════
+function getXpMultiplier(){
+  const now=new Date(),dow=now.getDay(),dom=now.getDate();
+  if(dom===1)return{mult:2,label:'🎉 FIRST OF THE MONTH — 2x XP'};
+  if(dow===0||dow===6)return{mult:1.5,label:'🔥 WEEKEND — 1.5x XP'};
+  return{mult:1,label:null};
+}
+
 const GOALS=['Fat Loss','Muscle Gain','Build Strength','General Fitness','Athletic Performance','Body Recomp'];
 const EXPERIENCE=['Beginner (< 1 year)','Intermediate (1-3 years)','Advanced (3+ years)','Elite (5+ years)'];
 const ACTIVITY_LEVELS=[

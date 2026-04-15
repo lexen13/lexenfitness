@@ -119,6 +119,7 @@ async function sendMessage(){
       from:U.uid,text:text.slice(0,500),ts:firebase.firestore.FieldValue.serverTimestamp()
     });
     unlockAch('chat_first');
+    const mc=(userData.messageCount||0)+1;await saveUser({messageCount:mc});if(mc>=10)unlockAch('chat_10');
   }catch(e){toast('Send failed: '+e.message)}
 }
 

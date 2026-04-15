@@ -268,15 +268,11 @@
 <div class="m-actions" style="margin-top:.6rem"><button class="m-cancel" onclick="closeScanner()">Cancel</button></div>
 </div></div>
 
-<!-- MACRO ADJUSTMENT MODAL -->
-<div class="modal-bg" id="macroModal"><div class="modal">
-<h2>⚙️ Adjust Targets</h2>
-<div class="m-field"><label>Activity Level</label><select id="macroActivity"></select></div>
-<label class="toggle-row" style="margin:.6rem 0"><input type="checkbox" class="toggle-cb" id="macroCustomToggle" onchange="toggleMacroFields()"><span>Set custom macros (override auto-calc)</span></label>
-<div class="macro-custom-field"><div class="m-field"><label>Calories</label><input type="number" id="macroCalories"></div></div>
-<div class="settings-row-fields macro-custom-field"><div class="m-field" style="flex:1"><label>Protein (g)</label><input type="number" id="macroProtein"></div><div class="m-field" style="flex:1"><label>Carbs (g)</label><input type="number" id="macroCarbs"></div><div class="m-field" style="flex:1"><label>Fat (g)</label><input type="number" id="macroFat"></div></div>
-<div class="m-actions"><button class="m-cancel" onclick="closeMacroModal()">Cancel</button><button class="m-save-btn" onclick="saveMacroSettings()">Save</button></div>
-</div></div>
+<!-- MACRO ADJUSTMENT MODAL (dynamic content) -->
+<div class="modal-bg" id="macroModal"><div class="modal" style="max-height:85vh;overflow-y:auto"></div></div>
+
+<!-- MEAL COUNT MODAL -->
+<div class="modal-bg" id="mealCountModal"><div class="modal" style="max-width:300px"></div></div>
 
 <!-- PROFILE CARD MODAL -->
 <div class="modal-bg" id="profileCardModal"><div class="modal" style="max-width:340px"></div></div>
