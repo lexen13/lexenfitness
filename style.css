@@ -379,6 +379,18 @@ input[type=checkbox]:checked::after{content:'✓';position:absolute;color:#fff;f
 .macro-bar-fill{height:100%;border-radius:3px;transition:width .4s}
 .tdee-adjust-btn{margin-top:.5rem;background:none;border:1px solid var(--border);color:var(--muted);font-size:.7rem;font-family:var(--font-mono);padding:5px 12px;border-radius:6px;cursor:pointer}
 .tdee-adjust-btn:hover{color:var(--text);border-color:var(--accent)}
+
+/* ── Macro Preview (live recalc) ── */
+.macro-preview{margin-top:.5rem;padding:.5rem;background:var(--surface2);border-radius:8px;font-family:var(--font-mono);font-size:.65rem;text-align:center}
+.macro-preview-row{margin-bottom:3px;color:var(--text)}
+.macro-preview-total{color:var(--muted);font-size:.6rem}
+.macro-preview-warn{margin-top:4px;font-size:.62rem;font-family:var(--font-body)}
+.macro-auto-tag{color:var(--green);font-size:.55rem;font-weight:600;font-family:var(--font-mono)}
+.macro-breakdown{font-family:var(--font-mono);font-size:.62rem;color:var(--muted);margin-top:.5rem;text-align:center;padding:.4rem;background:var(--surface2);border-radius:6px}
+.macro-breakdown strong{color:var(--text)}
+
+/* ── TDEE Maintenance Display ── */
+.tdee-maintenance{font-family:var(--font-mono);font-size:.68rem;color:var(--muted);text-align:center;margin-bottom:.5rem;padding:4px 8px;background:var(--surface2);border-radius:6px}
 .food-actions{display:flex;gap:6px;margin:.6rem 0}
 .food-btn{flex:1;padding:10px 8px;border:1px solid var(--border);background:var(--surface);color:var(--text);border-radius:9px;font-size:.74rem;font-weight:600;transition:all .15s}
 .food-btn:hover{border-color:var(--accent);color:var(--accent)}
@@ -493,6 +505,13 @@ input[type=checkbox]:checked::after{content:'✓';position:absolute;color:#fff;f
 .chat-input-row{display:flex;gap:6px;margin-top:.5rem;padding-top:.5rem;border-top:1px solid var(--border)}
 .chat-send-btn{width:42px;height:42px;border:none;background:var(--accent);color:#fff;border-radius:10px;font-size:1.1rem;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center}
 .chat-send-btn:hover{background:var(--accent2)}
+
+/* ── Chat Unread & Sorting ── */
+.chat-list-item.unread{border-color:var(--accent);background:rgba(123,92,255,.06)}
+.chat-list-preview.unread-text{color:var(--text);font-weight:600}
+.chat-list-meta{display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex-shrink:0}
+.chat-unread-dot{width:10px;height:10px;background:var(--accent);border-radius:50%}
+.chat-date-sep{text-align:center;font-family:var(--font-mono);font-size:.58rem;color:var(--dim);padding:.6rem 0 .3rem;letter-spacing:1px}
 
 /* ── AI Coach ── */
 .coach-header{display:flex;align-items:center;gap:.7rem;margin-bottom:1rem}

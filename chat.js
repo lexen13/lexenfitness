@@ -23,37 +23,62 @@ async function renderChatList(){
   const el=$('chatListContent');if(!el)return;
   const friends=userData.friends||[];
   if(!friends.length){el.innerHTML='<div class="page-title">MESSAGES</div><p style="color:var(--muted);font-size:.82rem;padding:.5rem 0">Add friends from your Profile to start chatting.</p>';return}
-  let h='<div class="page-title">MESSAGES</div><div class="page-sub">Tap a friend to chat</div>';
-  let loaded=0;
+  const lastRead=userData.lastReadTimestamps||{};
+  // Collect chat data for sorting
+  const chatItems=[];
   for(const fid of friends.slice(0,30)){
     try{
       const d=await db.collection('users').doc(fid).get();
       if(!d.exists)continue;
       const f=d.data();const r=getRank(f.xp||0);
-      let preview='No messages yet';let previewTime='';
+      let preview='No messages yet',previewTime='',sortTime=0,isUnread=false,senderName='';
       try{
         const chatId=getChatId(U.uid,fid);
         const lastMsg=await db.collection('chats').doc(chatId).collection('messages').orderBy('ts','desc').limit(1).get();
         if(!lastMsg.empty){
           const m=lastMsg.docs[0].data();
-          preview=(m.from===U.uid?'You: ':'')+String(m.text||'').slice(0,40);
-          if(m.ts){const dt=m.ts.toDate();previewTime=dt.toLocaleDateString('en-US',{month:'short',day:'numeric'})}
+          const isMe=m.from===U.uid;
+          preview=(isMe?'You: ':'')+(String(m.text||'').slice(0,40));
+          if(m.ts){
+            const dt=m.ts.toDate();sortTime=dt.getTime();
+            const now=new Date();const isToday=dt.toDateString()===now.toDateString();
+            const yesterday=new Date(now);yesterday.setDate(yesterday.getDate()-1);
+            const isYesterday=dt.toDateString()===yesterday.toDateString();
+            if(isToday)previewTime=dt.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});
+            else if(isYesterday)previewTime='Yesterday';
+            else previewTime=dt.toLocaleDateString('en-US',{month:'short',day:'numeric'});
+            // Unread check
+            if(!isMe){
+              const readTime=lastRead[fid]||0;
+              if(dt.getTime()>readTime){isUnread=true;senderName=f.username||'hunter'}
+            }
+          }
         }
       }catch(e){}
-      h+=`<div class="chat-list-item" onclick="openChat('${fid}')">
-        <div class="lb-pic">${f.profilePic?'<img src="'+f.profilePic+'">':'👤'}</div>
-        <div class="chat-list-info">
-          <div class="chat-list-name">@${esc(f.username||'hunter')} <span class="chat-list-rank" style="color:${r.color}">${r.name}</span></div>
-          <div class="chat-list-preview">${esc(preview)}</div>
-        </div>
-        <div class="chat-list-time">${previewTime}</div>
-      </div>`;
-      loaded++;
-    }catch(e){
-      h+=`<div class="chat-list-item" style="opacity:.5"><div class="lb-pic">👤</div><div class="chat-list-info"><div class="chat-list-name">Unable to load</div><div class="chat-list-preview" style="color:var(--red)">Check Firestore rules</div></div></div>`;
-    }
+      chatItems.push({fid,f,r,preview,previewTime,sortTime,isUnread,senderName});
+    }catch(e){}
   }
-  if(!loaded&&friends.length)h+='<p style="color:var(--red);font-size:.78rem;padding:.5rem">Could not load friends. Make sure Firestore rules allow reading user docs.</p>';
+  // Sort: unread first, then by most recent message
+  chatItems.sort((a,b)=>{
+    if(a.isUnread&&!b.isUnread)return -1;
+    if(!a.isUnread&&b.isUnread)return 1;
+    return b.sortTime-a.sortTime;
+  });
+  let h='<div class="page-title">MESSAGES</div><div class="page-sub">Tap a friend to chat</div>';
+  if(!chatItems.length)h+='<p style="color:var(--red);font-size:.78rem;padding:.5rem">Could not load friends. Make sure Firestore rules allow reading user docs.</p>';
+  chatItems.forEach(c=>{
+    h+=`<div class="chat-list-item${c.isUnread?' unread':''}" onclick="openChat('${c.fid}')">
+      <div class="lb-pic">${c.f.profilePic?'<img src="'+c.f.profilePic+'">':'👤'}</div>
+      <div class="chat-list-info">
+        <div class="chat-list-name">@${esc(c.f.username||'hunter')} <span class="chat-list-rank" style="color:${c.r.color}">${c.r.name}</span></div>
+        <div class="chat-list-preview${c.isUnread?' unread-text':''}">${c.isUnread?'<strong>@'+esc(c.senderName)+':</strong> ':''}${esc(c.preview)}</div>
+      </div>
+      <div class="chat-list-meta">
+        <div class="chat-list-time">${c.previewTime}</div>
+        ${c.isUnread?'<div class="chat-unread-dot"></div>':''}
+      </div>
+    </div>`;
+  });
   el.innerHTML=h;
 }
 
@@ -101,11 +126,28 @@ async function openChat(friendUid){
 function renderMessages(msgs){
   const el=$('chatMessages');if(!el)return;
   if(!msgs.length){el.innerHTML='<p style="color:var(--muted);font-size:.78rem;text-align:center;padding:2rem 0">No messages yet. Say hi! 👋</p>';return}
-  el.innerHTML=msgs.map(m=>{
+  const now=new Date();const todayStr=now.toDateString();
+  const yesterday=new Date(now);yesterday.setDate(yesterday.getDate()-1);const yestStr=yesterday.toDateString();
+  let lastDateStr='';
+  let h='';
+  msgs.forEach(m=>{
     const isMe=m.from===U.uid;
-    const time=m.ts?m.ts.toDate().toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'}):'';
-    return`<div class="chat-msg ${isMe?'me':'them'}"><div class="chat-bubble">${esc(m.text)}</div><div class="chat-time">${time}</div></div>`;
-  }).join('');
+    if(!m.ts){h+=`<div class="chat-msg ${isMe?'me':'them'}"><div class="chat-bubble">${esc(m.text)}</div><div class="chat-time">sending...</div></div>`;return}
+    const dt=m.ts.toDate();
+    const dateStr=dt.toDateString();
+    // Date separator
+    if(dateStr!==lastDateStr){
+      let dateLabel;
+      if(dateStr===todayStr)dateLabel='Today';
+      else if(dateStr===yestStr)dateLabel='Yesterday';
+      else dateLabel=dt.toLocaleDateString('en-US',{weekday:'long',month:'short',day:'numeric',year:dt.getFullYear()!==now.getFullYear()?'numeric':undefined});
+      h+=`<div class="chat-date-sep">${dateLabel}</div>`;
+      lastDateStr=dateStr;
+    }
+    const time=dt.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});
+    h+=`<div class="chat-msg ${isMe?'me':'them'}"><div class="chat-bubble">${esc(m.text)}</div><div class="chat-time">${time}</div></div>`;
+  });
+  el.innerHTML=h;
   el.scrollTop=el.scrollHeight;
 }
 

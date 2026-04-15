@@ -37,19 +37,26 @@ function calcTDEE(){
   const stepBonus=stepsToCalories(dailySteps);
   const tdee=Math.round(bmr*al.mult)+stepBonus;
   const goal=userData.nutritionGoal||userData.goal||'';
-  let target=tdee;
-  if(goal.includes('Fat Loss')||goal.includes('Cut'))target=tdee-400;
-  else if(goal.includes('Aggressive Cut'))target=tdee-600;
-  else if(goal.includes('Lean Bulk')||goal.includes('Muscle Gain'))target=tdee+250;
-  else if(goal.includes('Bulk'))target=tdee+500;
-  else if(goal.includes('Recomp'))target=tdee-100;
+  let target=tdee,deficit=0;
+  // Order: most specific first (Aggressive contains 'Cut' so check it before Fat Loss)
+  if(goal.includes('Aggressive'))      {deficit=-750;target=tdee-750}
+  else if(goal.includes('Moderate'))   {deficit=-500;target=tdee-500}
+  else if(goal.includes('Fat Loss'))   {deficit=-400;target=tdee-400}
+  else if(goal.includes('Mild'))       {deficit=-250;target=tdee-250}
+  else if(goal.includes('Lean Bulk'))  {deficit=250;target=tdee+250}
+  else if(goal.includes('Bulk'))       {deficit=500;target=tdee+500}
+  else if(goal.includes('Recomp'))     {deficit=-100;target=tdee-100}
+  else if(goal.includes('Muscle Gain')){deficit=300;target=tdee+300}
   const cm=userData.customMacros;
-  if(cm&&cm.enabled)return{bmr,tdee,stepBonus,target:cm.calories||target,proteinG:cm.protein||Math.round(wKg*2.2),fatG:cm.fat||Math.round(target*0.25/9),carbG:cm.carbs||Math.round((target-(cm.protein||Math.round(wKg*2.2))*4-(cm.fat||Math.round(target*0.25/9))*9)/4),goal:goal||'Maintenance',custom:true,actName:al.name,steps:dailySteps};
-  // Auto macros: protein 1g/lb, fat 25%, carbs fill the rest
+  const bmrR=Math.round(bmr);
+  if(cm&&cm.enabled){
+    const cTarget=cm.calories||target;
+    return{bmr:bmrR,tdee,stepBonus,target:cTarget,maintenance:tdee,deficit,proteinG:cm.protein||Math.round(w*1),fatG:cm.fat||Math.round(cTarget*0.25/9),carbG:cm.carbs||Math.round((cTarget-(cm.protein||Math.round(w*1))*4-(cm.fat||Math.round(cTarget*0.25/9))*9)/4),goal:goal||'Maintenance',custom:true,actName:al.name,steps:dailySteps};
+  }
   const proteinG=Math.round(w*1);
   const fatG=Math.round(target*0.25/9);
   const carbG=Math.round((target-proteinG*4-fatG*9)/4);
-  return{bmr,tdee,stepBonus,target,proteinG:Math.max(proteinG,50),fatG:Math.max(fatG,30),carbG:Math.max(carbG,50),goal:goal||'Maintenance',custom:false,actName:al.name,steps:dailySteps};
+  return{bmr:bmrR,tdee,stepBonus,target,maintenance:tdee,deficit,proteinG:Math.max(proteinG,50),fatG:Math.max(fatG,30),carbG:Math.max(carbG,50),goal:goal||'Maintenance',custom:false,actName:al.name,steps:dailySteps};
 }
 
 // ═══════════ MEAL HELPERS ═══════════
@@ -119,6 +126,7 @@ function renderNutritionPage(){
   h+=`<div class="tdee-card">
     <div class="tdee-header">${t.custom?'CUSTOM':'AUTO'} · ${t.goal.toUpperCase()} · ${t.actName}${t.steps?' · ~'+t.steps+' steps':''}</div>
     <div class="tdee-main"><div class="tdee-cal${calOver?' over':''}">${totals.cal} <span style="font-size:1.2rem;opacity:.5">/ ${t.target}</span></div><div class="tdee-cal-label">CALORIES${calOver?' ⚠️ OVER':''}${!calOver&&calPct>=90?' ✅ ON TRACK':''}</div></div>
+    ${t.deficit?`<div class="tdee-maintenance">Maintenance: ${t.maintenance} cal · ${t.deficit>0?'+':''}<span style="color:${t.deficit<0?'var(--green)':'var(--gold)'}"> ${t.deficit>0?'+':''}${t.deficit}</span> cal ${t.deficit<0?'deficit':'surplus'}</div>`:''}
     <div class="macro-bars">
       <div class="macro-bar-row"><span class="macro-label" style="color:var(--red)">P ${totals.p}/${t.proteinG}g</span><div class="macro-bar"><div class="macro-bar-fill" style="width:${pPct}%;background:var(--red)"></div></div></div>
       <div class="macro-bar-row"><span class="macro-label" style="color:var(--gold)">C ${totals.c}/${t.carbG}g</span><div class="macro-bar"><div class="macro-bar-fill" style="width:${cPct}%;background:var(--gold)"></div></div></div>
@@ -446,6 +454,17 @@ async function removeMealItem(meal,idx){
 // ── MACRO ADJUSTMENT MODAL ──
 function openMacroModal(){
   const t=calcTDEE();const cm=userData.customMacros||{};const st=userData.stats||{};
+  const curGoal=userData.nutritionGoal||userData.goal||'Maintenance';
+  const goalOpts=[
+    {v:'Maintenance',l:'Maintenance (±0)'},
+    {v:'Mild Cut',l:'Mild Cut (-250)'},
+    {v:'Fat Loss',l:'Fat Loss (-400)'},
+    {v:'Moderate Cut',l:'Moderate Cut (-500)'},
+    {v:'Aggressive Cut',l:'Aggressive Cut (-750)'},
+    {v:'Recomp',l:'Recomp (-100)'},
+    {v:'Lean Bulk',l:'Lean Bulk (+250)'},
+    {v:'Bulk',l:'Bulk (+500)'}
+  ];
   let h=`<h2>⚙️ Nutrition Settings</h2>`;
   h+=`<div class="settings-section" style="margin-top:0">BODY STATS</div>`;
   h+=`<div class="settings-row-fields"><div class="m-field" style="flex:1"><label>Height</label><input type="text" id="macroHeight" value="${st.height||''}" placeholder="5'10&quot;"></div><div class="m-field" style="flex:1"><label>Weight (lbs)</label><input type="number" id="macroWeight" value="${st.weight||''}"></div></div>`;
@@ -460,21 +479,89 @@ function openMacroModal(){
     <option value="10000"${(userData.dailySteps||'')==='10000'?' selected':''}>~10,000 (very active)</option>
     <option value="12000"${(userData.dailySteps||'')==='12000'?' selected':''}>~12,000+</option>
   </select></div>`;
-  h+=`<div class="m-field"><label>Goal</label><select id="macroGoal">
-    ${['Maintenance','Fat Loss','Aggressive Cut','Lean Bulk','Bulk','Recomp'].map(g=>`<option value="${g}"${(userData.nutritionGoal||userData.goal||'')==g?' selected':''}>${g}</option>`).join('')}
-  </select></div>`;
+  h+=`<div class="m-field"><label>Goal</label><select id="macroGoal">${goalOpts.map(g=>`<option value="${g.v}"${curGoal===g.v?' selected':''}>${g.l}</option>`).join('')}</select></div>`;
   h+=`<div class="settings-section">CUSTOM OVERRIDES</div>`;
   h+=`<label class="toggle-row" style="margin:.3rem 0"><input type="checkbox" class="toggle-cb" id="macroCustomToggle" onchange="toggleMacroFields()" ${cm&&cm.enabled?'checked':''}><span>Override auto-calculated macros</span></label>`;
-  h+=`<div class="macro-custom-field"><div class="m-field"><label>Calories</label><input type="number" id="macroCalories" value="${cm.calories||(t?t.target:2000)}"></div></div>`;
-  h+=`<div class="settings-row-fields macro-custom-field"><div class="m-field" style="flex:1"><label>Protein (g)</label><input type="number" id="macroProtein" value="${cm.protein||(t?t.proteinG:150)}"></div><div class="m-field" style="flex:1"><label>Carbs (g)</label><input type="number" id="macroCarbs" value="${cm.carbs||(t?t.carbG:200)}"></div><div class="m-field" style="flex:1"><label>Fat (g)</label><input type="number" id="macroFat" value="${cm.fat||(t?t.fatG:60)}"></div></div>`;
-  if(t){h+=`<div style="font-family:var(--font-mono);font-size:.62rem;color:var(--muted);margin-top:.4rem;text-align:center">BMR: ${Math.round(t.bmr)} · TDEE: ${t.tdee}${t.stepBonus?' (+'+t.stepBonus+' steps)':''} · Target: ${t.target}</div>`}
+  h+=`<div class="macro-custom-field"><div class="m-field"><label>Target Calories</label><input type="number" id="macroCalories" value="${cm.calories||(t?t.target:2000)}" oninput="recalcMacros('cal')"></div></div>`;
+  h+=`<div class="settings-row-fields macro-custom-field">
+    <div class="m-field" style="flex:1"><label>Protein (g) <span class="macro-auto-tag" id="macroAutoP"></span></label><input type="number" id="macroProtein" value="${cm.protein||(t?t.proteinG:150)}" oninput="recalcMacros('protein')"></div>
+    <div class="m-field" style="flex:1"><label>Fat (g) <span class="macro-auto-tag" id="macroAutoF"></span></label><input type="number" id="macroFat" value="${cm.fat||(t?t.fatG:60)}" oninput="recalcMacros('fat')"></div>
+    <div class="m-field" style="flex:1"><label>Carbs (g) <span class="macro-auto-tag" id="macroAutoC"></span></label><input type="number" id="macroCarbs" value="${cm.carbs||(t?t.carbG:200)}" oninput="recalcMacros('carbs')"></div>
+  </div>`;
+  h+=`<div style="font-size:.6rem;color:var(--dim);text-align:center;margin-top:2px;font-family:var(--font-mono)">Edit any field — the others adjust to match your calorie target</div>`;
+  h+=`<div id="macroPreview" class="macro-preview"></div>`;
+  if(t){h+=`<div class="macro-breakdown">BMR: ${t.bmr} · Maintenance: <strong>${t.maintenance||t.tdee}</strong>${t.stepBonus?' (+'+t.stepBonus+' steps)':''} · Target: <strong>${t.target}</strong>${t.deficit?' ('+t.deficit+')':''}</div>`}
   h+=`<div class="m-actions" style="margin-top:.8rem"><button class="m-cancel" onclick="closeMacroModal()">Cancel</button><button class="m-save-btn" onclick="saveMacroSettings()">Save</button></div>`;
   $('macroModal').querySelector('.modal').innerHTML=h;
   toggleMacroFields();
+  recalcMacros('init');
   $('macroModal').classList.add('open');
 }
 function closeMacroModal(){$('macroModal').classList.remove('open')}
-function toggleMacroFields(){const c=$('macroCustomToggle').checked;document.querySelectorAll('.macro-custom-field').forEach(el=>el.style.opacity=c?'1':'.4');document.querySelectorAll('.macro-custom-field input').forEach(el=>el.disabled=!c)}
+function toggleMacroFields(){
+  const c=$('macroCustomToggle').checked;
+  document.querySelectorAll('.macro-custom-field').forEach(el=>el.style.opacity=c?'1':'.4');
+  document.querySelectorAll('.macro-custom-field input').forEach(el=>el.disabled=!c);
+  if(c)recalcMacros('init');
+}
+let lastMacroEdit='carbs'; // tracks which field auto-adjusts
+function recalcMacros(source){
+  const calEl=$('macroCalories'),pEl=$('macroProtein'),fEl=$('macroFat'),cEl=$('macroCarbs'),preview=$('macroPreview');
+  if(!calEl||!pEl||!fEl||!cEl)return;
+  const cal=parseInt(calEl.value)||0;
+  let p=parseInt(pEl.value)||0;
+  let f=parseInt(fEl.value)||0;
+  let c=parseInt(cEl.value)||0;
+  // Determine which field to auto-adjust based on what the user edited
+  // Rule: the field you're typing in stays, protein is protected unless explicitly changed
+  let autoField='carbs'; // default
+  if(source==='protein'||source==='cal')autoField='carbs';    // edit P or cal → carbs adjusts
+  else if(source==='fat')autoField='carbs';                    // edit fat → carbs adjusts
+  else if(source==='carbs')autoField='fat';                    // edit carbs → fat adjusts
+  else autoField=lastMacroEdit||'carbs';                       // init: use last
+  if(source!=='init')lastMacroEdit=autoField;
+  // Calculate the auto field
+  if(autoField==='carbs'){
+    const remaining=cal-p*4-f*9;
+    c=Math.max(0,Math.round(remaining/4));
+    cEl.value=c;
+  }else if(autoField==='fat'){
+    const remaining=cal-p*4-c*4;
+    f=Math.max(0,Math.round(remaining/9));
+    fEl.value=f;
+  }else if(autoField==='protein'){
+    const remaining=cal-f*9-c*4;
+    p=Math.max(0,Math.round(remaining/4));
+    pEl.value=p;
+  }
+  // Update auto labels
+  const tagP=$('macroAutoP'),tagF=$('macroAutoF'),tagC=$('macroAutoC');
+  if(tagP)tagP.textContent=autoField==='protein'?'← auto':'';
+  if(tagF)tagF.textContent=autoField==='fat'?'← auto':'';
+  if(tagC)tagC.textContent=autoField==='carbs'?'← auto':'';
+  // Highlight the auto field
+  pEl.style.borderColor=autoField==='protein'?'var(--green)':'';
+  fEl.style.borderColor=autoField==='fat'?'var(--green)':'';
+  cEl.style.borderColor=autoField==='carbs'?'var(--green)':'';
+  // Preview
+  const pCal=p*4,fCal=f*9,cCal=c*4;
+  const total=pCal+fCal+cCal;
+  const diff=total-cal;
+  let warn='';
+  if(autoField==='carbs'&&c<=0)warn='<span style="color:var(--red)">⚠️ Protein + Fat exceed calories. Reduce one or increase target.</span>';
+  else if(autoField==='fat'&&f<=0)warn='<span style="color:var(--red)">⚠️ Protein + Carbs exceed calories. Reduce one or increase target.</span>';
+  else if(c<50&&autoField==='carbs')warn='<span style="color:var(--gold)">⚠️ Low carbs ('+c+'g). Consider increasing calories or reducing fat.</span>';
+  else if(f<20)warn='<span style="color:var(--gold)">⚠️ Very low fat ('+f+'g). May affect hormones. Consider 40g+ minimum.</span>';
+  if(preview){
+    preview.innerHTML=`<div class="macro-preview-row">
+      <span style="color:var(--red)">P: ${p}g (${pCal})</span> ·
+      <span style="color:var(--cyan)">F: ${f}g (${fCal})</span> ·
+      <span style="color:var(--gold)">C: ${c}g (${cCal})</span>
+    </div>
+    <div class="macro-preview-total">Total: ${total} cal${Math.abs(diff)>5?' · <span style="color:var(--red)">'+diff+' off target</span>':' ✓'}</div>
+    ${warn?'<div class="macro-preview-warn">'+warn+'</div>':''}`;
+  }
+}
 async function saveMacroSettings(){
   const stats={...(userData.stats||{}),
     height:$('macroHeight').value.trim(),
