@@ -109,6 +109,8 @@ img{display:block}
 .day-notes-section{margin-top:.6rem;padding-top:.5rem;border-top:1px dashed var(--border)}
 .day-notes{font-size:.74rem;color:var(--muted);line-height:1.5;padding:.5rem .6rem;background:var(--surface);border:1px solid var(--border);border-radius:8px;margin-bottom:.4rem}
 .day-notes strong{color:var(--gold);font-size:.65rem;font-family:var(--font-mono);letter-spacing:1px}
+.day-notes-top{background:linear-gradient(135deg,rgba(251,191,36,.08),rgba(251,191,36,.02));border:1px solid var(--gold);color:var(--text);margin-bottom:.6rem;padding:.6rem .7rem}
+.day-notes-top strong{display:inline-block;margin-bottom:3px}
 .ex-edit{width:28px;height:28px;border:1px solid var(--border);background:var(--surface2);color:var(--dim);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:.7rem;flex-shrink:0}
 .ex-edit:hover{color:var(--text);border-color:var(--accent)}
 .sets-grid{display:flex;flex-direction:column;gap:4px}

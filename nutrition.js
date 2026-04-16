@@ -117,7 +117,24 @@ function renderNutritionPage(){
       <div class="tdee-empty">Set up your body stats to get calorie & macro targets</div>
       <button class="auth-btn primary" onclick="openMacroModal()" style="margin-top:.6rem;max-width:280px;margin-left:auto;margin-right:auto">⚙️ Set Up Nutrition</button>
     </div>`;
-  }else{
+    // Show recent days even without TDEE set up
+    h+=`<div class="section-title" style="margin:1rem 0 .4rem">RECENT DAYS</div>`;
+    const logDays0=Object.keys(userData.foodLog||{}).filter(k=>{
+      const d=userData.foodLog[k];
+      if(Array.isArray(d))return d.length>0;
+      if(d&&d.meals)return getDayItemCount(d)>0;
+      return false;
+    }).sort().reverse().slice(0,14);
+    if(!logDays0.length)h+=`<p style="color:var(--muted);font-size:.78rem">No history yet. Set up your nutrition above to start tracking.</p>`;
+    else h+=`<div class="food-history">${logDays0.map(d=>{
+      const dl=getDayLog(d);const tot=getDayTotals(dl);const count=getDayItemCount(dl);
+      const dt=new Date(d+'T12:00:00');const label=dt.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
+      return`<div class="food-history-day" onclick="foodLogDate='${d}';renderNutritionPage()"><div class="fh-date">${label}</div><div class="fh-stats">${tot.cal} cal · ${tot.p}g P · ${count} items</div></div>`;
+    }).join('')}</div>`;
+    $('nutritionContent').innerHTML=h;
+    return;
+  }
+
   const calPct=Math.min(100,(totals.cal/t.target)*100);
   const pPct=Math.min(100,(totals.p/t.proteinG)*100);
   const cPct=Math.min(100,(totals.c/t.carbG)*100);
@@ -134,7 +151,6 @@ function renderNutritionPage(){
     </div>
     <div class="tdee-btns"><button class="tdee-adjust-btn" onclick="openMacroModal()">⚙️ Adjust Targets</button><button class="tdee-adjust-btn" onclick="openMealCountModal()">🍽️ ${mealCount} Meals</button></div>
   </div>`;
-  } // end TDEE if/else
 
   // ── MEAL SECTIONS ──
   for(let m=1;m<=mealCount;m++){

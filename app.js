@@ -73,7 +73,21 @@ async function doSignup(){
     $('signupError').textContent=friendlyErr(err.code);
   }
 }
-async function resetPassword(){const e=$('loginEmail').value.trim();if(!e){$('loginError').textContent='Enter email first';return}try{await auth.sendPasswordResetEmail(e);$('loginError').style.color='var(--green)';$('loginError').textContent='Reset link sent!';setTimeout(()=>{$('loginError').style.color='';$('loginError').textContent=''},4000)}catch(err){$('loginError').textContent=friendlyErr(err.code)}}
+async function resetPassword(){
+  const e=$('loginEmail').value.trim();
+  if(!e){$('loginError').style.color='';$('loginError').textContent='Enter your email above first, then tap Forgot password';return}
+  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)){$('loginError').style.color='';$('loginError').textContent='That email looks invalid';return}
+  try{
+    await auth.sendPasswordResetEmail(e);
+    $('loginError').style.color='var(--green)';
+    $('loginError').innerHTML=`✅ Reset link sent to <strong>${esc(e)}</strong><br><span style="color:var(--muted);font-size:.65rem;line-height:1.5;display:block;margin-top:4px">• Check <strong>spam folder</strong> if not in inbox in 2 min<br>• Link expires in <strong>1 hour</strong><br>• Click it <strong>only once</strong> — it's single-use<br>• Open it on the <strong>same device</strong> if possible</span>`;
+    setTimeout(()=>{$('loginError').style.color='';$('loginError').textContent=''},20000);
+  }catch(err){
+    $('loginError').style.color='';
+    console.error('Password reset error:',err);
+    $('loginError').textContent=friendlyErr(err.code)||err.message||'Reset failed';
+  }
+}
 async function doGoogleLogin(){
   const provider=new firebase.auth.GoogleAuthProvider();
   try{await auth.signInWithPopup(provider)}catch(err){$('loginError').textContent=friendlyErr(err.code)}
@@ -558,6 +572,8 @@ async function editDayNotes(){
 function switchDay(id){currentDay=id;document.querySelectorAll('.dtab').forEach(t=>t.classList.toggle('active',t.dataset.d===id));renderDay();updateLogBtn()}
 function renderDay(){const prog=userData.program||[],day=prog.find(d=>d.id===currentDay);if(!day)return;const di=prog.indexOf(day);let h='';
   if(day.subtitle)h+=`<div class="day-subtitle">${esc(day.subtitle)}</div>`;
+  // Day notes display at top (if set)
+  if(day.notes)h+=`<div class="day-notes day-notes-top"><strong>📝 NOTES</strong><br>${esc(day.notes)}</div>`;
   day.exercises.forEach((ex,ei)=>{h+=`<div class="exercise"><div class="ex-header"><span class="ex-num">${ei+1}</span><span class="ex-name">${ex.name}</span><button class="ex-edit" onclick="openEdit(${di},${ei})">✏️</button></div>`;
     if(ex.notes)h+=`<div class="ex-notes">${esc(ex.notes)}</div>`;
     h+=`<div class="sets-grid">`;
@@ -566,11 +582,8 @@ function renderDay(){const prog=userData.program||[],day=prog.find(d=>d.id===cur
       else h+=`<div class="set-row"><label>S${s+1}</label><input type="number" id="${wK}" placeholder="lbs" value="${savedInputs[wK]||''}"><span class="sep">×</span><input type="number" id="${rK}" placeholder="reps" value="${savedInputs[rK]||''}"><input type="checkbox" id="${cK}" ${savedInputs[cK]?'checked':''}><span class="target">${ex.reps}</span></div>`}
     h+='</div></div>'});
   h+=`<button class="add-ex" onclick="openAdd(${di})">+ Add Exercise</button>`;
-  // Day notes
-  h+=`<div class="day-notes-section">`;
-  if(day.notes)h+=`<div class="day-notes"><strong>Notes:</strong> ${esc(day.notes)}</div>`;
-  h+=`<button class="day-manage-btn" onclick="editDayNotes()" style="font-size:.72rem">📝 ${day.notes?'Edit':'Add'} Day Notes</button>`;
-  h+=`</div>`;
+  // Day notes button only (display is now at top)
+  h+=`<div class="day-notes-section"><button class="day-manage-btn" onclick="editDayNotes()" style="font-size:.72rem">📝 ${day.notes?'Edit':'Add'} Day Notes</button></div>`;
   h+=`<div class="day-manage"><button class="day-manage-btn" onclick="renameWorkoutDay()">✏️ Rename Day</button><button class="day-manage-btn" style="color:var(--red)" onclick="removeWorkoutDay()">🗑 Remove Day</button></div>`;
   $('dayContent').innerHTML=h}
 
