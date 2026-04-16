@@ -163,29 +163,29 @@ const CLASS_PROGRAMS={
 };
 const SHARED_PROGRAMS=[
   {key:'fb_abc',name:'Full Body ABC',desc:'3-day full body — strength & hypertrophy',icon:'🅰️',days:[
-    {id:'day1',title:'WORKOUT A',subtitle:'Full Body',exercises:[
-      {name:'Squats (Barbell or Goblet)',sets:4,reps:'4-8'},
-      {name:'Bench Press (Barbell/Dumbbell)',sets:4,reps:'4-8'},
-      {name:'Bent-Over Rows (Barbell/Dumbbell)',sets:3,reps:'4-8'},
-      {name:'Overhead Press (Dumbbell/Machine)',sets:3,reps:'4-8'},
-      {name:'Romanian Deadlifts',sets:3,reps:'4-8'},
-      {name:'Plank',sets:3,reps:'20-30s',isTime:true}
+    {id:'day1',title:'WORKOUT A',subtitle:'Full Body — Compound Focus',notes:'Rest: 2-3 min for compounds, 60-90 sec for accessories. Warm up with 5-10 min cardio + dynamic stretching.',exercises:[
+      {name:'Squats (Barbell or Goblet)',sets:4,reps:'4-8',notes:'Push to near failure; 2-3 min rest'},
+      {name:'Bench Press (Barbell/Dumbbell)',sets:4,reps:'4-8',notes:'Warm-up sets first'},
+      {name:'Bent-Over Rows (Barbell/Dumbbell)',sets:3,reps:'4-8',notes:'Focus on form'},
+      {name:'Overhead Press (Dumbbell/Machine)',sets:3,reps:'4-8',notes:'Seated if possible'},
+      {name:'Romanian Deadlifts',sets:3,reps:'4-8',notes:'Controlled descent'},
+      {name:'Plank',sets:3,reps:'20-30s',isTime:true,notes:'If time allows'}
     ]},
-    {id:'day2',title:'WORKOUT B',subtitle:'Full Body',exercises:[
-      {name:'Romanian Deadlifts',sets:4,reps:'4-8'},
-      {name:'Incline Press (Dumbbell)',sets:4,reps:'4-8'},
-      {name:'Pull-Ups or Lat Pulldowns',sets:3,reps:'4-8'},
-      {name:'Leg Extensions',sets:3,reps:'4-8'},
-      {name:'Tricep Extensions',sets:3,reps:'4-8'},
-      {name:'Leg Raises (Optional Core)',sets:3,reps:'8-12'}
+    {id:'day2',title:'WORKOUT B',subtitle:'Full Body — Posterior Chain',notes:'Rest: 60-90 sec between sets for hypertrophy, 2-3 min for main compound lifts.',exercises:[
+      {name:'Romanian Deadlifts',sets:4,reps:'4-8',notes:'Replacement for deadlifts'},
+      {name:'Incline Press (Dumbbell)',sets:4,reps:'4-8',notes:'Slight incline'},
+      {name:'Pull-Ups or Lat Pulldowns',sets:3,reps:'4-8',notes:'Assisted if needed'},
+      {name:'Leg Extensions',sets:3,reps:'4-8',notes:'Alternate legs if lunges'},
+      {name:'Tricep Extensions',sets:3,reps:'4-8',notes:'Assisted dips alternative'},
+      {name:'Leg Raises (Optional Core)',sets:3,reps:'8-12',notes:'Hanging or lying'}
     ]},
-    {id:'day3',title:'WORKOUT C',subtitle:'Full Body',exercises:[
-      {name:'Front Squats (Barbell or Dumbbell)',sets:4,reps:'4-8'},
-      {name:'Dumbbell Bench Press',sets:4,reps:'4-8'},
-      {name:'Seated Rows (Cable or Machine)',sets:3,reps:'4-8'},
-      {name:'Arnold Press (Dumbbell)',sets:3,reps:'4-8'},
-      {name:'Good Mornings or Hamstring Curls',sets:3,reps:'4-8'},
-      {name:'Bicycle Crunches (Optional Core)',sets:3,reps:'10-15/side'}
+    {id:'day3',title:'WORKOUT C',subtitle:'Full Body — Compound + Core',notes:'Rest: 60-90 sec between sets for hypertrophy, 2-3 min for main compound lifts. Always warm up with 5-10 min cardio + dynamic stretching.',exercises:[
+      {name:'Front Squats (Barbell or Dumbbell)',sets:4,reps:'4-8',notes:'Variation for emphasis'},
+      {name:'Dumbbell Bench Press',sets:4,reps:'4-8',notes:'Flat or slight incline'},
+      {name:'Seated Rows (Cable or Machine)',sets:3,reps:'4-8',notes:'Squeeze at top'},
+      {name:'Arnold Press (Dumbbell)',sets:3,reps:'4-8',notes:'Rotational movement'},
+      {name:'Good Mornings or Hamstring Curls',sets:3,reps:'4-8',notes:'Light weight for form'},
+      {name:'Bicycle Crunches (Optional Core)',sets:3,reps:'10-15/side',notes:'Alternate sides'}
     ]}
   ]}
 ];
@@ -457,3 +457,70 @@ function getDailyMissions(dateStr,cls){
   return picked;
 }
 function getTodayStr(){const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')}
+
+// ═══════════ EXERCISE LIBRARY ═══════════
+const EXERCISE_LIBRARY=[
+  // ── CHEST ──
+  {name:'Barbell Bench Press',group:'Chest',tags:['compound','push'],reps:'6-10',cues:['Retract shoulder blades, arch slightly','Drive feet into floor, lower to mid-chest','Control the descent — 2 sec down, explosive up'],yt:'barbell+bench+press+form'},
+  {name:'Incline Dumbbell Press',group:'Chest',tags:['compound','push'],reps:'8-12',cues:['30-45° incline — not too steep','Squeeze at the top, slow lowering phase','Dumbbells in line with upper chest'],yt:'incline+dumbbell+press+form+eugene+teo'},
+  {name:'Dumbbell Floor Press',group:'Chest',tags:['compound','push'],reps:'8-12',cues:['Elbows touch floor for a brief pause','Joint-friendly chest builder','Great for lockout strength'],yt:'dumbbell+floor+press+form'},
+  {name:'Cable Flyes',group:'Chest',tags:['isolation','push'],reps:'12-15',cues:['Slight bend in elbows throughout','Think "hugging a tree"','Squeeze hard at peak contraction'],yt:'cable+flyes+form+eugene+teo'},
+  {name:'Push-Ups',group:'Chest',tags:['compound','bodyweight','push'],reps:'10-20',cues:['Hands shoulder-width, body in a straight line','Full range of motion — chest to floor','Squeeze chest at the top'],yt:'push+ups+proper+form'},
+  {name:'Dips (Chest)',group:'Chest',tags:['compound','bodyweight','push'],reps:'8-12',cues:['Lean forward for chest emphasis','Lower until shoulders are below elbows','Add weight once bodyweight is easy'],yt:'chest+dips+form+eugene+teo'},
+  // ── BACK ──
+  {name:'Barbell Row',group:'Back',tags:['compound','pull'],reps:'6-10',cues:['Hinge at hips, flat back, ~45° torso angle','Pull to lower chest/upper abs','Squeeze shoulder blades at the top'],yt:'barbell+row+form+eugene+teo'},
+  {name:'Pull-Ups',group:'Back',tags:['compound','bodyweight','pull'],reps:'5-12',cues:['Full dead hang at bottom, chin over bar at top','Initiate by depressing shoulder blades','Use bands for assistance if needed'],yt:'pull+ups+form+tutorial'},
+  {name:'Lat Pulldown',group:'Back',tags:['compound','pull'],reps:'8-12',cues:['Slight lean back, pull to upper chest','Squeeze lats — think "elbows to pockets"','Full stretch at the top, control the return'],yt:'lat+pulldown+form+eugene+teo'},
+  {name:'Seated Cable Row',group:'Back',tags:['compound','pull'],reps:'8-12',cues:['Chest up, pull to lower ribcage','Squeeze at peak for 1 sec','Don\'t lean too far forward or back'],yt:'seated+cable+row+form+eugene+teo'},
+  {name:'Dumbbell Row',group:'Back',tags:['compound','pull'],reps:'8-12',cues:['Knee and hand on bench for support','Row to hip, not to chest','Control the negative — no swinging'],yt:'dumbbell+row+form'},
+  {name:'Face Pulls',group:'Back',tags:['isolation','pull'],reps:'15-20',cues:['High cable, rope attachment','Pull to forehead, externally rotate','Great for posture and shoulder health'],yt:'face+pulls+form+jeff+nippard'},
+  {name:'Chest-Supported Row',group:'Back',tags:['compound','pull'],reps:'8-12',cues:['Incline bench support removes low back stress','Great for strict pulling form','Squeeze at top, full stretch at bottom'],yt:'chest+supported+row+form+eugene+teo'},
+  // ── SHOULDERS ──
+  {name:'Overhead Press',group:'Shoulders',tags:['compound','push'],reps:'5-8',cues:['Bar starts at front rack position','Brace core hard, press straight up','Lockout overhead, head through the window'],yt:'overhead+press+form+eugene+teo'},
+  {name:'Dumbbell Shoulder Press',group:'Shoulders',tags:['compound','push'],reps:'8-12',cues:['Seated or standing, dumbbells at shoulder height','Press up and slightly inward','Control the descent'],yt:'dumbbell+shoulder+press+form'},
+  {name:'Arnold Press',group:'Shoulders',tags:['compound','push'],reps:'8-12',cues:['Start palms facing you, rotate as you press','Full rotational range of motion','Great for all three delt heads'],yt:'arnold+press+form+tutorial'},
+  {name:'Lateral Raises',group:'Shoulders',tags:['isolation'],reps:'12-20',cues:['Slight bend in elbows, raise to shoulder height','Lead with elbows, not hands','Light weight — ego check this one'],yt:'lateral+raises+form+eugene+teo'},
+  {name:'Rear Delt Fly',group:'Shoulders',tags:['isolation','pull'],reps:'12-15',cues:['Bent over or chest-supported','Think "pouring water" with pinkies up','Most neglected muscle — prioritize it'],yt:'rear+delt+fly+form'},
+  // ── ARMS ──
+  {name:'Barbell Curl',group:'Biceps',tags:['isolation'],reps:'8-12',cues:['Elbows pinned to sides','Full stretch at bottom, squeeze at top','Don\'t swing — reduce weight if needed'],yt:'barbell+curl+form'},
+  {name:'Hammer Curls',group:'Biceps',tags:['isolation'],reps:'10-15',cues:['Neutral grip — thumbs up','Works brachialis for arm thickness','Alternate or simultaneous'],yt:'hammer+curls+form'},
+  {name:'Incline Dumbbell Curl',group:'Biceps',tags:['isolation'],reps:'10-12',cues:['Incline bench puts bicep on stretch','Full range of motion is key','Lighter weight than standing curls'],yt:'incline+dumbbell+curl+form+eugene+teo'},
+  {name:'Tricep Pushdowns',group:'Triceps',tags:['isolation','push'],reps:'10-15',cues:['Elbows locked at sides','Full extension at bottom, squeeze','Rope or bar attachment both work'],yt:'tricep+pushdowns+form'},
+  {name:'Skull Crushers',group:'Triceps',tags:['isolation','push'],reps:'8-12',cues:['Lower to forehead or behind head','Elbows stay pointed at ceiling','EZ bar is easier on wrists'],yt:'skull+crushers+form'},
+  {name:'Overhead Tricep Extension',group:'Triceps',tags:['isolation','push'],reps:'10-15',cues:['Cable or dumbbell behind head','Full stretch at bottom','Elbows close to ears'],yt:'overhead+tricep+extension+form'},
+  // ── QUADS ──
+  {name:'Barbell Back Squat',group:'Quads',tags:['compound'],reps:'4-8',cues:['Bar on upper traps, brace core hard','Break at hips and knees simultaneously','Drive through full foot, knees track toes'],yt:'barbell+squat+form+eugene+teo'},
+  {name:'Front Squat',group:'Quads',tags:['compound'],reps:'6-10',cues:['Bar in front rack or cross-arm grip','Upright torso — more quad dominant','Elbows high throughout'],yt:'front+squat+form+eugene+teo'},
+  {name:'Goblet Squat',group:'Quads',tags:['compound'],reps:'8-12',cues:['Hold dumbbell at chest level','Great for learning squat mechanics','Elbows between knees at bottom'],yt:'goblet+squat+form'},
+  {name:'Leg Press',group:'Quads',tags:['compound'],reps:'8-15',cues:['Feet shoulder-width on platform','Full range — don\'t cut it short','Never lock knees at the top'],yt:'leg+press+form'},
+  {name:'Bulgarian Split Squat',group:'Quads',tags:['compound','unilateral'],reps:'8-12/leg',cues:['Rear foot elevated on bench','Most of the weight on front leg','Great for fixing imbalances'],yt:'bulgarian+split+squat+form+eugene+teo'},
+  {name:'Leg Extension',group:'Quads',tags:['isolation'],reps:'10-15',cues:['Full extension at top, squeeze quad','Control the negative','Good finisher for quad pump'],yt:'leg+extension+form'},
+  // ── HAMSTRINGS & GLUTES ──
+  {name:'Romanian Deadlift',group:'Hamstrings',tags:['compound','pull'],reps:'6-10',cues:['Hinge at hips, slight knee bend','Bar stays close to legs','Feel the stretch in hamstrings, squeeze glutes at top'],yt:'romanian+deadlift+form+eugene+teo'},
+  {name:'Conventional Deadlift',group:'Hamstrings',tags:['compound','pull'],reps:'3-6',cues:['Bar over mid-foot, grip just outside knees','Brace core, push floor away','Lockout with glutes — don\'t hyperextend'],yt:'deadlift+form+eugene+teo'},
+  {name:'Hip Thrust',group:'Glutes',tags:['compound'],reps:'8-12',cues:['Upper back on bench, bar across hips','Drive through heels, squeeze glutes hard at top','Chin tucked, ribs down'],yt:'hip+thrust+form+eugene+teo'},
+  {name:'Leg Curl',group:'Hamstrings',tags:['isolation'],reps:'10-15',cues:['Lying or seated — both effective','Full stretch at bottom, curl all the way','Control the eccentric'],yt:'leg+curl+form'},
+  {name:'Good Mornings',group:'Hamstrings',tags:['compound'],reps:'8-12',cues:['Bar on upper back, hinge at hips','Light weight — this is a stretch movement','Keep slight knee bend'],yt:'good+mornings+form'},
+  // ── CORE ──
+  {name:'Plank',group:'Core',tags:['isometric','bodyweight'],reps:'30-60s',cues:['Straight line from head to heels','Brace like someone\'s about to punch your gut','Don\'t let hips sag or pike up'],yt:'plank+proper+form'},
+  {name:'Hanging Leg Raise',group:'Core',tags:['bodyweight'],reps:'10-15',cues:['Dead hang, raise legs to parallel','Posterior pelvic tilt at the top','Slow descent — no swinging'],yt:'hanging+leg+raise+form'},
+  {name:'Cable Crunch',group:'Core',tags:['isolation'],reps:'12-15',cues:['Kneel facing cable, rope behind head','Crunch ribs toward hips','Exhale hard at peak contraction'],yt:'cable+crunch+form'},
+  {name:'Ab Wheel Rollout',group:'Core',tags:['bodyweight'],reps:'8-12',cues:['Start on knees, extend as far as you can control','Brace hard — don\'t let low back sag','Build up to standing rollouts'],yt:'ab+wheel+rollout+form'},
+  {name:'Russian Twist',group:'Core',tags:['bodyweight'],reps:'15-20/side',cues:['Lean back slightly, feet off ground','Rotate torso — not just arms','Add weight for more challenge'],yt:'russian+twist+form'},
+  {name:'Bicycle Crunch',group:'Core',tags:['bodyweight'],reps:'15-20/side',cues:['Opposite elbow to knee','Fully extend the non-working leg','Slow and controlled — not a speed race'],yt:'bicycle+crunch+form'},
+  // ── FULL BODY / COMPOUND ──
+  {name:'Power Clean',group:'Full Body',tags:['compound','olympic'],reps:'3-5',cues:['Triple extension — hips, knees, ankles','Catch in front rack position','Learn with a coach if possible'],yt:'power+clean+form+tutorial'},
+  {name:'Trap Bar Deadlift',group:'Full Body',tags:['compound'],reps:'5-8',cues:['Neutral grip, stand in center of trap bar','More quad-friendly than conventional','Great for athletes and beginners'],yt:'trap+bar+deadlift+form+eugene+teo'},
+  {name:'Farmers Walk',group:'Full Body',tags:['compound','carry'],reps:'30-40m',cues:['Heavy dumbbells or farmer handles','Tall posture, engaged core, steady steps','Builds grip, core, traps, everything'],yt:'farmers+walk+form'},
+  {name:'Kettlebell Swing',group:'Full Body',tags:['compound','conditioning'],reps:'15-20',cues:['Hinge — not a squat','Explosive hip snap drives the bell up','Arms are just along for the ride'],yt:'kettlebell+swing+form+eugene+teo'},
+  {name:'Burpees',group:'Full Body',tags:['bodyweight','conditioning'],reps:'10-15',cues:['Chest to floor, explosive jump at top','Scale by removing the push-up or jump','Great for conditioning, terrible for fun'],yt:'burpees+proper+form'},
+  // ── CALVES ──
+  {name:'Standing Calf Raise',group:'Calves',tags:['isolation'],reps:'12-20',cues:['Full stretch at bottom, pause at top','Straight legs for gastrocnemius','Train calves more than you think'],yt:'standing+calf+raise+form'},
+  {name:'Seated Calf Raise',group:'Calves',tags:['isolation'],reps:'12-20',cues:['Bent knee targets soleus muscle','Full range of motion — both directions','Slow eccentrics for growth'],yt:'seated+calf+raise+form'},
+  // ── CONDITIONING ──
+  {name:'Battle Ropes',group:'Conditioning',tags:['cardio'],reps:'30s',cues:['Alternating waves or slams','Keep core braced, slight squat stance','Full arm extension on each wave'],yt:'battle+ropes+workout'},
+  {name:'Sled Push',group:'Conditioning',tags:['cardio','compound'],reps:'30-40m',cues:['Low body position, drive through legs','Arms locked out on handles','Scale weight for speed vs. strength'],yt:'sled+push+form'},
+  {name:'Box Jumps',group:'Conditioning',tags:['plyometric'],reps:'5-8',cues:['Land softly with bent knees','Step down — don\'t jump down','Focus on explosive hip extension'],yt:'box+jumps+form+tutorial'},
+  {name:'Sprint Intervals',group:'Conditioning',tags:['cardio'],reps:'30s on/60s off',cues:['6-8 rounds, full effort on sprints','Walk or light jog during rest','Warm up properly first'],yt:'sprint+interval+training'}
+];
+const LIBRARY_GROUPS=[...new Set(EXERCISE_LIBRARY.map(e=>e.group))];

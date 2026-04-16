@@ -104,6 +104,11 @@ img{display:block}
 .ex-header{display:flex;align-items:center;gap:7px;margin-bottom:.45rem}
 .ex-num{font-family:var(--font-mono);color:var(--accent);font-size:.68rem;background:var(--surface2);border-radius:5px;padding:2px 6px;flex-shrink:0}
 .ex-name{font-weight:700;font-size:.85rem;flex:1;min-width:0;line-height:1.3}
+.ex-notes{font-size:.7rem;color:var(--muted);font-style:italic;padding:0 .2rem;margin:-2px 0 6px 0;line-height:1.4}
+.day-subtitle{font-size:.72rem;color:var(--muted);margin-bottom:.5rem;font-style:italic}
+.day-notes-section{margin-top:.6rem;padding-top:.5rem;border-top:1px dashed var(--border)}
+.day-notes{font-size:.74rem;color:var(--muted);line-height:1.5;padding:.5rem .6rem;background:var(--surface);border:1px solid var(--border);border-radius:8px;margin-bottom:.4rem}
+.day-notes strong{color:var(--gold);font-size:.65rem;font-family:var(--font-mono);letter-spacing:1px}
 .ex-edit{width:28px;height:28px;border:1px solid var(--border);background:var(--surface2);color:var(--dim);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:.7rem;flex-shrink:0}
 .ex-edit:hover{color:var(--text);border-color:var(--accent)}
 .sets-grid{display:flex;flex-direction:column;gap:4px}
@@ -391,6 +396,35 @@ input[type=checkbox]:checked::after{content:'✓';position:absolute;color:#fff;f
 
 /* ── TDEE Maintenance Display ── */
 .tdee-maintenance{font-family:var(--font-mono);font-size:.68rem;color:var(--muted);text-align:center;margin-bottom:.5rem;padding:4px 8px;background:var(--surface2);border-radius:6px}
+
+/* ── Recent Foods ── */
+.recent-list{max-height:50vh;overflow-y:auto}
+.recent-item{display:flex;align-items:center;gap:.5rem;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:.6rem .7rem;margin-bottom:.35rem;cursor:pointer;transition:all .15s}
+.recent-item:hover,.recent-item:active{border-color:var(--accent);background:var(--surface2)}
+.recent-quick{width:36px;height:36px;display:flex;align-items:center;justify-content:center;background:var(--green);border-radius:8px;font-size:1rem;flex-shrink:0;cursor:pointer;transition:all .15s}
+.recent-quick:hover{background:var(--accent)}
+
+/* ── AI Coach Chat ── */
+.coach-header{display:flex;align-items:center;gap:.7rem;padding:.7rem .5rem;border-bottom:1px solid var(--border);margin-bottom:.5rem}
+.coach-avatar{width:40px;height:40px;border-radius:10px;background:linear-gradient(135deg,var(--accent),var(--accent2));display:flex;align-items:center;justify-content:center;font-size:1.2rem;flex-shrink:0}
+.coach-name{font-family:var(--font-display);font-size:.95rem;letter-spacing:1px}
+.coach-sub{font-size:.65rem;color:var(--muted);margin-top:2px}
+.coach-messages{max-height:52vh;min-height:200px;overflow-y:auto;padding:.3rem;margin-bottom:.5rem;display:flex;flex-direction:column;gap:.4rem}
+.coach-bubble{background:linear-gradient(135deg,rgba(123,92,255,.12),rgba(251,191,36,.04))!important;border:1px solid var(--accent)!important}
+.coach-bubble strong{color:var(--gold)}
+.coach-typing{display:inline-flex!important;gap:4px;align-items:center;padding:12px 14px!important}
+.coach-typing span{width:6px;height:6px;border-radius:50%;background:var(--accent);animation:typing-dot 1.2s infinite ease-in-out}
+.coach-typing span:nth-child(2){animation-delay:.2s}
+.coach-typing span:nth-child(3){animation-delay:.4s}
+@keyframes typing-dot{0%,60%,100%{opacity:.3;transform:translateY(0)}30%{opacity:1;transform:translateY(-3px)}}
+.coach-suggestions{padding:.5rem 0;border-top:1px dashed var(--border)}
+.coach-sug-label{font-family:var(--font-mono);font-size:.6rem;color:var(--dim);letter-spacing:1px;margin-bottom:.4rem;text-align:center}
+.coach-sug-chips{display:flex;flex-wrap:wrap;gap:6px;justify-content:center}
+.coach-chip{background:var(--surface);border:1px solid var(--border);color:var(--text);padding:7px 12px;border-radius:18px;font-size:.72rem;cursor:pointer;transition:all .15s}
+.coach-chip:hover,.coach-chip:active{border-color:var(--accent);color:var(--accent2);background:var(--surface2)}
+.coach-input-row{display:flex;gap:6px;align-items:flex-end;margin-top:.5rem;padding-top:.5rem;border-top:1px solid var(--border)}
+.coach-input{flex:1;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:10px;padding:10px 12px;font-size:.85rem;font-family:var(--font-body);outline:none;resize:none;min-height:40px;max-height:100px;line-height:1.4}
+.coach-input:focus{border-color:var(--accent)}
 .food-actions{display:flex;gap:6px;margin:.6rem 0}
 .food-btn{flex:1;padding:10px 8px;border:1px solid var(--border);background:var(--surface);color:var(--text);border-radius:9px;font-size:.74rem;font-weight:600;transition:all .15s}
 .food-btn:hover{border-color:var(--accent);color:var(--accent)}
@@ -708,3 +742,31 @@ input[type=checkbox]:checked::after{content:'✓';position:absolute;color:#fff;f
 
 /* ── Achievement Filters ── */
 .ach-filters{margin-bottom:.6rem}
+
+/* ── Exercise Library ── */
+.lib-search{margin-bottom:.5rem}
+.lib-filters{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:.5rem}
+.lib-count{font-family:var(--font-mono);font-size:.62rem;color:var(--dim);margin-bottom:.5rem;letter-spacing:1px}
+.lib-card{background:var(--surface);border:1px solid var(--border);border-radius:11px;margin-bottom:.4rem;overflow:hidden;cursor:pointer;transition:border-color .15s}
+.lib-card:active{border-color:var(--accent)}
+.lib-card-header{display:flex;align-items:center;justify-content:space-between;padding:.7rem .8rem}
+.lib-card-info{flex:1;min-width:0}
+.lib-card-name{font-weight:700;font-size:.85rem}
+.lib-card-meta{font-size:.68rem;color:var(--muted);margin-top:1px}
+.lib-group{font-weight:600;font-family:var(--font-mono);font-size:.6rem;letter-spacing:1px}
+.lib-card-arrow{color:var(--dim);font-size:.7rem;flex-shrink:0;margin-left:8px}
+.lib-card-body{max-height:0;overflow:hidden;transition:max-height .3s ease;padding:0 .8rem}
+.lib-cues{margin-bottom:.5rem}
+.lib-cue{font-size:.74rem;color:var(--text);line-height:1.5;padding:2px 0}
+.lib-cue::before{content:'';color:var(--accent2)}
+.lib-tags{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:.5rem}
+.lib-tag{font-family:var(--font-mono);font-size:.55rem;color:var(--muted);background:var(--surface2);padding:2px 8px;border-radius:10px;letter-spacing:1px;text-transform:uppercase}
+.lib-actions{display:flex;gap:6px;margin-bottom:.6rem}
+.lib-btn{flex:1;padding:8px;border-radius:8px;font-size:.74rem;font-weight:700;text-align:center;text-decoration:none;cursor:pointer;transition:all .15s}
+.lib-btn.video{background:rgba(248,113,113,.1);border:1px solid var(--red);color:var(--red)}
+.lib-btn.video:hover{background:rgba(248,113,113,.2)}
+.lib-btn.add{background:rgba(52,211,153,.1);border:1px solid var(--green);color:var(--green)}
+.lib-btn.add:hover{background:rgba(52,211,153,.2)}
+
+/* ── Friend Request Badge ── */
+.friend-badge{position:absolute;top:-6px;right:-8px;background:var(--red);color:#fff;font-size:.55rem;font-weight:800;font-family:var(--font-mono);min-width:16px;height:16px;border-radius:8px;display:flex;align-items:center;justify-content:center;padding:0 4px;line-height:1}

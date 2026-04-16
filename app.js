@@ -221,7 +221,7 @@ function initApp(){
   let tapCount=0,tapTimer=null;
   const logo=document.querySelector('.top-bar h1');
   if(logo)logo.addEventListener('click',()=>{tapCount++;clearTimeout(tapTimer);tapTimer=setTimeout(()=>tapCount=0,2000);if(tapCount>=10){unlockAch('secret_founder');toast('🔑 You found it...');tapCount=0}});
-  document.querySelectorAll('.nav-item').forEach(n=>n.addEventListener('click',()=>switchPage(n.dataset.page)));updateTopBar();syncAcceptedRequests();checkUnreadChats();checkPassiveAchievements();initNotifications();
+  document.querySelectorAll('.nav-item').forEach(n=>n.addEventListener('click',()=>switchPage(n.dataset.page)));updateTopBar();syncAcceptedRequests();checkUnreadChats();checkPassiveAchievements();initNotifications();checkFriendRequests();
   // Handle PWA shortcut ?page= param
   const params=new URLSearchParams(window.location.search);const startPage=params.get('page');
   switchPage(startPage&&['train','missions','nutrition','chat','ranks','profile'].includes(startPage)?startPage:'profile');
@@ -285,8 +285,8 @@ function switchSubTab(page,tab){
   const sp=$('sp-'+tab);if(sp)sp.classList.add('active');
   if(tab==='log')renderLog();if(tab==='rankinfo')$('rankInfoContent').innerHTML=renderRankInfo();if(tab==='leaderboard')renderLeaderboard();
   if(tab==='aicoach')renderAICoach();if(tab==='friendchat')renderChatList();
-  if(tab==='friends')renderFriendsPage();if(tab==='mystats')renderProfile();
-  if(tab==='updates')renderUpdatesTab();
+  if(tab==='friends'){renderFriendsPage();pendingFriendReqs=0;updateFriendBadge()};if(tab==='mystats')renderProfile();
+  if(tab==='updates')renderUpdatesTab();if(tab==='library')renderLibrary();
 }
 
 // ═══════════ DAILY MISSIONS ═══════════
@@ -547,24 +547,40 @@ async function renameWorkoutDay(){
   await saveUser({program:prog});
   buildWorkout();toast('Day renamed!');
 }
+async function editDayNotes(){
+  const prog=userData.program||[];const day=prog.find(d=>d.id===currentDay);if(!day)return;
+  const notes=prompt('Day notes (rest times, warm-up reminders, etc.):',day.notes||'');
+  if(notes===null)return; // cancelled
+  day.notes=notes.trim();
+  await saveUser({program:prog});
+  renderDay();toast(notes?'Notes saved!':'Notes cleared.');
+}
 function switchDay(id){currentDay=id;document.querySelectorAll('.dtab').forEach(t=>t.classList.toggle('active',t.dataset.d===id));renderDay();updateLogBtn()}
 function renderDay(){const prog=userData.program||[],day=prog.find(d=>d.id===currentDay);if(!day)return;const di=prog.indexOf(day);let h='';
-  day.exercises.forEach((ex,ei)=>{h+=`<div class="exercise"><div class="ex-header"><span class="ex-num">${ei+1}</span><span class="ex-name">${ex.name}</span><button class="ex-edit" onclick="openEdit(${di},${ei})">✏️</button></div><div class="sets-grid">`;
+  if(day.subtitle)h+=`<div class="day-subtitle">${esc(day.subtitle)}</div>`;
+  day.exercises.forEach((ex,ei)=>{h+=`<div class="exercise"><div class="ex-header"><span class="ex-num">${ei+1}</span><span class="ex-name">${ex.name}</span><button class="ex-edit" onclick="openEdit(${di},${ei})">✏️</button></div>`;
+    if(ex.notes)h+=`<div class="ex-notes">${esc(ex.notes)}</div>`;
+    h+=`<div class="sets-grid">`;
     for(let s=0;s<ex.sets;s++){const wK=day.id+'_e'+ei+'_s'+s+'_w',rK=day.id+'_e'+ei+'_s'+s+'_r',cK=day.id+'_e'+ei+'_s'+s+'_c';
       if(ex.isTime)h+=`<div class="set-row"><label>S${s+1}</label><input type="number" id="${rK}" placeholder="sec" value="${savedInputs[rK]||''}"><span class="sep">sec</span><input type="checkbox" id="${cK}" ${savedInputs[cK]?'checked':''}><span class="target">${ex.reps}</span></div>`;
       else h+=`<div class="set-row"><label>S${s+1}</label><input type="number" id="${wK}" placeholder="lbs" value="${savedInputs[wK]||''}"><span class="sep">×</span><input type="number" id="${rK}" placeholder="reps" value="${savedInputs[rK]||''}"><input type="checkbox" id="${cK}" ${savedInputs[cK]?'checked':''}><span class="target">${ex.reps}</span></div>`}
     h+='</div></div>'});
   h+=`<button class="add-ex" onclick="openAdd(${di})">+ Add Exercise</button>`;
+  // Day notes
+  h+=`<div class="day-notes-section">`;
+  if(day.notes)h+=`<div class="day-notes"><strong>Notes:</strong> ${esc(day.notes)}</div>`;
+  h+=`<button class="day-manage-btn" onclick="editDayNotes()" style="font-size:.72rem">📝 ${day.notes?'Edit':'Add'} Day Notes</button>`;
+  h+=`</div>`;
   h+=`<div class="day-manage"><button class="day-manage-btn" onclick="renameWorkoutDay()">✏️ Rename Day</button><button class="day-manage-btn" style="color:var(--red)" onclick="removeWorkoutDay()">🗑 Remove Day</button></div>`;
   $('dayContent').innerHTML=h}
 
-function openEdit(di,ei){editTarget={di,ei};const ex=userData.program[di].exercises[ei];$('editName').value=ex.name;$('editSets').value=ex.sets;$('editReps').value=ex.reps;$('editModal').classList.add('open')}
+function openEdit(di,ei){editTarget={di,ei};const ex=userData.program[di].exercises[ei];$('editName').value=ex.name;$('editSets').value=ex.sets;$('editReps').value=ex.reps;$('editNotes').value=ex.notes||'';$('editModal').classList.add('open')}
 function closeEdit(){$('editModal').classList.remove('open')}
-async function saveEdit(){if(!editTarget)return;captureInputs();const ex=userData.program[editTarget.di].exercises[editTarget.ei];ex.name=$('editName').value.trim()||ex.name;ex.sets=parseInt($('editSets').value)||ex.sets;ex.reps=$('editReps').value.trim()||ex.reps;ex.isTime=/sec|s$/i.test(ex.reps);await saveUser({program:userData.program});closeEdit();renderDay();unlockAch('customize');toast('Updated!')}
+async function saveEdit(){if(!editTarget)return;captureInputs();const ex=userData.program[editTarget.di].exercises[editTarget.ei];ex.name=$('editName').value.trim()||ex.name;ex.sets=parseInt($('editSets').value)||ex.sets;ex.reps=$('editReps').value.trim()||ex.reps;ex.notes=$('editNotes').value.trim();ex.isTime=/sec|s$/i.test(ex.reps);await saveUser({program:userData.program});closeEdit();renderDay();unlockAch('customize');toast('Updated!')}
 async function deleteEx(){if(!editTarget||!confirm('Remove?'))return;captureInputs();userData.program[editTarget.di].exercises.splice(editTarget.ei,1);await saveUser({program:userData.program});closeEdit();renderDay();toast('Removed.')}
-function openAdd(di){addDayIdx=di;$('addName').value='';$('addSets').value=3;$('addReps').value='';$('addModal').classList.add('open')}
+function openAdd(di){addDayIdx=di;$('addName').value='';$('addSets').value=3;$('addReps').value='';$('addNotes').value='';$('addModal').classList.add('open')}
 function closeAdd(){$('addModal').classList.remove('open')}
-async function saveAdd(){if(addDayIdx===null)return;const name=$('addName').value.trim();if(!name){toast('Enter a name');return}captureInputs();userData.program[addDayIdx].exercises.push({name,sets:parseInt($('addSets').value)||3,reps:$('addReps').value.trim()||'8-12',isTime:/sec|s$/i.test($('addReps').value)});await saveUser({program:userData.program});closeAdd();renderDay();toast('Added!')}
+async function saveAdd(){if(addDayIdx===null)return;const name=$('addName').value.trim();if(!name){toast('Enter a name');return}captureInputs();userData.program[addDayIdx].exercises.push({name,sets:parseInt($('addSets').value)||3,reps:$('addReps').value.trim()||'8-12',notes:$('addNotes').value.trim(),isTime:/sec|s$/i.test($('addReps').value)});await saveUser({program:userData.program});closeAdd();renderDay();toast('Added!')}
 function captureInputs(){document.querySelectorAll('#dayContent input[type=number]').forEach(el=>{if(el.id)savedInputs[el.id]=el.value});document.querySelectorAll('#dayContent input[type=checkbox]').forEach(el=>{if(el.id)savedInputs[el.id]=el.checked})}
 async function saveInputs(){captureInputs();await db.collection('users').doc(U.uid).collection('meta').doc('inputs').set({data:savedInputs});toast('Saved!')}
 function clearInputs(){if(!confirm('Clear inputs?'))return;document.querySelectorAll('#dayContent input[type=number]').forEach(el=>el.value='');document.querySelectorAll('#dayContent input[type=checkbox]').forEach(el=>el.checked=false);toast('Cleared.')}
@@ -1322,4 +1338,89 @@ function scheduleTrainReminder(){
 function sendNotif(title,body){
   if(notifPermission!=='granted')return;
   try{new Notification(title,{body,icon:'icons/icon-192x192.png'})}catch(e){}
+}
+
+// ═══════════ EXERCISE LIBRARY ═══════════
+let libFilter='All',libSearch='';
+function renderLibrary(){
+  const el=$('libraryContent');if(!el)return;
+  let h=`<div class="page-title">EXERCISE LIBRARY</div>
+  <div class="page-sub">Learn proper form — tap any exercise for tutorials</div>
+  <div class="lib-search"><input type="text" class="auth-input" placeholder="Search exercises..." value="${esc(libSearch)}" oninput="libSearch=this.value;renderLibrary()" style="margin:0"></div>
+  <div class="lib-filters">`;
+  h+=`<div class="log-filter${libFilter==='All'?' active':''}" onclick="libFilter='All';renderLibrary()">All</div>`;
+  LIBRARY_GROUPS.forEach(g=>{
+    h+=`<div class="log-filter${libFilter===g?' active':''}" onclick="libFilter='${g}';renderLibrary()">${g}</div>`;
+  });
+  h+=`</div>`;
+  // Filter exercises
+  let exs=EXERCISE_LIBRARY;
+  if(libFilter!=='All')exs=exs.filter(e=>e.group===libFilter);
+  if(libSearch.trim()){const q=libSearch.toLowerCase();exs=exs.filter(e=>e.name.toLowerCase().includes(q)||e.group.toLowerCase().includes(q)||(e.tags||[]).some(t=>t.includes(q)))}
+  h+=`<div class="lib-count">${exs.length} exercise${exs.length!==1?'s':''}</div>`;
+  exs.forEach(ex=>{
+    const groupColor={'Chest':'var(--red)','Back':'var(--green)','Shoulders':'var(--gold)','Biceps':'var(--cyan)','Triceps':'var(--accent2)','Quads':'var(--green)','Hamstrings':'var(--orange)','Glutes':'var(--accent)','Core':'var(--gold)','Full Body':'var(--cyan)','Calves':'var(--muted)','Conditioning':'var(--red)'}[ex.group]||'var(--muted)';
+    h+=`<div class="lib-card" onclick="toggleLibCard(this)">
+      <div class="lib-card-header">
+        <div class="lib-card-info">
+          <div class="lib-card-name">${ex.name}</div>
+          <div class="lib-card-meta"><span class="lib-group" style="color:${groupColor}">${ex.group}</span> · ${ex.reps}</div>
+        </div>
+        <span class="lib-card-arrow">▶</span>
+      </div>
+      <div class="lib-card-body">
+        <div class="lib-cues">${(ex.cues||[]).map(c=>'<div class="lib-cue">→ '+c+'</div>').join('')}</div>
+        <div class="lib-tags">${(ex.tags||[]).map(t=>'<span class="lib-tag">'+t+'</span>').join('')}</div>
+        <div class="lib-actions">
+          <a class="lib-btn video" href="https://www.youtube.com/results?search_query=${ex.yt||ex.name.replace(/ /g,'+')}" target="_blank" rel="noopener">📺 Watch Tutorial</a>
+          <button class="lib-btn add" onclick="event.stopPropagation();addFromLibrary('${ex.name.replace(/'/g,"\\'")}',${ex.reps.includes('s')?'true':'false'},'${(ex.reps||'').replace(/'/g,"\\'")}','${(ex.cues||[])[0]?ex.cues[0].replace(/'/g,"\\'"):''}')">➕ Add to Program</button>
+        </div>
+      </div>
+    </div>`;
+  });
+  if(!exs.length)h+=`<p style="color:var(--muted);font-size:.82rem;padding:1rem 0">No exercises found. Try a different search.</p>`;
+  el.innerHTML=h;
+}
+function toggleLibCard(card){
+  const body=card.querySelector('.lib-card-body');
+  const arrow=card.querySelector('.lib-card-arrow');
+  const isOpen=body.style.maxHeight&&body.style.maxHeight!=='0px';
+  // Close all others
+  document.querySelectorAll('.lib-card-body').forEach(b=>{b.style.maxHeight='0px';b.style.overflow='hidden'});
+  document.querySelectorAll('.lib-card-arrow').forEach(a=>a.textContent='▶');
+  if(!isOpen){body.style.maxHeight=body.scrollHeight+'px';body.style.overflow='visible';arrow.textContent='▼'}
+}
+async function addFromLibrary(name,isTime,reps,notes){
+  const prog=userData.program||[];if(!prog.length){toast('Create a program first');return}
+  const day=prog.find(d=>d.id===currentDay);if(!day){toast('Select a workout day first');return}
+  const di=prog.indexOf(day);
+  userData.program[di].exercises.push({name,sets:3,reps:reps||'8-12',isTime:!!isTime,notes:notes||''});
+  await saveUser({program:userData.program});
+  toast(name+' added to '+day.title+'!');
+}
+
+// ═══════════ FRIEND REQUEST BADGE ═══════════
+let pendingFriendReqs=0;
+async function checkFriendRequests(){
+  if(!U)return;
+  try{
+    const snap=await db.collection('friendRequests').where('to','==',U.uid).where('status','==','pending').get();
+    pendingFriendReqs=snap.size;
+    updateFriendBadge();
+    // Toast on login if there are pending requests
+    if(pendingFriendReqs>0){
+      const names=[];snap.forEach(d=>{const r=d.data();if(r.fromUsername)names.push('@'+r.fromUsername)});
+      if(names.length===1)toast('👋 Friend request from '+names[0]);
+      else if(names.length>1)toast('👋 '+pendingFriendReqs+' friend requests waiting!');
+    }
+  }catch(e){}
+}
+function updateFriendBadge(){
+  // Badge on Profile nav
+  const profileNav=document.querySelector('[data-page="profile"] .nav-icon');if(!profileNav)return;
+  let badge=profileNav.querySelector('.friend-badge');
+  if(pendingFriendReqs>0){
+    if(!badge){badge=document.createElement('span');badge.className='friend-badge';profileNav.appendChild(badge)}
+    badge.textContent=pendingFriendReqs>9?'9+':pendingFriendReqs;badge.style.display='';
+  }else{if(badge)badge.style.display='none'}
 }

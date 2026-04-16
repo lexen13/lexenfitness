@@ -100,6 +100,7 @@
   <div class="sub-tabs" id="trainTabs">
     <div class="stab active" data-st="workout" onclick="switchSubTab('train','workout')">Workout</div>
     <div class="stab" data-st="log" onclick="switchSubTab('train','log')">Log</div>
+    <div class="stab" data-st="library" onclick="switchSubTab('train','library')">Library</div>
   </div>
   <div class="sub-page active" id="sp-workout">
     <div class="page-title" id="workoutTitle">WORKOUT</div>
@@ -112,6 +113,9 @@
     <div class="page-title">EXERCISE LOG</div>
     <div class="page-sub">Weekly progression</div>
     <div id="logContent"></div>
+  </div>
+  <div class="sub-page" id="sp-library">
+    <div id="libraryContent"></div>
   </div>
 </div>
 
@@ -175,6 +179,7 @@
 <div class="m-field"><label>Name</label><input type="text" id="editName"></div>
 <div class="m-field"><label>Sets</label><input type="number" id="editSets" min="1" max="10"></div>
 <div class="m-field"><label>Target Reps</label><input type="text" id="editReps"></div>
+<div class="m-field"><label>Notes <span style="color:var(--dim);font-size:.6rem">(optional — coaching cues, tips)</span></label><input type="text" id="editNotes" placeholder="e.g. Focus on form, 2-sec pause at bottom"></div>
 <div class="m-actions"><button class="m-cancel" onclick="closeEdit()">Cancel</button><button class="m-delete" onclick="deleteEx()">🗑</button><button class="m-save-btn" onclick="saveEdit()">Save</button></div>
 </div></div>
 
@@ -182,6 +187,7 @@
 <div class="m-field"><label>Name</label><input type="text" id="addName" placeholder="e.g. Barbell Curl"></div>
 <div class="m-field"><label>Sets</label><input type="number" id="addSets" value="3" min="1" max="10"></div>
 <div class="m-field"><label>Target Reps</label><input type="text" id="addReps" placeholder="e.g. 10-12"></div>
+<div class="m-field"><label>Notes <span style="color:var(--dim);font-size:.6rem">(optional)</span></label><input type="text" id="addNotes" placeholder="e.g. Slow eccentric, squeeze at top"></div>
 <div class="m-actions"><button class="m-cancel" onclick="closeAdd()">Cancel</button><button class="m-save-btn" onclick="saveAdd()">Add</button></div>
 </div></div>
 
@@ -275,6 +281,12 @@
 
 <!-- MEAL COUNT MODAL -->
 <div class="modal-bg" id="mealCountModal"><div class="modal" style="max-width:300px"></div></div>
+
+<!-- RECENT FOODS MODAL -->
+<div class="modal-bg" id="recentFoodsModal"><div class="modal" style="max-height:80vh;overflow-y:auto"></div></div>
+
+<!-- RECENT SERVING MODAL -->
+<div class="modal-bg" id="recentServingModal"><div class="modal"></div></div>
 
 <!-- PROFILE CARD MODAL -->
 <div class="modal-bg" id="profileCardModal"><div class="modal" style="max-width:340px"></div></div>

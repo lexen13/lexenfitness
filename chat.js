@@ -172,148 +172,233 @@ function closeChat(){
 
 // ═══════════ AI COACH (Chat-style interface) ═══════════
 let coachHistory=[];
+let coachSending=false;
 
 function renderAICoach(){
   const el=$('aiCoachContent');if(!el)return;
   // Init with greeting if empty
   if(!coachHistory.length){
-    coachHistory.push({role:'coach',text:getMotivation()});
-    coachHistory.push({role:'coach',text:generateMainTip()});
+    coachHistory.push({role:'coach',text:getGreeting()});
   }
 
-  let h=`<div class="chat-header" style="border-bottom:none;padding-bottom:.3rem">
-    <div class="coach-avatar" style="width:32px;height:32px;font-size:1rem;border-radius:8px">🤖</div>
-    <span class="coach-name" style="font-size:.95rem">SYSTEM COACH</span>
+  let h=`<div class="coach-header">
+    <div class="coach-avatar">🤖</div>
+    <div><div class="coach-name">SYSTEM COACH</div><div class="coach-sub">Ask me anything about training, nutrition, or progress</div></div>
   </div>`;
 
   // Chat messages
-  h+=`<div class="chat-messages" id="coachMessages" style="max-height:45vh">`;
+  h+=`<div class="coach-messages" id="coachMessages">`;
   coachHistory.forEach(m=>{
     if(m.role==='coach'){
-      h+=`<div class="chat-msg them"><div class="chat-bubble" style="background:linear-gradient(135deg,rgba(123,92,255,.15),rgba(251,191,36,.05));border:1px solid var(--accent)">${m.text}</div></div>`;
+      h+=`<div class="chat-msg them"><div class="chat-bubble coach-bubble">${m.text}</div></div>`;
     }else{
       h+=`<div class="chat-msg me"><div class="chat-bubble">${esc(m.text)}</div></div>`;
     }
   });
+  if(coachSending){
+    h+=`<div class="chat-msg them"><div class="chat-bubble coach-bubble coach-typing"><span></span><span></span><span></span></div></div>`;
+  }
   h+=`</div>`;
 
-  // Quick question buttons
-  h+=`<div class="coach-questions">
-    <div class="coach-q-label">Ask me about:</div>
-    <div class="coach-q-btns">
-      <button onclick="askCoach('nutrition')">🍽️ What should I eat?</button>
-      <button onclick="askCoach('training')">🏋️ Training advice</button>
-      <button onclick="askCoach('progress')">📊 Am I on track?</button>
-      <button onclick="askCoach('recovery')">😴 Recovery tips</button>
-      <button onclick="askCoach('motivation')">🔥 Motivate me</button>
-    </div>
+  // Quick suggestion chips (shown on first render only)
+  if(coachHistory.length<=1){
+    h+=`<div class="coach-suggestions">
+      <div class="coach-sug-label">Try asking:</div>
+      <div class="coach-sug-chips">
+        <button class="coach-chip" onclick="askCoachQuick('What should I eat today?')">🍽️ What should I eat?</button>
+        <button class="coach-chip" onclick="askCoachQuick('What should I train?')">🏋️ What should I train?</button>
+        <button class="coach-chip" onclick="askCoachQuick('Am I on track?')">📊 Am I on track?</button>
+        <button class="coach-chip" onclick="askCoachQuick('I need motivation')">🔥 Motivate me</button>
+        <button class="coach-chip" onclick="askCoachQuick('How much protein should I eat?')">🥩 Protein needs</button>
+        <button class="coach-chip" onclick="askCoachQuick('Help me with recovery')">😴 Recovery tips</button>
+      </div>
+    </div>`;
+  }
+
+  // Input box (ALWAYS visible)
+  h+=`<div class="coach-input-row">
+    <textarea id="coachInput" class="coach-input" placeholder="Ask your coach anything..." rows="1" onkeydown="coachKeyDown(event)" oninput="autoGrowCoach(this)"></textarea>
+    <button class="chat-send-btn" onclick="sendCoachMessage()">➤</button>
   </div>`;
 
   el.innerHTML=h;
   const msgs=$('coachMessages');if(msgs)msgs.scrollTop=msgs.scrollHeight;
 }
 
-function askCoach(topic){
-  const labels={nutrition:'What should I eat today?',training:'What should I train?',progress:'Am I on track?',recovery:'Any recovery tips?',motivation:'I need motivation'};
-  coachHistory.push({role:'user',text:labels[topic]||topic});
-  coachHistory.push({role:'coach',text:generateCoachResponse(topic)});
-  renderAICoach();
+function coachKeyDown(e){
+  if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendCoachMessage()}
+}
+function autoGrowCoach(el){el.style.height='auto';el.style.height=Math.min(el.scrollHeight,100)+'px'}
+
+function askCoachQuick(text){
+  const input=$('coachInput');if(input)input.value=text;
+  sendCoachMessage();
 }
 
-function generateCoachResponse(topic){
-  const streak=calcStreak();const wc=workoutLog.length;const st=userData.stats||{};const prs=userData.prs||{};
+async function sendCoachMessage(){
+  const input=$('coachInput');if(!input)return;
+  const text=input.value.trim();if(!text||coachSending)return;
+  input.value='';input.style.height='auto';
+  coachHistory.push({role:'user',text});
+  coachSending=true;renderAICoach();
+  // Simulate thinking delay
+  await new Promise(r=>setTimeout(r,400+Math.random()*600));
+  const response=generateCoachResponse(text);
+  coachHistory.push({role:'coach',text:response});
+  coachSending=false;renderAICoach();
+}
+
+// ─── Intent detection from freeform text ───
+function detectIntent(text){
+  const t=text.toLowerCase();
+  // Nutrition keywords
+  if(/\b(eat|food|meal|nutrition|calorie|carb|fat|protein|macro|diet|cut|bulk|weight loss|weight gain|hungry)\b/.test(t)){
+    if(/\bprotein\b/.test(t))return'protein';
+    if(/\b(carb|rice|pasta|bread)\b/.test(t))return'carbs';
+    if(/\bfat\b/.test(t))return'fats';
+    if(/\b(cut|deficit|weight loss|lose weight|fat loss|shredded|lean)\b/.test(t))return'cutting';
+    if(/\b(bulk|surplus|gain|muscle|size|bigger)\b/.test(t))return'bulking';
+    return'nutrition';
+  }
+  // Training keywords
+  if(/\b(train|workout|lift|exercise|rep|set|gym|program|routine|split|push|pull|leg|chest|back|shoulder|arm|bench|squat|deadlift)\b/.test(t)){
+    if(/\b(squat|back squat|front squat)\b/.test(t))return'squat';
+    if(/\b(bench|bench press|chest press)\b/.test(t))return'bench';
+    if(/\b(deadlift|pull)\b/.test(t))return'deadlift';
+    if(/\b(rest day|rest|off day|active recovery)\b/.test(t))return'rest';
+    if(/\b(volume|sets|reps|how many)\b/.test(t))return'volume';
+    return'training';
+  }
+  // Recovery
+  if(/\b(sleep|recover|sore|rest|tired|fatigue|stretch|mobility|deload)\b/.test(t))return'recovery';
+  // Progress
+  if(/\b(progress|track|goal|rank|level|xp|streak|improve|plateau|stuck)\b/.test(t))return'progress';
+  // Motivation
+  if(/\b(motivat|lazy|quit|give up|can't|hard|struggle|pump me up|hype)\b/.test(t))return'motivation';
+  // PR / Strength
+  if(/\b(pr|personal record|max|1rm|strength|stronger)\b/.test(t))return'strength';
+  // Supplements
+  if(/\b(supplement|creatine|pre.?workout|protein powder|whey|caffeine|vitamin|omega|fish oil)\b/.test(t))return'supplements';
+  // Water/hydration
+  if(/\b(water|hydrat|drink|thirst)\b/.test(t))return'hydration';
+  // Greeting
+  if(/^(hi|hey|hello|yo|sup|what'?s up)\b/.test(t))return'greeting';
+  // Thanks
+  if(/\b(thanks|thank you|thx|appreciate)\b/.test(t))return'thanks';
+  return'unknown';
+}
+
+function generateCoachResponse(userText){
+  const intent=detectIntent(userText);
+  const streak=calcWeeklyStreak();const wc=workoutLog.length;
+  const st=userData.stats||{};const prs=userData.prs||{};
   const goal=userData.goal||'General Fitness';const cls=userData.class||'';
   const t=calcTDEE();const today=getTodayStr();
-  const todayFood=(userData.foodLog&&userData.foodLog[today])||[];
-  const todayCal=todayFood.reduce((s,f)=>s+(f.cal||0),0);
-  const todayP=todayFood.reduce((s,f)=>s+(f.protein||0),0);
+  const dayLog=typeof getDayLog==='function'?getDayLog(today):{meals:{}};
+  const todayTotals=typeof getDayTotals==='function'?getDayTotals(dayLog):{cal:0,p:0};
   const rank=getEffectiveRank();
+  const lastW=workoutLog[0];const hoursSince=lastW?((Date.now()-new Date(lastW.date).getTime())/3600000):999;
 
-  if(topic==='nutrition'){
-    if(!t)return"I don't have your body stats yet. Go to <strong>Profile → Settings</strong> and add your height, weight, and age. Then I can give you real numbers.";
-    const calLeft=t.target-todayCal;const pLeft=t.proteinG-todayP;
-    if(!todayFood.length)return`Your target today is <strong>${t.target} cal</strong> with <strong>${t.proteinG}g protein</strong>. You haven't logged anything yet — start tracking! For ${goal.toLowerCase()}, protein timing matters. Hit at least 30g protein per meal across 3-4 meals.`;
-    if(calLeft>500)return`You've eaten <strong>${todayCal} cal</strong> so far — still <strong>${calLeft} cal</strong> to go. You need <strong>${pLeft}g more protein</strong>. ${goal.includes('Muscle')?"Don't skip meals — you need the surplus to grow.":"Keep it clean — lean protein, complex carbs, healthy fats."}`;
-    if(calLeft<-200)return`⚠️ You're <strong>${Math.abs(calLeft)} cal over</strong> your ${t.target} target. ${goal.includes('Fat Loss')?"This will slow your cut. Tomorrow is a new day — tighten up.":"A little over isn't terrible for a growth phase, but don't make it a habit."}`;
-    return`Looking good! <strong>${todayCal}/${t.target} cal</strong>, <strong>${todayP}/${t.proteinG}g protein</strong>. ${pLeft>20?'Prioritize protein in your next meal.':'Protein is on track. Keep it up.'}`;
+  switch(intent){
+    case 'greeting':
+      return`Hey${userData.name?', '+esc(userData.name.split(' ')[0]):''}. ${rank.name} rank, ${wc} workouts deep. What's on your mind?`;
+    case 'thanks':
+      return"Anytime. Now get back to work. 💪";
+    case 'protein':
+      if(!t)return"Set up your stats (<strong>Nutrition → Set Up Nutrition</strong>) and I'll give you a real number. General rule: <strong>1g per pound of bodyweight</strong> for anyone lifting seriously.";
+      return`Your target is <strong>${t.proteinG}g protein</strong> per day. You've had <strong>${todayTotals.p}g</strong> so far (${Math.round(todayTotals.p/t.proteinG*100)}%). Spread it across 3-4 meals, 30-50g each. Whey shake post-workout is a shortcut, not a cheat code.`;
+    case 'carbs':
+      if(!t)return"Set up your stats first. Carbs should be your biggest macro for training fuel.";
+      return`You're at <strong>${t.carbG}g carbs</strong> daily. Time them around training — more on lift days, fewer on rest days. Rice, oats, potatoes, fruit. Stop fearing carbs — they fuel your lifts.`;
+    case 'fats':
+      if(!t)return"Fats matter for hormones. Set up your stats for a specific number.";
+      return`Your target is <strong>${t.fatG}g fat</strong>. Don't drop below <strong>40-50g minimum</strong> or your test levels tank. Sources: eggs, olive oil, nuts, fatty fish, avocado.`;
+    case 'cutting':
+      if(!t)return"For a clean cut: moderate deficit (-400 to -500 cal), keep protein high (1g/lb), lift heavy to preserve muscle, and sleep 8+ hours. Set up your stats to get specific numbers.";
+      return`<strong>Cutting checklist:</strong><br>• Target: <strong>${t.target} cal</strong> (${t.deficit?t.deficit+' deficit':'set a goal'})<br>• Maintenance: ${t.maintenance||t.tdee} cal<br>• Protein floor: ${t.proteinG}g<br>• Keep lifting heavy — don't switch to endurance<br>• Weigh yourself 3-4x/week, take weekly average<br>• Aim for 0.5-1% bodyweight loss per week`;
+    case 'bulking':
+      if(!t)return"Lean bulk = slight surplus (+200-300 cal). Dirty bulk just makes you fat. Set up your stats for a specific target.";
+      return`<strong>Lean bulk protocol:</strong><br>• Target: <strong>${t.target} cal</strong><br>• 0.25-0.5% bodyweight gain per week (faster = more fat)<br>• Hit protein (${t.proteinG}g) first, fill rest with carbs<br>• Progressive overload every week<br>• Track strength — if the weight on the bar isn't going up, neither is muscle`;
+    case 'nutrition':
+      if(!t)return"Tap <strong>Nutrition → Set Up Nutrition</strong> first. I need your stats to give real advice.";
+      const calLeft=t.target-todayTotals.cal;
+      if(todayTotals.cal===0)return`Day's target: <strong>${t.target} cal, ${t.proteinG}g protein</strong>. You haven't logged anything. Start with breakfast — 30g+ protein. Eggs, greek yogurt, shake. Your move.`;
+      if(calLeft>500)return`You've had <strong>${todayTotals.cal}/${t.target} cal</strong>, <strong>${todayTotals.p}/${t.proteinG}g protein</strong>. ${calLeft} cal left. ${t.proteinG-todayTotals.p>30?'Prioritize protein — you\'re behind.':'Protein on track. Balance the rest.'}`;
+      if(calLeft<-200)return`⚠️ <strong>${Math.abs(calLeft)} over</strong> your ${t.target} target. ${goal.includes('Fat Loss')||t.deficit<0?'This undoes your cut. Tomorrow, tighten up.':'Not the end of the world on a growth phase — just don\'t make it a pattern.'}`;
+      return`You're on track: <strong>${todayTotals.cal}/${t.target} cal</strong>, <strong>${todayTotals.p}/${t.proteinG}g protein</strong>. Keep eating like this.`;
+    case 'training':
+      let resp='';
+      if(hoursSince<16)resp=`You trained ${Math.round(hoursSince)}h ago. <strong>Take a rest day</strong> or hit a different muscle group. Recovery = growth. `;
+      else if(hoursSince>72)resp=`It's been <strong>${Math.round(hoursSince/24)} days</strong> since your last session. Get back in. `;
+      else resp='Solid window to train. ';
+      if(cls==='Powerlifter')resp+=`As a Powerlifter: warm up, work up to a top set, save energy for the big 3. ${prs.squat?`Your squat PR is ${prs.squat} — `:''}push intensity over volume.`;
+      else if(cls==='Bodybuilder')resp+='Bodybuilder mode: slow eccentrics (3-4s), full ROM, mind-muscle connection. Chase the pump, not ego.';
+      else if(cls==='Strongman')resp+='Strongman: carries, presses, deadlifts, events. Train heavy, train gritty.';
+      else if(cls==='Athlete')resp+='Athlete split: power first (cleans, jumps, sprints), then sport-specific work.';
+      else resp+='Pick your program day in <strong>Train</strong> and execute. Consistency beats optimization.';
+      return resp;
+    case 'squat':
+      return"<strong>Squat tips:</strong><br>• Bar on upper traps, not neck<br>• Brace core hard before descending<br>• Knees track over toes<br>• Break parallel if mobility allows<br>• Drive through full foot, not just heels<br>Check the <strong>Library</strong> tab for Eugene Teo's squat video.";
+    case 'bench':
+      return"<strong>Bench tips:</strong><br>• Retract shoulder blades, pin to bench<br>• Slight arch, feet planted<br>• Bar touches mid-chest, elbows ~75°<br>• Drive feet into floor for leg drive<br>• Pause 1s on chest for power<br>Watch the tutorial in the <strong>Library</strong>.";
+    case 'deadlift':
+      return"<strong>Deadlift tips:</strong><br>• Bar over mid-foot before setup<br>• Hinge, grip just outside knees<br>• Brace like you're about to get punched<br>• Push floor away, don't 'pull'<br>• Lockout with glutes, not lower back<br>Trap bar is friendlier if conventional hurts.";
+    case 'rest':
+      return`Rest days matter as much as training days.${hoursSince<48?` You just trained ${Math.round(hoursSince)}h ago — absolutely take one.`:''} On rest days: walk (5-8k steps), hydrate, hit protein target, stretch, sleep 8+hrs. Active recovery > sitting on the couch.`;
+    case 'volume':
+      return"<strong>Weekly volume guidelines:</strong><br>• Beginners: 8-12 sets per muscle per week<br>• Intermediate: 12-18 sets per muscle<br>• Advanced: 15-22 sets per muscle (diminishing returns after)<br>• 4-8 reps for strength, 8-15 for hypertrophy, 15+ for endurance<br>Track it in the <strong>Log</strong> tab.";
+    case 'recovery':
+      return`<strong>Recovery protocol:</strong><br>🛏 <strong>Sleep 7-9 hrs</strong> — non-negotiable<br>💧 Bodyweight (lbs) ÷ 2 = oz of water minimum<br>🥩 ${t?t.proteinG+'g protein daily':'Protein — hit 1g/lb bodyweight'}<br>🚶 5-8k steps on rest days<br>🧘 Stretch / mobility 10 min post-workout<br>${hoursSince<24?'You trained recently. Lock these in today.':''}`;
+    case 'progress':
+      let p=`<strong>${rank.name}</strong> · ${userData.xp} XP · ${wc} workouts · ${streak}-week streak.<br><br>`;
+      if(streak===0&&wc>0)p+='⚠️ Streak is broken. Get 3 sessions this week to restart it. ';
+      else if(streak>=4)p+=`🔥 ${streak}-week streak — elite territory. `;
+      if(wc<10)p+='You\'re in the foundation phase. Show up, that\'s the whole job right now.';
+      else if(wc<30)p+='Momentum building. Strength should be climbing weekly.';
+      else if(wc<100)p+='Solid base. Start tracking progressive overload — add 2.5-5 lbs or 1 rep weekly.';
+      else p+=`${wc} sessions in the bank. You're a veteran. Focus on periodization and nutrition precision now.`;
+      const trial=getAvailableTrial();if(trial)p+=`<br><br>🚪 <strong>${trial.trial.name}</strong> is your next gate. See Missions.`;
+      return p;
+    case 'motivation':
+      const msgs=[
+        `<strong>${rank.name}</strong> with ${userData.xp} XP. Every hunter above you started where you are. The only difference? They didn't stop.`,
+        `${streak>0?streak+'-week streak. Don\'t let it die on your watch.':'Your streak is 0. Rebuild starts today.'} The version of you that gives up is watching. Beat him.`,
+        `${wc} workouts logged. That's ${wc} times you chose discipline over comfort. Stack another one today.`,
+        "The iron doesn't care about your feelings. It respects work. Show up and put it in.",
+        "You didn't come this far to only come this far. The System sees everything. Level up.",
+        `${cls?'You chose '+cls+'. Now earn it.':'No class yet? Pick one. Commit.'} The strongest hunters aren't the most gifted — they're the most consistent.`
+      ];
+      return msgs[Math.floor(Math.random()*msgs.length)];
+    case 'strength':
+      let s='<strong>To get stronger:</strong><br>';
+      s+='• Progressive overload — add weight/reps every week<br>';
+      s+='• Lower reps (3-6), heavier weight (80-90% 1RM)<br>';
+      s+='• Longer rest between sets (3-5 min for compounds)<br>';
+      s+='• Eat in a surplus or maintenance (can\'t build in a big deficit)<br>';
+      s+='• Sleep 8+ hours — CNS recovery drives strength<br>';
+      if(prs.bench||prs.squat||prs.deadlift){s+='<br>Your current PRs: ';const list=[];if(prs.bench)list.push(`Bench ${prs.bench}`);if(prs.squat)list.push(`Squat ${prs.squat}`);if(prs.deadlift)list.push(`DL ${prs.deadlift}`);if(prs.ohp)list.push(`OHP ${prs.ohp}`);s+=list.join(' · ')}
+      return s;
+    case 'supplements':
+      return"<strong>The essentials (in order):</strong><br>1. <strong>Whey protein</strong> — if you can't hit protein from food<br>2. <strong>Creatine</strong> — 5g/day, most researched supplement ever<br>3. <strong>Vitamin D3</strong> — most people are deficient<br>4. <strong>Fish oil</strong> — if you don't eat fatty fish 2x/wk<br><br>Pre-workout = glorified caffeine. Amino acids = usually unnecessary if protein is dialed in. Don't chase fancy stuff before the basics.";
+    case 'hydration':
+      return`<strong>Water targets:</strong><br>• Minimum: bodyweight (lbs) ÷ 2 = oz/day<br>• Training days: add 16-20 oz<br>• Hot weather: add more<br>${st.weight?'For you ('+st.weight+' lbs): <strong>'+Math.round(st.weight/2)+' oz minimum</strong>':'Set your weight in Settings for a specific number'}<br><br>Thirst = already behind. Drink regularly, not just when thirsty.`;
+    case 'unknown':
+    default:
+      return `I'm not quite sure what you're asking. Try rephrasing, or ask about:<br>• <strong>Training</strong> — workouts, form, specific lifts<br>• <strong>Nutrition</strong> — calories, macros, cutting, bulking<br>• <strong>Recovery</strong> — sleep, soreness, rest days<br>• <strong>Progress</strong> — your stats, how you're tracking<br><br>Or just chat — I'll do my best.`;
   }
-
-  if(topic==='training'){
-    const lastW=workoutLog[0];const hoursSince=lastW?((Date.now()-new Date(lastW.date).getTime())/3600000):999;
-    let resp='';
-    if(hoursSince<16)resp=`You trained ${Math.round(hoursSince)} hours ago. <strong>Rest today</strong> — muscles grow during recovery, not during the workout. `;
-    else if(hoursSince>72)resp=`It's been <strong>${Math.round(hoursSince/24)} days</strong> since your last session. Time to get back in. `;
-    else resp=`Good window for training. `;
-    if(cls==='Powerlifter')resp+=`Focus on your compounds today. ${prs.squat?`Your squat PR is ${prs.squat} lbs — `:''}warm up properly, hit your working sets with intent, save energy for the heavy lifts.`;
-    else if(cls==='Bodybuilder')resp+='Prioritize the mind-muscle connection. Slow eccentrics (3-4 sec), full range of motion, chase the pump. Volume is king.';
-    else if(cls==='Strongman')resp+='Event work and compound strength. Farmer walks, deadlifts, overhead press. Train heavy, train gritty.';
-    else if(cls==='Athlete')resp+='Power and explosiveness first (cleans, jumps), then sport-specific work. Keep conditioning in every session.';
-    else resp+='Pick your program day and train with intention. Consistency beats perfection.';
-    return resp;
-  }
-
-  if(topic==='progress'){
-    let resp=`<strong>${rank.name}</strong> · ${userData.xp} XP · ${wc} workouts · ${streak}-day streak.<br><br>`;
-    if(streak===0)resp+='⚠️ Your streak is broken. One session brings it back. ';
-    else if(streak>=7)resp+=`✅ ${streak}-day streak — elite consistency. `;
-    if(wc<10)resp+='You\'re in the foundation phase. Focus on showing up regularly — the gains will follow.';
-    else if(wc<30)resp+='Building momentum. You should be seeing early strength gains and improved recovery.';
-    else if(wc<50)resp+='Solid training base. Consider tracking progressive overload more closely — add weight or reps each week.';
-    else resp+=`${wc} workouts in the bank. You're a veteran. Time to optimize: periodization, deloads, and nutrition precision.`;
-    const trial=getAvailableTrial();
-    if(trial)resp+=`<br><br>🚪 <strong>${trial.trial.name}</strong> is your next gate. Check Missions for progress.`;
-    return resp;
-  }
-
-  if(topic==='recovery'){
-    const lastW=workoutLog[0];const hoursSince=lastW?((Date.now()-new Date(lastW.date).getTime())/3600000):999;
-    let resp='Recovery is where gains actually happen. Key priorities:<br><br>';
-    resp+='<strong>🛏 Sleep:</strong> 7-9 hours. Growth hormone peaks during deep sleep. Non-negotiable.<br>';
-    resp+='<strong>💧 Water:</strong> Half your bodyweight in ounces, minimum. More on training days.<br>';
-    resp+=`<strong>🥩 Protein:</strong> ${t?t.proteinG+'g/day spread across meals.':'Set up your stats for a specific number.'}<br>`;
-    if(hoursSince<24)resp+='<br>You trained recently — prioritize all three today. Tomorrow you\'ll feel the difference.';
-    return resp;
-  }
-
-  if(topic==='motivation'){
-    const msgs=[
-      `You're <strong>${rank.name}</strong> with ${userData.xp} XP. Every hunter ahead of you started exactly where you are. The only difference? They didn't quit.`,
-      `${streak>0?streak+'-day streak.':'Streak is at zero.'} ${streak>0?'Every day you show up, you widen the gap between you and the version of you that gave up.':'The best time to start was yesterday. The second best time is right now.'}`,
-      `${wc} workouts logged. That's ${wc} times you chose discipline over comfort. That's ${wc} reps of character. Keep stacking.`,
-      "The iron doesn't care about your excuses. It doesn't care about your bad day. It only respects the work. So put in the work.",
-      "You didn't come this far to only come this far. The System sees everything. Level up.",
-      `${cls?'You chose '+cls+'. Own it.':'Pick a class and commit.'} The strongest hunters aren't the most talented — they're the most consistent.`
-    ];
-    let seed=Date.now();return msgs[seed%msgs.length];
-  }
-
-  return"Train hard. Eat right. Sleep well. The System rewards consistency above all else.";
 }
 
-function generateMainTip(){
-  const streak=calcStreak();const wc=workoutLog.length;const t=calcTDEE();
-  const today=getTodayStr();const todayFood=(userData.foodLog&&userData.foodLog[today])||[];
-  if(!userData.class)return"First things first — pick your class and program in the <strong>Train</strong> tab. That's step one.";
-  if(wc===0)return"Welcome, hunter. Your first workout awaits. Go to <strong>Train</strong>, fill in your weights, and log it. That's how you earn your first XP.";
-  if(streak===0)return"Your streak is at zero. One workout today fixes that. The gate won't open for hunters who rest too long.";
-  if(t&&!todayFood.length)return`You haven't logged any food today. Your target is <strong>${t.target} cal</strong> and <strong>${t.proteinG}g protein</strong>. Nutrition is half the battle — tap <strong>🍽️ What should I eat?</strong> for details.`;
-  if(streak>=7)return`${streak}-day streak. You're proving yourself. Keep pushing — the next rank gate is waiting.`;
-  return"Consistency is everything. Train, eat, recover, repeat. The System rewards those who don't stop.";
-}
-
-function getMotivation(){
-  const messages=[
-    "The System sees your effort. Every rep brings you closer to the next rank.",
-    "Hunters who rest too long get left behind. Stay sharp.",
-    "You chose this path. The iron doesn't lie — put in the work.",
-    "Discipline is choosing between what you want now and what you want most.",
-    "The gate ahead won't open for the weak. Train harder.",
-    "Consistency beats intensity. Show up every day.",
-    "The strongest hunters aren't born — they're forged.",
-    "The System rewards those who never stop leveling up."
-  ];
-  const today=getTodayStr();let seed=0;for(let i=0;i<today.length;i++)seed+=today.charCodeAt(i);
-  return'<em>"'+messages[seed%messages.length]+'"</em>';
+function getGreeting(){
+  const rank=getEffectiveRank();const wc=workoutLog.length;const ws=calcWeeklyStreak();
+  const hr=new Date().getHours();
+  let greeting='';
+  if(hr<12)greeting='Morning';else if(hr<17)greeting='Afternoon';else greeting='Evening';
+  let second='';
+  if(wc===0)second=" Let's get your first workout logged. Ask me anything about getting started.";
+  else if(ws===0&&wc>0)second=` Your streak is at 0 — let's fix that. ${wc} workouts in the bank.`;
+  else if(ws>=4)second=` ${ws}-week streak going strong. ${rank.name} rank. What do you need?`;
+  else second=` ${rank.name} · ${userData.xp} XP · ${wc} workouts logged. What's on your mind?`;
+  return`${greeting}, hunter.${second}`;
 }
 
 // ═══════════ UPDATES / CHANGELOG TAB ═══════════

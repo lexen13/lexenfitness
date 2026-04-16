@@ -163,6 +163,7 @@ function renderNutritionPage(){
         <button class="food-btn sm" onclick="activeMeal=${m};openFoodSearch()">🔍</button>
         <button class="food-btn sm" onclick="activeMeal=${m};openScanner()">📸</button>
         <button class="food-btn sm" onclick="activeMeal=${m};openManualFood()">✏️</button>
+        <button class="food-btn sm" onclick="activeMeal=${m};openRecentFoods()">🕐</button>
       </div>`;
     }
     h+=`</div></div>`;
@@ -371,7 +372,13 @@ async function saveFoodItem(food){
   if(!dayLog.meals[activeMeal])dayLog.meals[activeMeal]=[];
   dayLog.meals[activeMeal].push(food);
   setDayLog(today,dayLog);
-  await saveUser({foodLog:userData.foodLog});
+  // Track in recent foods (keep last 30 unique by name)
+  const recent=userData.recentFoods||[];
+  const exists=recent.findIndex(r=>r.name===food.name);
+  if(exists>=0)recent.splice(exists,1);
+  recent.unshift({name:food.name,cal:food.cal,protein:food.protein,carbs:food.carbs,fat:food.fat,serving:food.serving});
+  if(recent.length>30)recent.length=30;
+  await saveUser({foodLog:userData.foodLog,recentFoods:recent});
   // Achievements
   const totalItems=getDayItemCount(dayLog);
   if(totalItems===1)unlockAch('food_log_1');
@@ -572,6 +579,80 @@ async function saveMacroSettings(){
   const cm=$('macroCustomToggle').checked?{enabled:true,calories:parseInt($('macroCalories').value)||0,protein:parseInt($('macroProtein').value)||0,carbs:parseInt($('macroCarbs').value)||0,fat:parseInt($('macroFat').value)||0}:{enabled:false};
   await saveUser({stats,activityLevel:$('macroActivity').value,dailySteps:$('macroSteps').value,nutritionGoal:$('macroGoal').value,customMacros:cm});
   closeMacroModal();renderNutritionPage();toast('Nutrition settings saved!');
+}
+
+// ── RECENT FOODS ──
+function openRecentFoods(){
+  const modal=$('recentFoodsModal');if(!modal)return;
+  const recent=userData.recentFoods||[];
+  let h=`<h2>🕐 Recent Foods</h2>`;
+  if(!recent.length){
+    h+=`<p style="color:var(--muted);font-size:.78rem;padding:1rem 0">No recent foods yet. Log something first!</p>`;
+  }else{
+    h+=`<div class="page-sub" style="margin-bottom:.5rem">Tap to log again · Meal ${activeMeal}</div>`;
+    h+=`<div class="recent-list">`;
+    recent.forEach((f,i)=>{
+      h+=`<div class="recent-item" onclick="openRecentServing(${i})">
+        <div class="food-item-info">
+          <div class="food-item-name">${esc(f.name)}</div>
+          <div class="food-item-detail">${esc(f.serving||'')} · ${f.cal} cal · P:${f.protein}g C:${f.carbs}g F:${f.fat}g</div>
+        </div>
+        <div class="recent-quick" onclick="event.stopPropagation();quickRelog(${i})">⚡</div>
+      </div>`;
+    });
+    h+=`</div>`;
+  }
+  h+=`<div class="m-actions" style="margin-top:.6rem"><button class="m-cancel" onclick="closeRecentFoods()">Close</button></div>`;
+  modal.querySelector('.modal').innerHTML=h;
+  modal.classList.add('open');
+}
+function closeRecentFoods(){$('recentFoodsModal').classList.remove('open')}
+
+// Quick relog — same serving, instant add
+async function quickRelog(idx){
+  const recent=userData.recentFoods||[];
+  const f=recent[idx];if(!f)return;
+  await saveFoodItem({...f});
+  closeRecentFoods();
+}
+
+// Relog with serving adjustment
+let recentPending=null;
+function openRecentServing(idx){
+  const recent=userData.recentFoods||[];
+  recentPending=recent[idx];if(!recentPending)return;
+  closeRecentFoods();
+  const modal=$('recentServingModal');if(!modal)return;
+  let h=`<h2>🍽️ Adjust Serving</h2>`;
+  h+=`<div class="serving-food-name">${esc(recentPending.name)}</div>`;
+  h+=`<div style="font-family:var(--font-mono);font-size:.65rem;color:var(--muted);margin:.3rem 0">Last logged: ${esc(recentPending.serving||'1 serving')} · ${recentPending.cal} cal</div>`;
+  h+=`<div class="m-field"><label>Servings (multiplier)</label><input type="number" id="recentServingMult" value="1" min="0.25" step="0.25" oninput="updateRecentPreview()"></div>`;
+  h+=`<div id="recentPreview" class="serving-preview"></div>`;
+  h+=`<div class="m-actions"><button class="m-cancel" onclick="closeRecentServing()">Cancel</button><button class="m-save-btn" onclick="confirmRecentServing()">Log It → Meal ${activeMeal}</button></div>`;
+  modal.querySelector('.modal').innerHTML=h;
+  updateRecentPreview();
+  modal.classList.add('open');
+}
+function closeRecentServing(){$('recentServingModal').classList.remove('open');recentPending=null}
+function updateRecentPreview(){
+  if(!recentPending)return;
+  const mult=parseFloat($('recentServingMult').value)||1;
+  const el=$('recentPreview');if(!el)return;
+  el.innerHTML=`<strong>${Math.round(recentPending.cal*mult)} cal</strong> · P:${Math.round(recentPending.protein*mult)}g · C:${Math.round(recentPending.carbs*mult)}g · F:${Math.round(recentPending.fat*mult)}g`;
+}
+async function confirmRecentServing(){
+  if(!recentPending)return;
+  const mult=parseFloat($('recentServingMult').value)||1;
+  const food={
+    name:recentPending.name,
+    cal:Math.round(recentPending.cal*mult),
+    protein:Math.round(recentPending.protein*mult),
+    carbs:Math.round(recentPending.carbs*mult),
+    fat:Math.round(recentPending.fat*mult),
+    serving:(mult===1?'':mult+'x ')+(recentPending.serving||'serving')
+  };
+  await saveFoodItem(food);
+  closeRecentServing();
 }
 
 // ── RANK INFO ──
