@@ -108,6 +108,10 @@
     <div class="day-tabs" id="dayTabs"></div>
     <div id="dayContent"></div>
     <div class="workout-actions"><button class="wa-log" id="logDayBtn" onclick="logWorkout()">📋 Log Day</button><button class="wa-log-all" onclick="logAllDays()">📋 Log All Days</button><button class="wa-save" onclick="saveInputs()">💾 Save</button><button class="wa-clear" onclick="clearInputs()">Clear</button></div>
+    <div class="alt-log-row">
+      <button class="alt-log-btn activity" onclick="openActivityLog()">🏃 Cardio / Activity</button>
+      <button class="alt-log-btn rest" onclick="openRestLog()">😴 Rest Day</button>
+    </div>
   </div>
   <div class="sub-page" id="sp-log">
     <div class="page-title">EXERCISE LOG</div>
@@ -158,9 +162,11 @@
   <div class="sub-tabs" id="profileTabs">
     <div class="stab active" data-st="mystats" onclick="switchSubTab('profile','mystats')">Profile</div>
     <div class="stab" data-st="friends" onclick="switchSubTab('profile','friends')">Friends</div>
+    <div class="stab" id="trainerTab" data-st="trainer" onclick="switchSubTab('profile','trainer')" style="display:none">Trainer</div>
   </div>
   <div class="sub-page active" id="sp-mystats"><div id="profileContent"></div></div>
   <div class="sub-page" id="sp-friends"><div id="friendsPageContent"></div></div>
+  <div class="sub-page" id="sp-trainer"><div id="trainerContent"></div></div>
 </div>
 
 <!-- NAV -->
@@ -213,6 +219,9 @@
 <div class="settings-section">PRIVACY</div>
 <label class="toggle-row"><input type="checkbox" class="toggle-cb" id="setHideName"><span>Hide real name everywhere (username only)</span></label>
 <label class="toggle-row"><input type="checkbox" class="toggle-cb" id="setHideStats"><span>Hide body stats from others</span></label>
+<div class="settings-section">TRAINER CONNECTION</div>
+<div id="trainerStatus" style="font-size:.72rem;color:var(--muted);margin-bottom:.5rem"></div>
+<div class="settings-row-fields" id="trainerCodeRow"><div class="m-field" style="flex:1"><label>Trainer Code (from your trainer)</label><input type="text" id="setTrainerCode" maxlength="6" placeholder="e.g. ABC123" autocapitalize="characters"></div><button class="m-save-btn" style="flex:0 0 auto;padding:10px 14px;border-radius:8px;align-self:flex-end" onclick="connectTrainer()">Connect</button></div>
 <div class="m-actions" style="margin-top:1rem"><button class="m-cancel" onclick="closeSettings()">Cancel</button><button class="m-save-btn" onclick="saveSettings()">Save All</button></div>
 <button class="edit-stats-btn" onclick="changeProgram();closeSettings()" style="margin-top:.8rem">🔄 Change Class / Program</button>
 <button class="edit-stats-btn" onclick="doLogout()" style="color:var(--red);border-color:var(--red)">Sign Out</button>
@@ -287,6 +296,89 @@
 
 <!-- RECENT SERVING MODAL -->
 <div class="modal-bg" id="recentServingModal"><div class="modal"></div></div>
+
+<!-- ACTIVITY LOG MODAL -->
+<div class="modal-bg" id="activityModal"><div class="modal">
+<h2>🏃 Log Activity</h2>
+<div class="m-field"><label>Activity</label><select id="actType">
+  <option value="Walking">🚶 Walking</option>
+  <option value="Running">🏃 Running</option>
+  <option value="Cycling">🚴 Cycling</option>
+  <option value="Swimming">🏊 Swimming</option>
+  <option value="Hiking">🥾 Hiking</option>
+  <option value="Bowling">🎳 Bowling</option>
+  <option value="Basketball">🏀 Basketball</option>
+  <option value="Soccer">⚽ Soccer</option>
+  <option value="Tennis">🎾 Tennis</option>
+  <option value="Yoga">🧘 Yoga</option>
+  <option value="Stretching">🤸 Stretching</option>
+  <option value="Jump Rope">🪢 Jump Rope</option>
+  <option value="Rowing">🚣 Rowing</option>
+  <option value="Stairmaster">🪜 Stairmaster</option>
+  <option value="Elliptical">🏋️ Elliptical</option>
+  <option value="Other">📝 Other</option>
+</select></div>
+<div class="m-field" id="actCustomRow" style="display:none"><label>Activity Name</label><input type="text" id="actCustomName" placeholder="e.g. Rock Climbing"></div>
+<div class="m-field"><label>Duration (minutes)</label><input type="number" id="actDuration" placeholder="30" min="1"></div>
+<div class="m-field"><label>Calories burned <span style="color:var(--dim);font-size:.6rem">(optional estimate)</span></label><input type="number" id="actCalories" placeholder="auto-estimate"></div>
+<div class="m-field"><label>Steps <span style="color:var(--dim);font-size:.6rem">(optional)</span></label><input type="number" id="actSteps" placeholder="e.g. 5000"></div>
+<div class="m-field"><label>Notes <span style="color:var(--dim);font-size:.6rem">(optional)</span></label><input type="text" id="actNotes" placeholder="e.g. Easy pace, felt good"></div>
+<div class="m-actions"><button class="m-cancel" onclick="closeActivityLog()">Cancel</button><button class="m-save-btn" onclick="saveActivityLog()">Log Activity</button></div>
+</div></div>
+
+<!-- REST DAY MODAL -->
+<div class="modal-bg" id="restModal"><div class="modal">
+<h2>😴 Log Rest Day</h2>
+<p style="font-size:.78rem;color:var(--muted);margin-bottom:.8rem;line-height:1.5">Rest days are where recovery happens. Choose your type — Active Rest counts toward your weekly streak (light movement like walking or mobility). Full Rest doesn't count toward streaks but is essential for recovery.</p>
+<div class="rest-options">
+  <div class="rest-option" data-rest="active" onclick="selectRestType('active')">
+    <div class="rest-icon">🚶</div>
+    <div class="rest-info">
+      <div class="rest-name">Active Rest</div>
+      <div class="rest-desc">Light walk, stretching, mobility, yoga — counts toward weekly streak</div>
+      <div class="rest-xp">+10 XP</div>
+    </div>
+  </div>
+  <div class="rest-option" data-rest="full" onclick="selectRestType('full')">
+    <div class="rest-icon">🛏️</div>
+    <div class="rest-info">
+      <div class="rest-name">Full Rest</div>
+      <div class="rest-desc">Complete recovery day — no movement planned. Recovery matters.</div>
+      <div class="rest-xp">+5 XP · Self-care</div>
+    </div>
+  </div>
+</div>
+<div class="m-field" style="margin-top:.6rem"><label>Notes <span style="color:var(--dim);font-size:.6rem">(optional)</span></label><input type="text" id="restNotes" placeholder="e.g. Feeling sore from leg day"></div>
+<div class="m-actions"><button class="m-cancel" onclick="closeRestLog()">Cancel</button><button class="m-save-btn" id="restSaveBtn" onclick="saveRestLog()" disabled>Pick a type</button></div>
+</div></div>
+
+<!-- PHOTO PRIVACY MODAL -->
+<div class="modal-bg" id="photoPrivacyModal"><div class="modal" style="max-width:340px">
+<h2>🔒 Your Photos Stay Private</h2>
+<div style="font-size:.82rem;color:var(--text);line-height:1.6;margin-bottom:.8rem">
+  Before you upload, we want to be clear about how your photos are handled:
+</div>
+<div class="privacy-list">
+  <div class="privacy-item"><strong>✅ Profile pictures</strong> are stored in Firebase and visible to friends on the leaderboard.</div>
+  <div class="privacy-item"><strong>🔒 Progress photos</strong> are stored <em>on your device only</em>. They never leave your phone.</div>
+  <div class="privacy-item"><strong>🚫 Not seen by:</strong> the admin (me), Anthropic, Google, anyone. Period.</div>
+  <div class="privacy-item"><strong>🗑️ You can delete</strong> any photo at any time from your device settings.</div>
+</div>
+<div class="m-actions" style="margin-top:.8rem"><button class="m-save-btn" style="width:100%" onclick="acceptPhotoPrivacy()">Got It — Continue</button></div>
+</div></div>
+
+<!-- WEIGH-IN MODAL -->
+<div class="modal-bg" id="weighInModal"><div class="modal">
+<h2>📏 Weekly Check-in</h2>
+<p style="font-size:.74rem;color:var(--muted);margin-bottom:.6rem">Tracking weekly keeps you honest. Weigh in the morning after using the bathroom.</p>
+<div class="settings-row-fields">
+  <div class="m-field" style="flex:1"><label>Weight (lbs)</label><input type="number" id="wiWeight" step="0.1"></div>
+  <div class="m-field" style="flex:1"><label>Body Fat % <span style="color:var(--dim);font-size:.55rem">(optional)</span></label><input type="number" id="wiBodyFat" step="0.1"></div>
+</div>
+<div class="m-field"><label>Notes <span style="color:var(--dim);font-size:.55rem">(optional)</span></label><input type="text" id="wiNotes" placeholder="e.g. Feeling lean, sleep was good"></div>
+<div id="wiHistory" class="weigh-history"></div>
+<div class="m-actions"><button class="m-cancel" onclick="closeWeighIn()">Cancel</button><button class="m-save-btn" onclick="saveWeighIn()">Save Check-in</button></div>
+</div></div>
 
 <!-- PROFILE CARD MODAL -->
 <div class="modal-bg" id="profileCardModal"><div class="modal" style="max-width:340px"></div></div>

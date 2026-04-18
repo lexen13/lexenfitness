@@ -130,6 +130,48 @@ input[type=checkbox]:checked::after{content:'✓';position:absolute;color:#fff;f
 .workout-actions button{flex:1;min-width:calc(50% - 4px);padding:11px;border:none;border-radius:9px;font-weight:700;font-size:.8rem}
 .wa-log{background:var(--green);color:#000}
 .wa-log-all{background:var(--gold);color:#000}
+
+/* ── Activity Log Button ── */
+/* ── Activity + Rest Row ── */
+.alt-log-row{display:flex;gap:6px;margin-top:.5rem}
+.alt-log-btn{flex:1;padding:10px;background:none;border:1px dashed var(--border);color:var(--muted);border-radius:9px;font-size:.76rem;font-weight:600;cursor:pointer;transition:all .15s}
+.alt-log-btn.activity:hover,.alt-log-btn.activity:active{border-color:var(--green);color:var(--green);border-style:solid;background:rgba(52,211,153,.05)}
+.alt-log-btn.rest:hover,.alt-log-btn.rest:active{border-color:var(--accent2);color:var(--accent2);border-style:solid;background:rgba(251,191,36,.05)}
+
+/* ── Rest Day Options ── */
+.rest-options{display:flex;flex-direction:column;gap:.5rem;margin:.6rem 0}
+.rest-option{display:flex;gap:.7rem;padding:.7rem;background:var(--surface);border:1px solid var(--border);border-radius:10px;cursor:pointer;transition:all .15s}
+.rest-option:hover{border-color:var(--accent)}
+.rest-option.selected{border-color:var(--accent2);background:linear-gradient(135deg,rgba(251,191,36,.08),rgba(52,211,153,.04))}
+.rest-icon{font-size:1.6rem;flex-shrink:0}
+.rest-info{flex:1;min-width:0}
+.rest-name{font-weight:700;font-size:.88rem;margin-bottom:2px}
+.rest-desc{font-size:.7rem;color:var(--muted);line-height:1.4;margin-bottom:3px}
+.rest-xp{font-family:var(--font-mono);font-size:.65rem;color:var(--accent2)}
+
+/* ── Privacy List ── */
+.privacy-list{display:flex;flex-direction:column;gap:.5rem}
+.privacy-item{font-size:.78rem;color:var(--muted);line-height:1.5;padding:.5rem .6rem;background:var(--surface);border:1px solid var(--border);border-radius:8px}
+.privacy-item strong{color:var(--text)}
+
+/* ── Weigh-In History ── */
+.weigh-history{margin-top:.5rem;max-height:35vh;overflow-y:auto}
+.weigh-row{display:grid;grid-template-columns:auto 1fr auto;gap:.5rem;padding:.4rem .5rem;background:var(--surface);border:1px solid var(--border);border-radius:7px;margin-bottom:.25rem;font-size:.72rem;align-items:center}
+.weigh-date{color:var(--dim);font-family:var(--font-mono);font-size:.65rem}
+.weigh-weight{font-weight:700;color:var(--text)}
+.weigh-diff{font-family:var(--font-mono);font-size:.7rem;font-weight:700}
+
+/* ── Trainer ── */
+.trainer-code-card{background:linear-gradient(135deg,rgba(251,191,36,.1),rgba(251,191,36,.02));border:1px solid var(--gold);border-radius:12px;padding:1rem;margin-bottom:1rem;text-align:center}
+.trainer-code-label{font-family:var(--font-mono);font-size:.6rem;color:var(--muted);letter-spacing:2px;margin-bottom:.3rem}
+.trainer-code{font-family:var(--font-mono);font-size:1.6rem;font-weight:800;color:var(--gold);letter-spacing:4px;margin-bottom:.4rem}
+.client-card{display:flex;gap:.7rem;align-items:center;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:.6rem;margin-bottom:.4rem;cursor:pointer;transition:all .15s}
+.client-card:hover,.client-card:active{border-color:var(--accent)}
+.client-info{flex:1;min-width:0}
+.client-name{font-weight:700;font-size:.85rem;display:flex;justify-content:space-between;align-items:center;gap:.5rem}
+.client-status{font-size:.58rem;font-family:var(--font-mono);color:var(--muted);letter-spacing:1px}
+.client-stats{font-size:.68rem;color:var(--muted);margin-top:2px}
+.client-goal{font-size:.65rem;color:var(--dim);margin-top:1px;font-style:italic}
 .wa-save{background:var(--accent);color:#fff}
 .wa-clear{background:var(--surface2);color:var(--muted);border:1px solid var(--border)!important}
 

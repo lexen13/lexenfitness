@@ -169,7 +169,7 @@ function renderNutritionPage(){
     if(items.length){
       h+=items.map((f,i)=>`<div class="food-item">
         <div class="food-item-info"><div class="food-item-name">${esc(f.name)}</div><div class="food-item-detail">${esc(f.serving||'')} · ${f.cal} cal · P:${f.protein}g C:${f.carbs}g F:${f.fat}g</div></div>
-        ${isToday?`<button class="btn-del" onclick="removeMealItem(${m},${i})">✕</button>`:''}
+        ${isToday?`<button class="btn-del" onclick="removeMealItem(${m},${i})">✕</button>`:`<button class="btn-del" onclick="removePastMealItem('${viewDate}',${m},${i})">✕</button>`}
       </div>`).join('');
     }else{
       h+=`<p style="color:var(--dim);font-size:.74rem;padding:.3rem 0">No items logged</p>`;
@@ -180,6 +180,10 @@ function renderNutritionPage(){
         <button class="food-btn sm" onclick="activeMeal=${m};openScanner()">📸</button>
         <button class="food-btn sm" onclick="activeMeal=${m};openManualFood()">✏️</button>
         <button class="food-btn sm" onclick="activeMeal=${m};openRecentFoods()">🕐</button>
+      </div>`;
+    }else{
+      h+=`<div class="food-actions meal-add-btns">
+        <button class="food-btn sm" onclick="activeMeal=${m};editPastMeal('${viewDate}')">✏️ Edit</button>
       </div>`;
     }
     h+=`</div></div>`;
@@ -457,7 +461,7 @@ async function lookupBarcode(code){
 
 // ── MANUAL FOOD ENTRY ──
 function openManualFood(){$('manualFoodModal').classList.add('open');$('mfName').value='';$('mfCal').value='';$('mfProtein').value='';$('mfCarbs').value='';$('mfFat').value='';$('mfServing').value=''}
-function closeManualFood(){$('manualFoodModal').classList.remove('open')}
+function closeManualFood(){$('manualFoodModal').classList.remove('open');window._pastFoodDate=null}
 async function saveManualFood(){
   const name=$('mfName').value.trim();if(!name){toast('Enter food name');return}
   const food={name,cal:parseInt($('mfCal').value)||0,protein:parseInt($('mfProtein').value)||0,carbs:parseInt($('mfCarbs').value)||0,fat:parseInt($('mfFat').value)||0,serving:$('mfServing').value.trim()||'manual'};
@@ -472,6 +476,46 @@ async function removeMealItem(meal,idx){
   setDayLog(today,dayLog);
   await saveUser({foodLog:userData.foodLog});
   renderNutritionPage();toast('Removed.');
+}
+
+async function removePastMealItem(date,meal,idx){
+  if(!confirm('Remove this item?'))return;
+  const dayLog=getDayLog(date);
+  if(dayLog.meals[meal])dayLog.meals[meal].splice(idx,1);
+  setDayLog(date,dayLog);
+  await saveUser({foodLog:userData.foodLog});
+  renderNutritionPage();toast('Removed.');
+}
+
+function editPastMeal(date){
+  // Open manual entry modal but save to the past date
+  $('manualFoodModal').classList.add('open');
+  $('mfName').value='';$('mfCal').value='';$('mfProtein').value='';$('mfCarbs').value='';$('mfFat').value='';$('mfServing').value='';
+  // Override save to target the past date
+  window._pastFoodDate=date;
+}
+// Patch saveManualFood to handle past dates
+const _origSaveManualFood=saveManualFood;
+async function saveManualFood(){
+  const pastDate=window._pastFoodDate;
+  if(pastDate){
+    const name=$('mfName').value.trim();if(!name){toast('Enter food name');return}
+    const food={name,cal:parseInt($('mfCal').value)||0,protein:parseInt($('mfProtein').value)||0,carbs:parseInt($('mfCarbs').value)||0,fat:parseInt($('mfFat').value)||0,serving:$('mfServing').value.trim()||'manual'};
+    if(!userData.foodLog)userData.foodLog={};
+    let dayLog=getDayLog(pastDate);
+    if(!dayLog.meals)dayLog={meals:{},mealCount:getMealCount()};
+    if(!dayLog.meals[activeMeal])dayLog.meals[activeMeal]=[];
+    dayLog.meals[activeMeal].push(food);
+    setDayLog(pastDate,dayLog);
+    await saveUser({foodLog:userData.foodLog});
+    closeManualFood();window._pastFoodDate=null;
+    renderNutritionPage();toast(food.name+' added to past log');
+    return;
+  }
+  // Normal today flow
+  const name=$('mfName').value.trim();if(!name){toast('Enter food name');return}
+  const food={name,cal:parseInt($('mfCal').value)||0,protein:parseInt($('mfProtein').value)||0,carbs:parseInt($('mfCarbs').value)||0,fat:parseInt($('mfFat').value)||0,serving:$('mfServing').value.trim()||'manual'};
+  await saveFoodItem(food);closeManualFood();
 }
 
 // ── MACRO ADJUSTMENT MODAL ──

@@ -161,7 +161,7 @@ async function loadUserData(){
   await cleanupOldData();
 }
 async function saveUser(f){await db.collection('users').doc(U.uid).update(f);Object.assign(userData,f)}
-async function saveLeaderboard(){const r=getEffectiveRank();await db.collection('leaderboard').doc(U.uid).set({username:userData.username||'hunter',xp:userData.xp,class:userData.class,subclass:userData.subclass||'',rank:r.name,profilePic:userData.profilePic||'',bio:userData.bio||'',workouts:workoutLog.length,updatedAt:firebase.firestore.FieldValue.serverTimestamp()})}
+async function saveLeaderboard(){const r=getEffectiveRank();await db.collection('leaderboard').doc(U.uid).set({username:userData.username||'hunter',xp:userData.xp,class:userData.class,subclass:userData.subclass||'',rank:r.name,profilePic:userData.profilePic||'',bio:userData.bio||'',workouts:getLiftLogs().length,activities:getActivityLogs().length,updatedAt:firebase.firestore.FieldValue.serverTimestamp()})}
 
 // ═══════════ RANK-UP SPLASH ═══════════
 function checkRankUp(){
@@ -201,7 +201,8 @@ function getXpBarInfo(){
   if(!nr) return {pct:100,label:`${userData.xp} XP`,sublabel:'MAX RANK',color:r.color};
   const rangeXp=nr.min-r.min, progress=userData.xp-r.min;
   const pct=Math.min(100,(progress/rangeXp)*100);
-  return {pct,label:`${userData.xp} XP`,sublabel:`${nr.min} XP to ${nr.name}`,color:r.color};
+  const remaining=nr.min-userData.xp;
+  return {pct,label:`${userData.xp} XP`,sublabel:`${remaining} XP to ${nr.name}`,color:r.color};
 }
 
 // ═══════════ CLASS & PROGRAM SELECT ═══════════
@@ -235,7 +236,7 @@ function initApp(){
   let tapCount=0,tapTimer=null;
   const logo=document.querySelector('.top-bar h1');
   if(logo)logo.addEventListener('click',()=>{tapCount++;clearTimeout(tapTimer);tapTimer=setTimeout(()=>tapCount=0,2000);if(tapCount>=10){unlockAch('secret_founder');toast('🔑 You found it...');tapCount=0}});
-  document.querySelectorAll('.nav-item').forEach(n=>n.addEventListener('click',()=>switchPage(n.dataset.page)));updateTopBar();syncAcceptedRequests();checkUnreadChats();checkPassiveAchievements();initNotifications();checkFriendRequests();
+  document.querySelectorAll('.nav-item').forEach(n=>n.addEventListener('click',()=>switchPage(n.dataset.page)));updateTopBar();syncAcceptedRequests();checkUnreadChats();checkPassiveAchievements();initNotifications();checkFriendRequests();updateTrainerTab();
   // Handle PWA shortcut ?page= param
   const params=new URLSearchParams(window.location.search);const startPage=params.get('page');
   switchPage(startPage&&['train','missions','nutrition','chat','ranks','profile'].includes(startPage)?startPage:'profile');
@@ -248,7 +249,7 @@ function updateTopBar(){
   const rb=$('tbRank');rb.textContent=r.name;
   // XP Multiplier banner
   let mb=$('xpMultBanner');if(!mb){mb=document.createElement('div');mb.id='xpMultBanner';mb.className='xp-mult-banner';const tb=document.querySelector('.top-bar');if(tb)tb.after(mb)}
-  const xm=getXpMultiplier();mb.style.display=xm.label?'':'none';mb.textContent=xm.label||'';rb.style.color=r.color;rb.style.background=r.color+'22';rb.style.border='1px solid '+r.color+'44';
+  const xm=getXpMultiplier();mb.style.display=xm.label?'block':'none';mb.textContent=xm.label||'';rb.style.color=r.color;rb.style.background=r.color+'22';rb.style.border='1px solid '+r.color+'44';
   const bar=$('tbXpBar');if(bar){bar.style.width=info.pct+'%';bar.style.background=capped?'var(--red)':`linear-gradient(90deg,${r.color},${r.color}cc)`}
 }
 function getEffectiveRank(){
@@ -290,7 +291,7 @@ function addXP(amount){
 }
 let xpCappedMsg='';
 function switchPage(p){currentPage=p;document.querySelectorAll('.nav-item').forEach(n=>n.classList.toggle('active',n.dataset.page===p));document.querySelectorAll('.page').forEach(pg=>pg.classList.remove('active'));$('page-'+p).classList.add('active');
-  if(p==='train')buildWorkout();if(p==='profile'){renderProfile();renderFriendsPage()}if(p==='missions'){renderMissions();renderAchievements()}
+  if(p==='train')buildWorkout();if(p==='profile'){updateTrainerTab();renderProfile();renderFriendsPage()}if(p==='missions'){renderMissions();renderAchievements()}
   if(p==='nutrition')renderNutritionPage();if(p==='ranks')renderLeaderboard();if(p==='chat')renderChatPage()}
 function switchSubTab(page,tab){
   const container=$('page-'+page);if(!container)return;
@@ -301,6 +302,10 @@ function switchSubTab(page,tab){
   if(tab==='aicoach')renderAICoach();if(tab==='friendchat')renderChatList();
   if(tab==='friends'){renderFriendsPage();pendingFriendReqs=0;updateFriendBadge()};if(tab==='mystats')renderProfile();
   if(tab==='updates')renderUpdatesTab();if(tab==='library')renderLibrary();
+  if(tab==='trainer')renderTrainerDashboard();
+}
+function updateTrainerTab(){
+  const tab=$('trainerTab');if(tab)tab.style.display=userData.role==='trainer'?'':'none';
 }
 
 // ═══════════ DAILY MISSIONS ═══════════
@@ -364,9 +369,9 @@ function renderTrialBanner(info){
 }
 function getTrialProgress(trial){return trial.tasks.map(task=>{switch(task.id){
   case 'perfect_weeks_3':return calcPerfectWeeks();case 'streak_14':case 'streak_30':return calcDayStreak();
-  case 'log_pr':return Math.max(0,...workoutLog.flatMap(e=>e.exercises.flatMap(ex=>ex.sets.map(s=>parseInt(s.weight)||0))));
-  case 'missions_7':return userData.missionStreak;case 'workouts_50':return workoutLog.length;default:return 0}})}
-function calcPerfectWeeks(){const w={};workoutLog.forEach(e=>{const m=getMonday(new Date(e.date)).toISOString().slice(0,10);if(!w[m])w[m]={days:new Set(),allDone:true};w[m].days.add(e.dayId);if(!e.exercises.every(ex=>ex.sets.every(s=>s.done)))w[m].allDone=false});return Object.values(w).filter(wk=>wk.days.size>=4&&wk.allDone).length}
+  case 'log_pr':return Math.max(0,...getLiftLogs().flatMap(e=>e.exercises.flatMap(ex=>Array.isArray(ex.sets)?ex.sets.map(s=>parseInt(s.weight)||0):[])));
+  case 'missions_7':return userData.missionStreak;case 'workouts_50':return getLiftLogs().length;default:return 0}})}
+function calcPerfectWeeks(){const w={};getLiftLogs().forEach(e=>{const m=getMonday(new Date(e.date)).toISOString().slice(0,10);if(!w[m])w[m]={days:new Set(),allDone:true};w[m].days.add(e.dayId);if(!e.exercises.every(ex=>Array.isArray(ex.sets)&&ex.sets.every(s=>s.done)))w[m].allDone=false});return Object.values(w).filter(wk=>wk.days.size>=4&&wk.allDone).length}
 async function claimTrial(trialId){
   if(userData.trialsCompleted.includes(trialId))return;
   userData.trialsCompleted.push(trialId);
@@ -414,6 +419,10 @@ function renderDevTools(){
     </div>
     <div class="dev-row" style="margin-top:.3rem;border-top:1px dashed var(--border);padding-top:.4rem">
       <button class="dev-btn" style="color:var(--green)" onclick="devPushProgram()">Push Program to User</button>
+    </div>
+    <div class="dev-row" style="margin-top:.3rem;border-top:1px dashed var(--border);padding-top:.4rem">
+      <button class="dev-btn" style="color:var(--gold)" onclick="devPromoteTrainer()">👨‍🏫 Promote User to Trainer</button>
+      <button class="dev-btn" style="color:var(--red)" onclick="devDemoteTrainer()">🚫 Demote Trainer</button>
     </div>
   </div>`;
 }
@@ -518,6 +527,32 @@ async function devPushProgram(){
   await db.collection('users').doc(uid).update({programKey:prog.key,program:programData});
   toast('Pushed "'+prog.name+'" to @'+username);
 }
+async function devPromoteTrainer(){
+  const username=prompt('Username to promote to Trainer (lowercase):');if(!username)return;
+  const un=username.toLowerCase().trim();
+  const snap=await db.collection('usernames').doc(un).get();
+  if(!snap.exists){toast('Username not found: @'+un);return}
+  const uid=snap.data().uid;
+  // Generate a trainer code for them
+  const code=genFriendCode();
+  await db.collection('users').doc(uid).update({role:'trainer',trainerCode:code,clients:firebase.firestore.FieldValue.arrayUnion()});
+  await db.collection('trainerCodes').doc(code).set({uid,createdAt:firebase.firestore.FieldValue.serverTimestamp()});
+  toast('✅ @'+un+' is now a Trainer. Code: '+code);
+  alert('@'+un+' promoted to Trainer.\n\nTheir Trainer Code: '+code+'\n\nShare this with them so they can give it to their clients.');
+}
+async function devDemoteTrainer(){
+  const username=prompt('Username to demote (remove trainer status):');if(!username)return;
+  const un=username.toLowerCase().trim();
+  if(!confirm('Demote @'+un+' from Trainer? This will remove their code but leave clients intact.'))return;
+  const snap=await db.collection('usernames').doc(un).get();
+  if(!snap.exists){toast('Username not found: @'+un);return}
+  const uid=snap.data().uid;
+  const userDoc=await db.collection('users').doc(uid).get();
+  const oldCode=userDoc.data()?.trainerCode;
+  await db.collection('users').doc(uid).update({role:firebase.firestore.FieldValue.delete(),trainerCode:firebase.firestore.FieldValue.delete()});
+  if(oldCode){try{await db.collection('trainerCodes').doc(oldCode).delete()}catch(e){}}
+  toast('@'+un+' demoted');
+}
 
 // ═══════════ WORKOUT ═══════════
 function buildWorkout(){
@@ -608,10 +643,11 @@ async function logWorkout(){
   day.exercises.forEach((ex,ei)=>{const sets=[];for(let s=0;s<ex.sets;s++){const wEl=$(day.id+'_e'+ei+'_s'+s+'_w'),rEl=$(day.id+'_e'+ei+'_s'+s+'_r'),cEl=$(day.id+'_e'+ei+'_s'+s+'_c');const w=wEl?wEl.value:'',r=rEl?rEl.value:'',d=cEl?cEl.checked:false;if(w||r)hasData=true;if(!d)allDone=false;if(parseInt(w)>maxW)maxW=parseInt(w);sets.push({weight:w,reps:r,done:d,isTime:!!ex.isTime})}entry.exercises.push({name:ex.name,sets})});
   if(!hasData){toast('Fill in sets!');return}
   const ref=await db.collection('users').doc(U.uid).collection('log').add(entry);entry._id=ref.id;workoutLog.unshift(entry);
-  let xp=50;if(allDone)xp+=50;const hr=new Date().getHours(),wc=workoutLog.length;
+  let xp=50;if(allDone)xp+=50;const hr=new Date().getHours(),wc=getLiftLogs().length;
   if(wc>=1)unlockAch('first_workout');if(wc>=10)unlockAch('workouts_10');if(wc>=25)unlockAch('workouts_25');if(wc>=50)unlockAch('workouts_50');if(wc>=100)unlockAch('workouts_100');if(wc>=200)unlockAch('workouts_200');
   if(hr<7)unlockAch('early_bird');if(hr>=21)unlockAch('night_owl');if(allDone)unlockAch('all_sets_done');
   if(hr===5)unlockAch('secret_5am');
+  const now=new Date();if(now.getHours()===3&&now.getMinutes()===33)unlockAch('secret_3am');
   if(maxW>=200)unlockAch('heavy_day');if(maxW>=315)unlockAch('monster_lift');if(maxW>=405)unlockAch('titan_lift');if(maxW>=500)unlockAch('heavy_500');
   const dids=new Set(workoutLog.map(e=>e.dayId));if(dids.size>=4)unlockAch('variety');
   const wkStreak=calcWeeklyStreak();
@@ -621,8 +657,8 @@ async function logWorkout(){
   const fw=calcFullWeeks();if(fw>=1)unlockAch('full_week');if(fw>=5)unlockAch('full_week_5');if(fw>=10)unlockAch('full_week_10');if(fw>=20)unlockAch('full_week_20');
   // Weekend warrior check
   const dow=new Date().getDay();if(dow===0||dow===6){const thisWeekLogs=workoutLog.filter(e=>{const d=new Date(e.date);const wk=getMonday(d).toISOString().slice(0,10);return wk===getMonday(new Date()).toISOString().slice(0,10)});const wDays=new Set(thisWeekLogs.map(e=>new Date(e.date).getDay()));if(wDays.has(0)&&wDays.has(6))unlockAch('weekend_warrior')}
-  // PR breaker check
-  if(workoutLog.length>=2){const prevMax=Math.max(0,...workoutLog.slice(1).flatMap(e=>e.exercises.flatMap(ex=>ex.sets.map(s=>parseInt(s.weight)||0))));if(maxW>prevMax&&prevMax>0)unlockAch('pr_breaker')}
+  // PR breaker check (only against other lift logs)
+  if(getLiftLogs().length>=2){const prevMax=Math.max(0,...getLiftLogs().slice(1).flatMap(e=>e.exercises.flatMap(ex=>Array.isArray(ex.sets)?ex.sets.map(s=>parseInt(s.weight)||0):[])));if(maxW>prevMax&&prevMax>0)unlockAch('pr_breaker')}
   const nx=userData.xp+xp;if(nx>=500)unlockAch('rank_d');if(nx>=1500)unlockAch('rank_c');
   const gained=addXP(xp);await saveUser({xp:userData.xp});await saveLeaderboard();updateTopBar();checkRankUp();
   let msg=day.title+' +'+gained+' XP';if(gained<xp)msg+=' (CAPPED — complete trial!)';if(xpCappedMsg)msg=xpCappedMsg;
@@ -655,7 +691,7 @@ async function logAllDays(){
   // Save cleared inputs
   await db.collection('users').doc(U.uid).collection('meta').doc('inputs').set({data:savedInputs});
   // XP + achievements (run once at end)
-  const wc=workoutLog.length;const hr=new Date().getHours();
+  const wc=getLiftLogs().length;const hr=new Date().getHours();
   if(wc>=1)unlockAch('first_workout');if(wc>=10)unlockAch('workouts_10');if(wc>=25)unlockAch('workouts_25');if(wc>=50)unlockAch('workouts_50');if(wc>=100)unlockAch('workouts_100');if(wc>=200)unlockAch('workouts_200');
   if(hr<7)unlockAch('early_bird');if(hr>=21)unlockAch('night_owl');
   const dids=new Set(workoutLog.map(e=>e.dayId));if(dids.size>=4)unlockAch('variety');
@@ -671,22 +707,27 @@ async function logAllDays(){
   }finally{logLock=false}
 }
 function calcDayStreak(){const dates=[...new Set(workoutLog.map(e=>new Date(e.date).toDateString()))].sort((a,b)=>new Date(b)-new Date(a));let s=0;for(let i=0;i<dates.length;i++){const exp=new Date();exp.setDate(exp.getDate()-i);if(dates[i]===exp.toDateString())s++;else break}return s}
+// ─── Helpers: distinguish lifts from activities/rest ───
+function getLiftLogs(){return workoutLog.filter(e=>!e.isActivity&&!e.isRest)}
+function getActivityLogs(){return workoutLog.filter(e=>e.isActivity)}
+function getRestLogs(){return workoutLog.filter(e=>e.isRest)}
+// Any entry that counts for streak (lift, activity, or active rest — NOT full rest)
+function getTrainingLogs(){return workoutLog.filter(e=>!e.isRest||e.restType==='active')}
 function calcWeeklyStreak(){
-  // Streak = consecutive weeks with 3+ sessions
-  const weeks={};workoutLog.forEach(e=>{const m=getMonday(new Date(e.date)).toISOString().slice(0,10);if(!weeks[m])weeks[m]=0;weeks[m]++});
+  // Streak = consecutive weeks with 3+ training sessions (lifts, activities, active rest)
+  const weeks={};getTrainingLogs().forEach(e=>{const m=getMonday(new Date(e.date)).toISOString().slice(0,10);if(!weeks[m])weeks[m]=0;weeks[m]++});
   const thisMonday=getMonday(new Date()).toISOString().slice(0,10);
   let streak=0;const d=new Date();
   for(let i=0;i<104;i++){
     const wk=new Date(d);wk.setDate(wk.getDate()-(7*i));
     const key=getMonday(wk).toISOString().slice(0,10);
-    // Current week: don't break streak if it's still in progress
     if(key===thisMonday){if((weeks[key]||0)>0)streak++;continue}
     if((weeks[key]||0)>=3)streak++;else break;
   }
   return streak;
 }
 function calcStreak(){return calcWeeklyStreak()}
-function calcFullWeeks(){const w={};workoutLog.forEach(e=>{const m=getMonday(new Date(e.date)).toISOString().slice(0,10);if(!w[m])w[m]=new Set();w[m].add(e.dayId)});return Object.values(w).filter(s=>s.size>=4).length}
+function calcFullWeeks(){const w={};getLiftLogs().forEach(e=>{const m=getMonday(new Date(e.date)).toISOString().slice(0,10);if(!w[m])w[m]=new Set();w[m].add(e.dayId)});return Object.values(w).filter(s=>s.size>=4).length}
 
 // ═══════════ ACHIEVEMENTS ═══════════
 async function unlockAch(id){if(userData.achievements.includes(id))return;userData.achievements.push(id);const a=ACHIEVEMENTS.find(x=>x.id===id);if(a&&a.xp>0)addXP(a.xp);await saveUser({achievements:userData.achievements,xp:userData.xp});await saveLeaderboard();updateTopBar()}
@@ -714,6 +755,7 @@ function renderAchievements(){
     {name:'Social',test:a=>['add_friend','friends_5','friends_10','chat_first','chat_10'].includes(a.id)},
     {name:'Missions',test:a=>a.id.startsWith('mission')||a.id.startsWith('event')},
     {name:'Nutrition',test:a=>['food_log_1','food_log_7','food_log_14','food_log_30','food_log_60','scan_1','scan_5','all_meals','protein_hit'].includes(a.id)},
+    {name:'Cardio',test:a=>a.id.startsWith('cardio_')},
     {name:'Rank',test:a=>a.id.startsWith('rank_')||a.id.startsWith('xp_')},
     {name:'Secrets',test:a=>!!a.secret}
   ];
@@ -750,7 +792,7 @@ function toggleAchCat(el){
 function renderProfile(){
   const r=getEffectiveRank(),info=getXpBarInfo();
   const title=(r.title&&r.title[userData.class])||r.name;const st=userData.stats||{};const prs=userData.prs||{};
-  let h=`<div class="profile-card"><div class="profile-pic-wrap" onclick="document.getElementById('picInput').click()">${userData.profilePic?'<img src="'+userData.profilePic+'">':'<div class="pp-placeholder">👤</div>'}</div>
+  let h=`<div class="profile-card"><div class="profile-pic-wrap" onclick="checkPhotoPrivacy(()=>document.getElementById('picInput').click())">${userData.profilePic?'<img src="'+userData.profilePic+'">':'<div class="pp-placeholder">👤</div>'}</div>
     <div class="profile-name">@${userData.username||'???'}</div>
     <div class="profile-realname">${userData.name||''} <span style="font-size:.6rem;color:var(--dim)">(only you see this)</span></div>
     <div class="profile-class">${userData.class}${userData.subclass?' — '+userData.subclass:''}</div>
@@ -760,12 +802,16 @@ function renderProfile(){
   // Stats
   h+=`<div class="stats-grid"><div class="stat-card"><div class="sv">${st.height||'—'}</div><div class="sl">Height</div></div><div class="stat-card"><div class="sv">${st.weight?st.weight+' lbs':'—'}</div><div class="sl">Weight</div></div><div class="stat-card"><div class="sv">${st.age||'—'}</div><div class="sl">Age</div></div></div>`;
   h+=`<div class="stats-grid"><div class="stat-card"><div class="sv">${prs.bench||'—'}</div><div class="sl">Bench PR</div></div><div class="stat-card"><div class="sv">${prs.squat||'—'}</div><div class="sl">Squat PR</div></div><div class="stat-card"><div class="sv">${prs.deadlift||'—'}</div><div class="sl">Deadlift PR</div></div></div>`;
-  h+=`<div class="stats-grid"><div class="stat-card"><div class="sv">${workoutLog.length}</div><div class="sl">Workouts</div></div><div class="stat-card"><div class="sv">${calcWeeklyStreak()}w</div><div class="sl">Wk Streak</div></div><div class="stat-card"><div class="sv">${(userData.achievements||[]).length}</div><div class="sl">Achieve.</div></div></div>`;
+  h+=`<div class="stats-grid"><div class="stat-card"><div class="sv">${getLiftLogs().length}</div><div class="sl">Workouts</div></div><div class="stat-card"><div class="sv">${calcWeeklyStreak()}w</div><div class="sl">Wk Streak</div></div><div class="stat-card"><div class="sv">${(userData.achievements||[]).length}</div><div class="sl">Achieve.</div></div></div>`;
+  const actCount=getActivityLogs().length;const restCount=getRestLogs().length;
+  if(actCount||restCount)h+=`<div class="stats-grid"><div class="stat-card"><div class="sv">${actCount}</div><div class="sl">Activities</div></div><div class="stat-card"><div class="sv">${restCount}</div><div class="sl">Rest Days</div></div><div class="stat-card"><div class="sv">${(userData.weighIns||[]).length}</div><div class="sl">Weigh-ins</div></div></div>`;
   // Streak warning
   const wkStreakP=calcWeeklyStreak();const thisWeekCount=workoutLog.filter(e=>{const m=getMonday(new Date(e.date)).toISOString().slice(0,10);return m===getMonday(new Date()).toISOString().slice(0,10)}).length;
   if(wkStreakP>0&&thisWeekCount<3){const need=3-thisWeekCount;h+=`<div class="streak-warning">🔥 <strong>${wkStreakP}-week streak!</strong> Need ${need} more session${need>1?'s':''} this week to keep it.</div>`}
   else if(wkStreakP===0&&workoutLog.length>0){h+=`<div class="streak-warning lost">💀 Streak broken. Get 3 sessions this week to start a new one.</div>`}
+  h+=`<button class="edit-stats-btn" onclick="openWeighIn()" style="background:rgba(52,211,153,.08);border-color:var(--green);color:var(--green)">📏 Weekly Check-in</button>`;
   h+=`<button class="edit-stats-btn" onclick="openSettings()">⚙️ Settings</button>`;
+  if(userData.role==='trainer')h+=`<button class="edit-stats-btn" onclick="switchPage('trainer')" style="background:rgba(251,191,36,.08);border-color:var(--gold);color:var(--gold)">👨‍🏫 Trainer Dashboard</button>`;
   h+=renderDevTools();
   $('profileContent').innerHTML=h;
 }
@@ -799,7 +845,24 @@ function openSettings(){
   $('setBench').value=prs.bench||'';$('setSquat').value=prs.squat||'';$('setDeadlift').value=prs.deadlift||'';$('setOhp').value=prs.ohp||'';
   $('setGoal').value=userData.goal||'';$('setExperience').value=userData.experience||'';
   $('setHideName').checked=!!priv.hideName;$('setHideStats').checked=!!priv.hideStats;
+  // Trainer status
+  if(userData.trainer){$('trainerStatus').innerHTML='✅ <strong style="color:var(--green)">Connected to a trainer</strong><br><button class="copy-code-btn" onclick="disconnectTrainer()" style="margin-top:4px">Disconnect</button>';$('trainerCodeRow').style.display='none'}
+  else if(userData.role==='trainer'){$('trainerStatus').innerHTML='👨‍🏫 <strong style="color:var(--gold)">You are a trainer</strong><br>Share your code from Profile → Trainer tab';$('trainerCodeRow').style.display='none'}
+  else{$('trainerStatus').textContent='Have a trainer? Enter their code to share your progress with them.';$('trainerCodeRow').style.display='';$('setTrainerCode').value=''}
   $('settingsModal').classList.add('open');
+}
+async function connectTrainer(){
+  const code=$('setTrainerCode').value.trim().toUpperCase();
+  if(!code||code.length!==6){toast('Enter a 6-character code');return}
+  await acceptTrainerCode(code);
+  openSettings();
+}
+async function disconnectTrainer(){
+  if(!confirm('Disconnect from your trainer? They will no longer see your progress.'))return;
+  const trainerUid=userData.trainer;
+  await saveUser({trainer:null});
+  if(trainerUid){try{await db.collection('users').doc(trainerUid).update({clients:firebase.firestore.FieldValue.arrayRemove(U.uid)})}catch(e){}}
+  toast('Trainer disconnected');openSettings();
 }
 function closeSettings(){$('settingsModal').classList.remove('open')}
 async function saveSettings(){
@@ -1202,8 +1265,8 @@ async function completeEvent(){
 // ═══════════ PROGRESSION TRACKS ═══════════
 function getTrackProgress(task){
   switch(task.check){
-    case 'workouts':return workoutLog.length;
-    case 'maxlift':return Math.max(0,...workoutLog.flatMap(e=>e.exercises.flatMap(ex=>ex.sets.map(s=>parseInt(s.weight)||0))));
+    case 'workouts':return getLiftLogs().length;
+    case 'maxlift':return Math.max(0,...getLiftLogs().flatMap(e=>e.exercises.flatMap(ex=>Array.isArray(ex.sets)?ex.sets.map(s=>parseInt(s.weight)||0):[])));
     case 'full_weeks':return calcFullWeeks();
     case 'wk_streak':return calcWeeklyStreak();
     case 'class_missions':{
@@ -1265,8 +1328,8 @@ async function checkPassiveAchievements(){
   if(userData.xp>=1000)unlockAch('xp_1k');
   if(userData.xp>=5000)unlockAch('xp_5k');
   if(userData.xp>=10000)unlockAch('xp_10k');
-  // Workout milestones
-  const wc=workoutLog.length;
+  // Workout milestones (lifts only, not activities)
+  const wc=getLiftLogs().length;
   if(wc>=1)unlockAch('first_workout');if(wc>=10)unlockAch('workouts_10');if(wc>=25)unlockAch('workouts_25');
   if(wc>=50)unlockAch('workouts_50');if(wc>=100)unlockAch('workouts_100');if(wc>=200)unlockAch('workouts_200');
   if(wc>=300)unlockAch('workouts_300');if(wc>=500)unlockAch('workouts_500');
@@ -1296,6 +1359,48 @@ async function checkPassiveAchievements(){
   // Message count
   const msgCount=parseInt(userData.messageCount)||0;
   if(msgCount>=1)unlockAch('chat_first');if(msgCount>=10)unlockAch('chat_10');
+  // Cardio count
+  const actCount=getActivityLogs().length;
+  if(actCount>=1)unlockAch('cardio_first');if(actCount>=5)unlockAch('cardio_5');if(actCount>=20)unlockAch('cardio_20');
+  // Rest days
+  const restLogs=getRestLogs();const activeRestCount=restLogs.filter(e=>e.restType==='active').length;
+  if(restLogs.length>=1)unlockAch('rest_first');
+  if(restLogs.length>=5)unlockAch('rest_5');
+  if(restLogs.length>=20)unlockAch('recovery_pro');
+  if(activeRestCount>=10)unlockAch('active_rest_10');
+  // Weigh-ins
+  const wiCount=(userData.weighIns||[]).length;
+  if(wiCount>=1)unlockAch('first_weighin');
+  if(wiCount>=4)unlockAch('weighin_4');
+  if(wiCount>=12)unlockAch('weighin_12');
+  if(wiCount>=26)unlockAch('weighin_26');
+  // Weight change goals (requires at least 2 weigh-ins)
+  if(wiCount>=2){
+    const first=userData.weighIns[0].weight,last=userData.weighIns[userData.weighIns.length-1].weight;
+    const diff=last-first;
+    if(diff<=-5)unlockAch('goal_5down');
+    if(diff<=-10)unlockAch('goal_10down');
+    if(diff>=5)unlockAch('goal_5up');
+  }
+  // Trainer connections
+  if(userData.trainer)unlockAch('trainer_connected');
+  if(userData.role==='trainer'&&(userData.clients||[]).length>=1)unlockAch('trainer_first_client');
+  // Powerlifter 1000 Club
+  if(userData.class==='Powerlifter'){
+    const prs=userData.prs||{};const total=(parseInt(prs.bench)||0)+(parseInt(prs.squat)||0)+(parseInt(prs.deadlift)||0);
+    if(total>=1000)unlockAch('pl_1000_club');
+  }
+  // Bowling secret
+  if(getActivityLogs().some(e=>e.activityType==='Bowling'))unlockAch('secret_bowler');
+  // Dawn Patrol (10 workouts before 6 AM)
+  const dawnCount=getLiftLogs().filter(e=>new Date(e.date).getHours()<6).length;
+  if(dawnCount>=10)unlockAch('dawn_patrol');
+  // Twice a day (3 separate days with 2+ workouts)
+  const byDay={};getLiftLogs().forEach(e=>{const k=new Date(e.date).toDateString();byDay[k]=(byDay[k]||0)+1});
+  const twiceDays=Object.values(byDay).filter(c=>c>=2).length;
+  if(twiceDays>=3)unlockAch('twice_day');
+  // Perfect weeks (10 perfect weeks)
+  if(calcPerfectWeeks()>=10)unlockAch('perfectionist');
   // ── Secret Achievements ──
   // OG Hunter — account created before May 2026
   if(userData.createdAt){const created=userData.createdAt.toDate?userData.createdAt.toDate():new Date(userData.createdAt);if(created<new Date('2026-05-01'))unlockAch('secret_og')}
@@ -1316,41 +1421,303 @@ async function checkPassiveAchievements(){
 let notifPermission='default';
 function initNotifications(){
   const isStandalone=window.matchMedia('(display-mode: standalone)').matches||window.navigator.standalone;
-  if(!isStandalone)return; // Only push for installed app
+  if(!isStandalone)return;
   if(!('Notification' in window))return;
   notifPermission=Notification.permission;
   if(notifPermission==='default'){
-    // Ask after a delay so it doesn't block first experience
     setTimeout(()=>{
-      Notification.requestPermission().then(p=>{notifPermission=p});
+      Notification.requestPermission().then(p=>{notifPermission=p;if(p==='granted')checkTrainReminder()});
     },10000);
+  }else if(notifPermission==='granted'){
+    // Check immediately on app open
+    setTimeout(()=>checkTrainReminder(),3000);
   }
-  // Schedule check — remind to train if no workout today
-  scheduleTrainReminder();
+  // Also check periodically
+  setInterval(()=>checkTrainReminder(),1800000); // Every 30 min
 }
-function scheduleTrainReminder(){
-  // Check every hour if app is open
-  setInterval(()=>{
-    if(notifPermission!=='granted')return;
-    const hr=new Date().getHours();
-    if(hr<16||hr>21)return; // Only remind 4-9 PM
-    const todayLogs=workoutLog.filter(e=>{const d=new Date(e.date);return d.toDateString()===new Date().toDateString()});
-    if(todayLogs.length>0)return; // Already trained
-    const lastNotif=localStorage.getItem('lastTrainNotif');
-    const today=getTodayStr();
-    if(lastNotif===today)return; // Already notified today
-    localStorage.setItem('lastTrainNotif',today);
-    const ws=calcWeeklyStreak();
-    const {label}=getXpMultiplier();
-    let body='The System is watching. Don\'t let your streak die.';
-    if(ws>0)body=`${ws}-week streak on the line. Get in there.`;
-    if(label)body+=` ${label}`;
-    new Notification('LexenFitness',{body,icon:'icons/icon-192x192.png',badge:'icons/icon-96x96.png'});
-  },3600000); // Every hour
+function checkTrainReminder(){
+  if(notifPermission!=='granted')return;
+  const hr=new Date().getHours();
+  if(hr<10||hr>21)return; // Only 10 AM - 9 PM
+  const todayLogs=workoutLog.filter(e=>{const d=new Date(e.date);return d.toDateString()===new Date().toDateString()});
+  if(todayLogs.length>0)return; // Already trained
+  const lastNotif=localStorage.getItem('lastTrainNotif');
+  const today=getTodayStr();
+  if(lastNotif===today)return; // Already notified today
+  localStorage.setItem('lastTrainNotif',today);
+  const ws=calcWeeklyStreak();
+  const {label}=getXpMultiplier();
+  let body='The System is watching. Don\'t let your streak die.';
+  if(ws>0)body=`${ws}-week streak on the line. Get in there.`;
+  if(label)body+=` ${label}`;
+  try{new Notification('LexenFitness',{body,icon:'icons/icon-192x192.png',badge:'icons/icon-96x96.png'})}catch(e){}
 }
 function sendNotif(title,body){
   if(notifPermission!=='granted')return;
   try{new Notification(title,{body,icon:'icons/icon-192x192.png'})}catch(e){}
+}
+
+// ═══════════ CARDIO / ACTIVITY LOG ═══════════
+const ACTIVITY_CAL_PER_MIN={Walking:4,Running:10,Cycling:7,Swimming:8,Hiking:6,Bowling:3,Basketball:7,Soccer:8,Tennis:7,Yoga:3,Stretching:2,'Jump Rope':11,Rowing:8,Stairmaster:9,Elliptical:7,Other:5};
+function openActivityLog(){
+  $('actType').value='Walking';$('actDuration').value='';$('actCalories').value='';$('actSteps').value='';$('actNotes').value='';$('actCustomName').value='';$('actCustomRow').style.display='none';
+  $('actType').onchange=function(){$('actCustomRow').style.display=this.value==='Other'?'':'none'};
+  $('actDuration').oninput=function(){
+    const type=$('actType').value;const dur=parseInt(this.value)||0;
+    const est=Math.round(dur*(ACTIVITY_CAL_PER_MIN[type]||5));
+    $('actCalories').placeholder='~'+est+' cal (auto)';
+  };
+  $('activityModal').classList.add('open');
+}
+function closeActivityLog(){$('activityModal').classList.remove('open')}
+async function saveActivityLog(){
+  const type=$('actType').value;
+  const name=type==='Other'?($('actCustomName').value.trim()||'Activity'):type;
+  const dur=parseInt($('actDuration').value);
+  if(!dur){toast('Enter duration');return}
+  const calBurned=parseInt($('actCalories').value)||Math.round(dur*(ACTIVITY_CAL_PER_MIN[type]||5));
+  const steps=parseInt($('actSteps').value)||0;
+  const notes=$('actNotes').value.trim();
+  // Log as a workout entry (counts for streak + XP)
+  const entry={
+    date:new Date().toISOString(),
+    dayId:'activity_'+Date.now(),
+    dayTitle:name,
+    isActivity:true,
+    activityType:type,
+    duration:dur,
+    calBurned,
+    steps,
+    notes,
+    exercises:[{name,sets:1,reps:dur+'min',sets_data:[{reps:dur}]}]
+  };
+  workoutLog.unshift(entry);
+  await db.collection('users').doc(U.uid).collection('log').add(entry);
+  const gained=addXP(15);
+  unlockAch('cardio_first');
+  // Count total activities
+  const actCount=getActivityLogs().length;
+  if(actCount>=5)unlockAch('cardio_5');if(actCount>=20)unlockAch('cardio_20');
+  await saveUser({xp:userData.xp});await saveLeaderboard();
+  updateTopBar();checkRankUp();
+  closeActivityLog();toast(`🏃 ${name} logged! +${gained} XP · ${calBurned} cal burned`);
+}
+
+// ═══════════ REST DAY ═══════════
+let selectedRestType=null;
+function openRestLog(){
+  selectedRestType=null;
+  document.querySelectorAll('.rest-option').forEach(r=>r.classList.remove('selected'));
+  $('restNotes').value='';
+  const btn=$('restSaveBtn');btn.disabled=true;btn.textContent='Pick a type';
+  $('restModal').classList.add('open');
+}
+function closeRestLog(){$('restModal').classList.remove('open')}
+function selectRestType(type){
+  selectedRestType=type;
+  document.querySelectorAll('.rest-option').forEach(r=>r.classList.toggle('selected',r.dataset.rest===type));
+  const btn=$('restSaveBtn');btn.disabled=false;btn.textContent=type==='active'?'Log Active Rest':'Log Full Rest';
+}
+async function saveRestLog(){
+  if(!selectedRestType)return;
+  const isActive=selectedRestType==='active';
+  const notes=$('restNotes').value.trim();
+  // Check if already logged rest today
+  const today=new Date().toDateString();
+  const alreadyRest=workoutLog.some(e=>e.isRest&&new Date(e.date).toDateString()===today);
+  if(alreadyRest){toast('Already logged rest today');closeRestLog();return}
+  const entry={
+    date:new Date().toISOString(),
+    dayId:'rest_'+Date.now(),
+    dayTitle:isActive?'Active Rest':'Full Rest',
+    isRest:true,
+    restType:selectedRestType,
+    notes,
+    exercises:[]
+  };
+  workoutLog.unshift(entry);
+  await db.collection('users').doc(U.uid).collection('log').add(entry);
+  const xp=isActive?10:5;
+  const gained=addXP(xp);
+  unlockAch('rest_first');
+  const restCount=getRestLogs().length;
+  if(restCount>=5)unlockAch('rest_5');
+  if(restCount>=20)unlockAch('recovery_pro');
+  await saveUser({xp:userData.xp});await saveLeaderboard();
+  updateTopBar();
+  closeRestLog();
+  toast(`${isActive?'🚶':'🛏️'} ${isActive?'Active':'Full'} rest logged! +${gained} XP`);
+}
+
+// ═══════════ WEIGH-IN / CHECK-IN ═══════════
+function openWeighIn(){
+  const st=userData.stats||{};
+  $('wiWeight').value=st.weight||'';
+  $('wiBodyFat').value=st.bodyFat||'';
+  $('wiNotes').value='';
+  // Render history
+  const history=(userData.weighIns||[]).slice(-8).reverse();
+  const histEl=$('wiHistory');
+  if(!history.length){histEl.innerHTML='<p style="color:var(--dim);font-size:.7rem;margin-top:.5rem">No check-ins yet. First one is the baseline.</p>'}
+  else{
+    let h='<div class="section-title" style="margin:.8rem 0 .3rem;font-size:.6rem">RECENT CHECK-INS</div>';
+    history.forEach((w,i)=>{
+      const dt=new Date(w.date).toLocaleDateString('en-US',{month:'short',day:'numeric'});
+      const diff=i<history.length-1?(w.weight-history[i+1].weight).toFixed(1):'—';
+      const diffColor=diff==='—'?'var(--muted)':diff>0?'var(--gold)':'var(--green)';
+      h+=`<div class="weigh-row"><span class="weigh-date">${dt}</span><span class="weigh-weight">${w.weight} lbs</span><span class="weigh-diff" style="color:${diffColor}">${diff!=='—'?(diff>0?'+':'')+diff:''}</span></div>`;
+    });
+    histEl.innerHTML=h;
+  }
+  $('weighInModal').classList.add('open');
+}
+function closeWeighIn(){$('weighInModal').classList.remove('open')}
+async function saveWeighIn(){
+  const weight=parseFloat($('wiWeight').value);
+  if(!weight||weight<50||weight>700){toast('Enter a valid weight');return}
+  const bodyFat=parseFloat($('wiBodyFat').value)||null;
+  const notes=$('wiNotes').value.trim();
+  const entry={date:new Date().toISOString(),weight,bodyFat,notes};
+  const history=userData.weighIns||[];
+  history.push(entry);
+  // Also update current stats
+  const stats={...(userData.stats||{}),weight:String(weight)};
+  if(bodyFat)stats.bodyFat=String(bodyFat);
+  await saveUser({weighIns:history,stats});
+  const gained=addXP(15);
+  unlockAch('first_weighin');
+  if(history.length>=4)unlockAch('weighin_4');
+  if(history.length>=12)unlockAch('weighin_12');
+  if(history.length>=26)unlockAch('weighin_26');
+  closeWeighIn();renderProfile();
+  toast(`📏 Check-in logged! +${gained} XP`);
+}
+
+// ═══════════ PHOTO PRIVACY ═══════════
+function checkPhotoPrivacy(then){
+  if(localStorage.getItem('photoPrivacyAccepted')==='1'){then();return}
+  window._pendingPhotoAction=then;
+  $('photoPrivacyModal').classList.add('open');
+}
+function acceptPhotoPrivacy(){
+  localStorage.setItem('photoPrivacyAccepted','1');
+  $('photoPrivacyModal').classList.remove('open');
+  if(window._pendingPhotoAction){const fn=window._pendingPhotoAction;window._pendingPhotoAction=null;fn()}
+}
+
+// ═══════════ TRAINER MODE ═══════════
+let trainerClients=[];
+async function renderTrainerDashboard(){
+  const el=$('trainerContent');if(!el)return;
+  let h=`<div class="page-title">TRAINER DASHBOARD</div>`;
+  h+=`<div class="page-sub">Monitor your clients' progress and stay connected</div>`;
+  h+=`<div class="trainer-code-card"><div class="trainer-code-label">YOUR TRAINER CODE</div><div class="trainer-code">${userData.trainerCode||'Generate below'}</div>`;
+  if(!userData.trainerCode)h+=`<button class="m-save-btn" onclick="generateTrainerCode()">Generate Code</button>`;
+  else h+=`<button class="copy-code-btn" onclick="copyTrainerCode()">📋 Copy</button><div style="font-size:.62rem;color:var(--dim);margin-top:4px">Share this with your clients</div>`;
+  h+=`</div>`;
+  h+=`<div class="section-title" style="margin:1rem 0 .3rem">CLIENTS (${(userData.clients||[]).length})</div>`;
+  const clients=userData.clients||[];
+  if(!clients.length){h+=`<p style="color:var(--muted);font-size:.82rem">No clients yet. Share your trainer code with clients so they can connect.</p>`}
+  else{
+    h+=`<div id="trainerClientList">Loading...</div>`;
+  }
+  el.innerHTML=h;
+  if(clients.length)loadTrainerClientList();
+}
+async function loadTrainerClientList(){
+  const el=$('trainerClientList');if(!el)return;
+  const clients=userData.clients||[];
+  let h='';
+  for(const uid of clients.slice(0,30)){
+    try{
+      const d=await db.collection('users').doc(uid).get();
+      if(!d.exists)continue;
+      const u=d.data();
+      const logSnap=await db.collection('users').doc(uid).collection('log').orderBy('date','desc').limit(20).get();
+      let lifts=0,activities=0,rest=0,last=null;
+      logSnap.forEach(doc=>{const e=doc.data();if(e.isRest)rest++;else if(e.isActivity)activities++;else lifts++;if(!last||new Date(e.date)>new Date(last))last=e.date});
+      const daysSince=last?Math.floor((Date.now()-new Date(last).getTime())/86400000):999;
+      const status=daysSince<=2?'🟢 Active':daysSince<=7?'🟡 Slow':'🔴 Inactive';
+      const weighIns=(u.weighIns||[]).length;
+      h+=`<div class="client-card" onclick="openClientDetail('${uid}')">
+        <div class="lb-pic">${u.profilePic?'<img src="'+u.profilePic+'">':'👤'}</div>
+        <div class="client-info">
+          <div class="client-name">@${esc(u.username||'hunter')} <span class="client-status">${status}</span></div>
+          <div class="client-stats">${lifts} lifts · ${activities} cardio · ${rest} rest · ${weighIns} check-ins</div>
+          <div class="client-goal">${esc(u.nutritionGoal||u.goal||'No goal set')}</div>
+        </div>
+      </div>`;
+    }catch(e){}
+  }
+  el.innerHTML=h||'<p style="color:var(--muted);font-size:.78rem">Could not load clients. Make sure they\'ve accepted your invite.</p>';
+}
+async function generateTrainerCode(){
+  const code=genFriendCode();
+  await saveUser({trainerCode:code,role:'trainer'});
+  await db.collection('trainerCodes').doc(code).set({uid:U.uid,createdAt:firebase.firestore.FieldValue.serverTimestamp()});
+  renderTrainerDashboard();toast('Trainer code generated!');
+}
+function copyTrainerCode(){
+  const c=userData.trainerCode||'';if(!c)return;
+  if(navigator.clipboard){navigator.clipboard.writeText(c).then(()=>toast('Code copied: '+c)).catch(()=>fallbackCopy(c))}else{fallbackCopy(c)}
+}
+async function openClientDetail(uid){
+  try{
+    const d=await db.collection('users').doc(uid).get();
+    if(!d.exists){toast('Client not found');return}
+    const u=d.data();
+    const logSnap=await db.collection('users').doc(uid).collection('log').orderBy('date','desc').limit(10).get();
+    const logs=[];logSnap.forEach(doc=>logs.push(doc.data()));
+    const weighIns=(u.weighIns||[]).slice(-5).reverse();
+    const modal=$('profileCardModal');if(!modal)return;
+    let h=`<div class="pc-header">
+      <div class="pc-pic">${u.profilePic?'<img src="'+u.profilePic+'">':'<div class="pp-placeholder" style="width:60px;height:60px;font-size:1.6rem">👤</div>'}</div>
+      <div class="pc-info">
+        <div class="pc-username">@${esc(u.username||'hunter')}</div>
+        <div class="pc-class">${u.class||''}${u.subclass?' — '+u.subclass:''}</div>
+        <div class="pc-rank">${u.nutritionGoal||u.goal||'No goal'}</div>
+      </div>
+    </div>`;
+    h+=`<div class="section-title" style="margin:.6rem 0 .2rem">RECENT ACTIVITY</div>`;
+    if(!logs.length)h+='<p style="color:var(--muted);font-size:.74rem">No workouts logged yet.</p>';
+    else logs.slice(0,6).forEach(e=>{
+      const dt=new Date(e.date).toLocaleDateString('en-US',{month:'short',day:'numeric'});
+      const type=e.isRest?'😴 Rest':e.isActivity?'🏃 Activity':'🏋️ Lift';
+      h+=`<div style="display:flex;justify-content:space-between;font-size:.72rem;padding:3px 0"><span>${type} · ${esc(e.dayTitle||'Workout')}</span><span style="color:var(--dim)">${dt}</span></div>`;
+    });
+    if(weighIns.length){
+      h+=`<div class="section-title" style="margin:.6rem 0 .2rem">WEIGH-INS</div>`;
+      weighIns.forEach(w=>{
+        const dt=new Date(w.date).toLocaleDateString('en-US',{month:'short',day:'numeric'});
+        h+=`<div style="display:flex;justify-content:space-between;font-size:.72rem;padding:3px 0"><span>${w.weight} lbs${w.bodyFat?' · '+w.bodyFat+'% BF':''}</span><span style="color:var(--dim)">${dt}</span></div>`;
+      });
+    }
+    h+=`<div class="m-actions" style="margin-top:.8rem"><button class="m-cancel" onclick="closeProfileCard()">Close</button><button class="m-save-btn" onclick="messageClient('${uid}')">💬 Message</button></div>`;
+    modal.querySelector('.modal').innerHTML=h;
+    modal.classList.add('open');
+  }catch(e){toast('Error loading client')}
+}
+function messageClient(uid){
+  closeProfileCard();
+  if(!(userData.friends||[]).includes(uid)){toast('Add them as a friend first to message');return}
+  openChat(uid);
+}
+
+// Client-side: accept a trainer
+async function acceptTrainerCode(code){
+  if(!code||code.length!==6)return;
+  try{
+    const snap=await db.collection('trainerCodes').doc(code.toUpperCase()).get();
+    if(!snap.exists){toast('Invalid trainer code');return}
+    const trainerUid=snap.data().uid;
+    if(trainerUid===U.uid){toast('That\'s your own code!');return}
+    // Add trainer to user's doc
+    await saveUser({trainer:trainerUid});
+    // Add user to trainer's clients list
+    await db.collection('users').doc(trainerUid).update({clients:firebase.firestore.FieldValue.arrayUnion(U.uid)});
+    toast('Trainer connected! They can now view your progress.');
+    renderProfile();
+  }catch(e){toast('Could not connect: '+e.message)}
 }
 
 // ═══════════ EXERCISE LIBRARY ═══════════

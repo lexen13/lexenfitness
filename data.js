@@ -1,9 +1,29 @@
 // ═══════════════════════════════════════════
 //  LEXENFITNESS — DATA v4 (Solo Leveling)
 // ═══════════════════════════════════════════
-const APP_VERSION='1.9.0';
+const APP_VERSION='1.10.0';
 const WELCOME_MESSAGE=`Welcome to Lexen Fitness! A Solo-Leveling inspired, gamified Fitness App to help friends and family stay motivated by giving fitness a game-like experience.\n\nThis app is developed by one person, and is very much still in the testing phase. Not everything will be perfect, but please bear with me. If you have any suggestions, feel free to pass them along as I continue to make this the best app that I can, before I actually have to start buying dev rights with Apple and Google.\n\nFeel free to share this with your own family and friends as we build a community that becomes healthier together!\n\n— Gavin (founder)`;
 const CHANGELOG=[
+  {version:'1.10.0',date:'Apr 2026',title:'Rest Days, Check-ins & Trainer Mode',items:[
+    '😴 Rest Day logging — Active Rest (counts for streak) vs Full Rest',
+    '📏 Weekly Check-in system — track weight, body fat, and progress over time',
+    '👨‍🏫 Trainer Mode — connect with a trainer via 6-char code so they can monitor your progress',
+    '🔒 Photo privacy disclosure — transparent handling of profile pics and progress photos',
+    '🏆 35+ new achievements — class-specific PRs, goal-based (5 down/10 down), behavioral (Dawn Patrol, Clockwork), and more secrets',
+    '🎯 11 new daily missions — cold plunge, meditation, PR hunt, tech detox, gallon challenge, and more',
+    '🎪 5 new event missions — PR Day (50 XP), Bullseye protein target, Double Move, Early Grind, Check-in day',
+    '🔧 Fixed activity entries breaking streak/PR calculations',
+    '🔧 Workout vs activity counts now tracked separately on profile + leaderboard'
+  ]},
+  {version:'1.9.2',date:'Apr 2026',title:'Activity Logging & Fixes',items:[
+    '🏃 Cardio / Activity logging — walking, running, bowling, and 13 more activities with auto calorie estimates',
+    '📊 XP bar now shows remaining XP to next rank (not total threshold)',
+    '🎪 Event missions fixed — proper 30% daily distribution',
+    '🔥 Weekend/Holiday XP banner now properly displays',
+    '✏️ Edit past food logs — add or remove items from any date',
+    '🔔 Notification timing improved (fires on app open, wider window)',
+    '🏆 New cardio achievements'
+  ]},
   {version:'1.9.0',date:'Apr 2026',title:'Polish & Community',items:[
     '⚙️ Full TDEE editor on Nutrition page — height, weight, sex, steps, all in one place',
     '👋 Welcome message for all new users from the founder',
@@ -208,7 +228,20 @@ const UNIVERSAL_MISSIONS=[
   {id:'meal_prep',icon:'🥡',name:'Prep Master',desc:'Meal prep for tomorrow',xp:15},
   {id:'no_phone',icon:'📵',name:'Unplug',desc:'No phone 30 min before bed',xp:10},
   {id:'steps_10k',icon:'🚶',name:'Step It Up',desc:'Walk 10,000 steps',xp:20},
-  {id:'abs_5min',icon:'🔥',name:'Core Blast',desc:'5-min ab routine',xp:10}
+  {id:'abs_5min',icon:'🔥',name:'Core Blast',desc:'5-min ab routine',xp:10},
+  // New universal missions
+  {id:'cold_shower',icon:'🥶',name:'Cold Plunge',desc:'2-min cold shower or ice bath',xp:15},
+  {id:'meditate',icon:'🧠',name:'Meditate',desc:'5 min of meditation or breathwork',xp:10},
+  {id:'pr_hunt',icon:'🎯',name:'PR Hunt',desc:'Add weight or reps over last session on any lift',xp:20},
+  {id:'call_friend',icon:'📞',name:'Connect',desc:'Call or message a friend/family member',xp:10},
+  {id:'tech_detox',icon:'🚫',name:'Tech Detox',desc:'1 hour with phone off',xp:15},
+  {id:'journal',icon:'📓',name:'Journal',desc:'Write for 5 minutes',xp:10},
+  {id:'cook_social',icon:'👨‍🍳',name:'Break Bread',desc:'Cook and eat a meal with family/friends',xp:15},
+  {id:'no_alcohol',icon:'🚱',name:'Dry Day',desc:'No alcohol today',xp:15},
+  {id:'nap',icon:'💤',name:'Power Nap',desc:'20-30 min nap',xp:10},
+  {id:'gallon',icon:'🚰',name:'Gallon Challenge',desc:'Drink a full gallon of water',xp:20},
+  {id:'sunlight',icon:'☀️',name:'Sunshine',desc:'10+ min of direct sunlight',xp:10},
+  {id:'stretch_long',icon:'🤸',name:'Deep Stretch',desc:'15+ min mobility/yoga session',xp:15}
 ];
 const CLASS_MISSIONS={
   Powerlifter:[
@@ -337,6 +370,10 @@ const ACHIEVEMENTS=[
   {id:'xp_1k',icon:'⭐',name:'1K Club',desc:'Reach 1,000 XP',xp:0},
   {id:'xp_5k',icon:'⭐',name:'5K Club',desc:'Reach 5,000 XP',xp:0},
   {id:'xp_10k',icon:'🌟',name:'10K Club',desc:'Reach 10,000 XP',xp:0},
+  // ── Cardio / Activity ──
+  {id:'cardio_first',icon:'🏃',name:'Active Life',desc:'Log your first cardio/activity',xp:10},
+  {id:'cardio_5',icon:'🏃',name:'Cardio Regular',desc:'Log 5 activities',xp:20},
+  {id:'cardio_20',icon:'🏃',name:'Cardio Machine',desc:'Log 20 activities',xp:40},
   // ── Secret Achievements ──
   {id:'secret_founder',icon:'🔑',name:'Founder\'s Circle',desc:'Found by those who look closely...',xp:50,secret:true},
   {id:'secret_5am',icon:'🌑',name:'5AM Club',desc:'Log a workout at exactly 5 AM',xp:25,secret:true},
@@ -346,6 +383,62 @@ const ACHIEVEMENTS=[
   {id:'secret_100pct',icon:'💯',name:'Completionist',desc:'Unlock 50 achievements',xp:75,secret:true},
   {id:'secret_night_shift',icon:'🦇',name:'Night Shift',desc:'Log 5 workouts between midnight and 5 AM',xp:40,secret:true},
   {id:'secret_og',icon:'👑',name:'OG Hunter',desc:'Account created before May 2026',xp:50,secret:true},
+  // ── Rest & Recovery ──
+  {id:'rest_first',icon:'😴',name:'Self-Aware',desc:'Log your first rest day',xp:10},
+  {id:'rest_5',icon:'🛏️',name:'Recovery Mindset',desc:'Log 5 rest days',xp:20},
+  {id:'recovery_pro',icon:'🧘',name:'Recovery Pro',desc:'Log 20 rest days',xp:40},
+  {id:'active_rest_10',icon:'🚶',name:'Never Stops Moving',desc:'Log 10 active rest days',xp:25},
+  // ── Weekly Check-ins ──
+  {id:'first_weighin',icon:'📏',name:'Baseline',desc:'Log your first weekly check-in',xp:15},
+  {id:'weighin_4',icon:'📊',name:'One Month In',desc:'4 weekly check-ins',xp:30},
+  {id:'weighin_12',icon:'📈',name:'Quarter Tracker',desc:'12 weekly check-ins',xp:50},
+  {id:'weighin_26',icon:'🏆',name:'Half-Year Disciplined',desc:'26 weekly check-ins',xp:75},
+  // ── Trainer ──
+  {id:'trainer_connected',icon:'👨‍🏫',name:'Coached Up',desc:'Connect with a trainer',xp:25},
+  {id:'trainer_first_client',icon:'🧑‍🏫',name:'Mentor',desc:'Onboard your first client (trainers)',xp:50},
+  // ── Class-Specific: Powerlifter ──
+  {id:'pl_1000_club',icon:'🏛️',name:'1000 Club',desc:'Bench + Squat + Deadlift PRs ≥ 1000 lbs',xp:100},
+  {id:'pl_pr_month',icon:'📈',name:'PR Machine',desc:'Beat a PR 5 times in one month',xp:50},
+  {id:'pl_bench_100',icon:'💪',name:'Bench Veteran',desc:'Log bench press 100 times',xp:40},
+  {id:'pl_squat_100',icon:'🦵',name:'Squat Veteran',desc:'Log squats 100 times',xp:40},
+  {id:'pl_dl_100',icon:'⚡',name:'Deadlift Veteran',desc:'Log deadlifts 100 times',xp:40},
+  // ── Class-Specific: Bodybuilder ──
+  {id:'bb_volume_king',icon:'📊',name:'Volume King',desc:'Log 1000+ total reps in one session',xp:50},
+  {id:'bb_pump_week',icon:'🔥',name:'Pump Week',desc:'Train 6 sessions in 7 days',xp:40},
+  {id:'bb_symmetry',icon:'⚖️',name:'Symmetry',desc:'Hit all major muscle groups in one week',xp:30},
+  {id:'bb_100_session',icon:'💎',name:'100 Sessions',desc:'Log 100 bodybuilder sessions',xp:50},
+  // ── Class-Specific: Strongman ──
+  {id:'sm_odd_object',icon:'🪨',name:'Odd Object',desc:'Log 5 different carry exercises',xp:30},
+  {id:'sm_event_ready',icon:'🏟️',name:'Event Ready',desc:'Hit all 4 Strongman day types in one week',xp:50},
+  {id:'sm_grip_master',icon:'✊',name:'Grip Master',desc:'Complete grip mission 20 times',xp:40},
+  // ── Class-Specific: Athlete ──
+  {id:'ath_sprint_king',icon:'💨',name:'Sprint King',desc:'30 sprint training sessions',xp:40},
+  {id:'ath_court_time',icon:'🏆',name:'Court Time',desc:'30 sport-specific sessions',xp:40},
+  {id:'ath_jumper',icon:'🦘',name:'Aerial',desc:'20 plyometric sessions',xp:30},
+  // ── Goal-Based ──
+  {id:'goal_5down',icon:'📉',name:'5 Down',desc:'Lose 5 lbs (via check-ins)',xp:50},
+  {id:'goal_10down',icon:'⬇️',name:'10 Down',desc:'Lose 10 lbs',xp:75},
+  {id:'goal_5up',icon:'📈',name:'5 Up',desc:'Gain 5 lbs with a PR improvement',xp:50},
+  {id:'goal_consistent_cut',icon:'🎯',name:'Consistent Cut',desc:'4 weeks of consecutive check-ins during cut',xp:40},
+  {id:'goal_body_recomp',icon:'🔄',name:'Recomp Real',desc:'8 weeks of recomp tracking',xp:60},
+  // ── Behavioral / Hard ──
+  {id:'dawn_patrol',icon:'🌅',name:'Dawn Patrol',desc:'10 workouts before 6 AM',xp:40},
+  {id:'twice_day',icon:'⚡',name:'Twice the Grind',desc:'Log 2 workouts in one day, 3 times',xp:30},
+  {id:'perfectionist',icon:'💎',name:'Perfectionist',desc:'10 consecutive perfect weeks',xp:75},
+  {id:'same_time',icon:'⏰',name:'Clockwork',desc:'Log at same time of day 14 days straight',xp:40},
+  {id:'travel_grind',icon:'✈️',name:'No Excuses',desc:'Log while tagged as traveling',xp:30},
+  // ── More Nutrition ──
+  {id:'protein_streak_7',icon:'🥩',name:'Protein Week',desc:'Hit protein target 7 days in a row',xp:30},
+  {id:'protein_streak_30',icon:'🥩',name:'Protein Month',desc:'Hit protein target 30 days in a row',xp:60,secret:true},
+  {id:'macro_master',icon:'🎯',name:'Macro Master',desc:'Hit all 3 macros (±10%) for 7 days',xp:40},
+  // ── More Social ──
+  {id:'message_100',icon:'💬',name:'Always Chatting',desc:'Send 100 messages',xp:30},
+  {id:'help_friend',icon:'🤝',name:'Accountability Partner',desc:'Both you + a friend log same day, 10 times',xp:30},
+  // ── More Secrets ──
+  {id:'secret_3am',icon:'🕒',name:'Gym Ghost',desc:'Log at 3:33 AM',xp:40,secret:true},
+  {id:'secret_7days',icon:'📆',name:'Perfect Attendance',desc:'Log every day of a full calendar week (Sun-Sat)',xp:50,secret:true},
+  {id:'secret_no_miss',icon:'🔒',name:'Never Missed',desc:'100 days without a missed week',xp:100,secret:true},
+  {id:'secret_bowler',icon:'🎳',name:'Strike',desc:'Log bowling as an activity',xp:20,secret:true},
 ];
 // ═══════════ COD-STYLE PROGRESSION TRACKS ═══════════
 const PROGRESSION_TRACKS={
@@ -419,12 +512,19 @@ const EVENT_MISSION_POOL=[
   {id:'evt_streak_saver',icon:'🔥',name:'STREAK SAVER',desc:'Train today (any workout)',xp:20},
   {id:'evt_mission_rush',icon:'🎯',name:'MISSION RUSH',desc:'Complete all daily missions',xp:30},
   {id:'evt_midnight',icon:'🌙',name:'MIDNIGHT OIL',desc:'Log a workout after 10 PM',xp:30},
-  {id:'evt_explore',icon:'🔍',name:'FOOD EXPLORER',desc:'Scan a new barcode today',xp:25}
+  {id:'evt_explore',icon:'🔍',name:'FOOD EXPLORER',desc:'Scan a new barcode today',xp:25},
+  // New event missions
+  {id:'evt_pr_day',icon:'🌟',name:'PR DAY',desc:'Beat a previous weight on any lift',xp:50},
+  {id:'evt_bullseye',icon:'🎯',name:'BULLSEYE',desc:'Hit exact protein target (±5g)',xp:30},
+  {id:'evt_double_move',icon:'🏃',name:'DOUBLE MOVE',desc:'Log a workout AND an activity today',xp:40},
+  {id:'evt_early_grind',icon:'🕐',name:'EARLY GRIND',desc:'Train AND log breakfast before 10 AM',xp:35},
+  {id:'evt_checkin',icon:'📏',name:'CHECK-IN',desc:'Log a weekly weight check-in',xp:25}
 ];
 function getEventMission(dateStr){
-  let seed=0;for(let i=0;i<dateStr.length;i++)seed=((seed<<5)-seed)+dateStr.charCodeAt(i)+7;seed=Math.abs(seed);
-  if(seed%100>=30)return null;
-  return EVENT_MISSION_POOL[seed%EVENT_MISSION_POOL.length];
+  // Better hash for even distribution
+  let h=0;for(let i=0;i<dateStr.length;i++){h=((h<<5)-h)+dateStr.charCodeAt(i);h=Math.imul(h,2654435761);h=h>>>0}
+  if(h%100>=30)return null; // ~30% chance
+  return EVENT_MISSION_POOL[(h>>>8)%EVENT_MISSION_POOL.length];
 }
 // ═══════════ XP MULTIPLIERS ═══════════
 function getXpMultiplier(){
