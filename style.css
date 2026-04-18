@@ -174,6 +174,29 @@ input[type=checkbox]:checked::after{content:'✓';position:absolute;color:#fff;f
 .client-goal{font-size:.65rem;color:var(--dim);margin-top:1px;font-style:italic}
 .wa-save{background:var(--accent);color:#fff}
 .wa-clear{background:var(--surface2);color:var(--muted);border:1px solid var(--border)!important}
+.wa-settings{background:var(--surface2);color:var(--muted);border:1px solid var(--border)!important;flex:0 0 auto!important;padding:0 14px!important;font-size:1rem}
+.wa-settings:hover,.wa-settings:active{color:var(--accent2);border-color:var(--accent2)!important}
+.workout-settings-btns{display:flex;flex-direction:column;gap:6px;margin-bottom:.5rem}
+.ws-btn{width:100%;padding:11px 14px;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:9px;font-size:.82rem;font-weight:600;text-align:left;cursor:pointer;transition:all .15s}
+.ws-btn:hover,.ws-btn:active{border-color:var(--accent);background:var(--surface2)}
+
+/* ── Progress Photos ── */
+.photo-privacy-note{font-size:.72rem;color:var(--muted);background:rgba(251,191,36,.06);border:1px solid var(--gold)44;border-radius:8px;padding:.6rem;margin-bottom:.7rem;line-height:1.5}
+.photo-privacy-note strong{color:var(--gold)}
+.photo-actions{display:flex;gap:6px;margin-bottom:.7rem}
+.photos-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:.6rem}
+.photo-card{position:relative;background:var(--surface);border:1px solid var(--border);border-radius:10px;overflow:hidden;cursor:pointer;transition:border-color .15s}
+.photo-card:hover,.photo-card:active{border-color:var(--accent)}
+.photo-card img{width:100%;aspect-ratio:3/4;object-fit:cover;display:block}
+.photo-meta{padding:6px 8px}
+.photo-date{font-family:var(--font-mono);font-size:.6rem;color:var(--text);font-weight:700}
+.photo-pose{font-size:.62rem;color:var(--muted);margin-top:1px;text-transform:capitalize}
+.photo-del{position:absolute;top:6px;right:6px;width:24px;height:24px;background:rgba(0,0,0,.7);border:none;color:var(--red);border-radius:50%;font-size:.7rem;cursor:pointer;display:flex;align-items:center;justify-content:center}
+.photo-compare-row{grid-column:1/-1;margin-top:4px}
+.compare-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:.5rem}
+.compare-col img{width:100%;aspect-ratio:3/4;object-fit:cover;border-radius:8px;display:block}
+.compare-cap{font-size:.62rem;color:var(--muted);text-align:center;margin-top:4px;line-height:1.4}
+.compare-summary{text-align:center;padding:.4rem;background:var(--surface2);border-radius:6px;font-family:var(--font-mono);font-size:.7rem;color:var(--accent2);font-weight:700}
 
 /* ── Profile ── */
 .profile-card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:1.5rem;text-align:center;margin-bottom:1rem}

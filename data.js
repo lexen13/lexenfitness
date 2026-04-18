@@ -1,9 +1,16 @@
 // ═══════════════════════════════════════════
 //  LEXENFITNESS — DATA v4 (Solo Leveling)
 // ═══════════════════════════════════════════
-const APP_VERSION='1.10.0';
+const APP_VERSION='1.10.1';
 const WELCOME_MESSAGE=`Welcome to Lexen Fitness! A Solo-Leveling inspired, gamified Fitness App to help friends and family stay motivated by giving fitness a game-like experience.\n\nThis app is developed by one person, and is very much still in the testing phase. Not everything will be perfect, but please bear with me. If you have any suggestions, feel free to pass them along as I continue to make this the best app that I can, before I actually have to start buying dev rights with Apple and Google.\n\nFeel free to share this with your own family and friends as we build a community that becomes healthier together!\n\n— Gavin (founder)`;
 const CHANGELOG=[
+  {version:'1.10.1',date:'Apr 2026',title:'Progress Photos & Cleaner Train Page',items:[
+    '📸 Progress Photos — device-only (IndexedDB), never uploaded, auto-resized to 1200px. Compare First vs Latest at a glance',
+    '⚙️ Workout Settings button — Train page decluttered; Rename/Remove/Notes/Add Day/Change Program all live in one menu now',
+    '🔧 Trainer promotion bug fixed (was silently failing due to empty arrayUnion)',
+    '🔧 New dev tool: Repair Trainer Code — regenerates codes for trainers with missing code docs',
+    '🏆 3 new progress-photo achievements'
+  ]},
   {version:'1.10.0',date:'Apr 2026',title:'Rest Days, Check-ins & Trainer Mode',items:[
     '😴 Rest Day logging — Active Rest (counts for streak) vs Full Rest',
     '📏 Weekly Check-in system — track weight, body fat, and progress over time',
@@ -439,6 +446,10 @@ const ACHIEVEMENTS=[
   {id:'secret_7days',icon:'📆',name:'Perfect Attendance',desc:'Log every day of a full calendar week (Sun-Sat)',xp:50,secret:true},
   {id:'secret_no_miss',icon:'🔒',name:'Never Missed',desc:'100 days without a missed week',xp:100,secret:true},
   {id:'secret_bowler',icon:'🎳',name:'Strike',desc:'Log bowling as an activity',xp:20,secret:true},
+  // ── Progress Photos ──
+  {id:'progress_photo_1',icon:'📸',name:'Before Shot',desc:'Take your first progress photo',xp:10},
+  {id:'progress_photo_4',icon:'📸',name:'Visible Progress',desc:'4 progress photos taken',xp:20},
+  {id:'progress_photo_12',icon:'📸',name:'Year in Review',desc:'12 progress photos taken',xp:40},
 ];
 // ═══════════ COD-STYLE PROGRESSION TRACKS ═══════════
 const PROGRESSION_TRACKS={

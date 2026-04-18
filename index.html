@@ -107,7 +107,12 @@
     <div class="page-sub" id="workoutSub"></div>
     <div class="day-tabs" id="dayTabs"></div>
     <div id="dayContent"></div>
-    <div class="workout-actions"><button class="wa-log" id="logDayBtn" onclick="logWorkout()">📋 Log Day</button><button class="wa-log-all" onclick="logAllDays()">📋 Log All Days</button><button class="wa-save" onclick="saveInputs()">💾 Save</button><button class="wa-clear" onclick="clearInputs()">Clear</button></div>
+    <div class="workout-actions">
+      <button class="wa-log" id="logDayBtn" onclick="logWorkout()">📋 Log Day</button>
+      <button class="wa-save" onclick="saveInputs()">💾 Save</button>
+      <button class="wa-clear" onclick="clearInputs()">Clear</button>
+      <button class="wa-settings" onclick="openWorkoutSettings()" title="Workout Settings">⚙️</button>
+    </div>
     <div class="alt-log-row">
       <button class="alt-log-btn activity" onclick="openActivityLog()">🏃 Cardio / Activity</button>
       <button class="alt-log-btn rest" onclick="openRestLog()">😴 Rest Day</button>
@@ -378,6 +383,50 @@
 <div class="m-field"><label>Notes <span style="color:var(--dim);font-size:.55rem">(optional)</span></label><input type="text" id="wiNotes" placeholder="e.g. Feeling lean, sleep was good"></div>
 <div id="wiHistory" class="weigh-history"></div>
 <div class="m-actions"><button class="m-cancel" onclick="closeWeighIn()">Cancel</button><button class="m-save-btn" onclick="saveWeighIn()">Save Check-in</button></div>
+</div></div>
+
+<!-- WORKOUT SETTINGS MODAL -->
+<div class="modal-bg" id="workoutSettingsModal"><div class="modal">
+<h2>⚙️ Workout Settings</h2>
+<div class="settings-section" id="workoutSettingsDayTitle">THIS DAY</div>
+<div class="workout-settings-btns">
+  <button class="ws-btn" onclick="closeWorkoutSettings();editDayNotes()">📝 <span id="wsNotesLabel">Edit Day Notes</span></button>
+  <button class="ws-btn" onclick="closeWorkoutSettings();renameWorkoutDay()">✏️ Rename Day</button>
+  <button class="ws-btn" style="color:var(--red);border-color:var(--red)33" onclick="closeWorkoutSettings();removeWorkoutDay()">🗑 Remove Day</button>
+</div>
+<div class="settings-section">PROGRAM</div>
+<div class="workout-settings-btns">
+  <button class="ws-btn" onclick="closeWorkoutSettings();addWorkoutDay()">➕ Add New Workout Day</button>
+  <button class="ws-btn" onclick="closeWorkoutSettings();logAllDays()">📋 Log All Filled Days</button>
+  <button class="ws-btn" onclick="closeWorkoutSettings();changeProgram()">🔄 Change Class / Program</button>
+</div>
+<div class="m-actions" style="margin-top:.8rem"><button class="m-cancel" onclick="closeWorkoutSettings()">Close</button></div>
+</div></div>
+
+<!-- PROGRESS PHOTOS MODAL -->
+<div class="modal-bg" id="progressPhotosModal"><div class="modal" style="max-height:85vh;overflow-y:auto">
+<h2>📸 Progress Photos</h2>
+<div class="photo-privacy-note">🔒 <strong>Stored on this device only.</strong> These photos never leave your phone. Not uploaded. Not shared. If you uninstall the app or clear browser data, they're gone.</div>
+<div class="photo-actions">
+  <button class="m-save-btn" onclick="document.getElementById('progressPhotoInput').click()" style="flex:1">📷 Add Photo</button>
+  <select id="photoPoseFilter" onchange="renderProgressPhotos()" style="background:var(--surface);border:1px solid var(--border);color:var(--text);padding:10px;border-radius:8px;font-family:var(--font-body);font-size:.78rem">
+    <option value="all">All Poses</option>
+    <option value="front">Front</option>
+    <option value="side">Side</option>
+    <option value="back">Back</option>
+    <option value="other">Other</option>
+  </select>
+</div>
+<input type="file" id="progressPhotoInput" accept="image/*" capture="environment" style="display:none">
+<div id="progressPhotosGrid" class="photos-grid"></div>
+<div class="m-actions"><button class="m-cancel" onclick="closeProgressPhotos()">Close</button></div>
+</div></div>
+
+<!-- PHOTO COMPARE MODAL -->
+<div class="modal-bg" id="photoCompareModal"><div class="modal" style="max-width:340px">
+<h2>Compare</h2>
+<div id="photoCompareBody"></div>
+<div class="m-actions"><button class="m-cancel" onclick="closePhotoCompare()">Close</button></div>
 </div></div>
 
 <!-- PROFILE CARD MODAL -->

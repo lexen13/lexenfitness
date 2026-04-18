@@ -423,6 +423,7 @@ function renderDevTools(){
     <div class="dev-row" style="margin-top:.3rem;border-top:1px dashed var(--border);padding-top:.4rem">
       <button class="dev-btn" style="color:var(--gold)" onclick="devPromoteTrainer()">👨‍🏫 Promote User to Trainer</button>
       <button class="dev-btn" style="color:var(--red)" onclick="devDemoteTrainer()">🚫 Demote Trainer</button>
+      <button class="dev-btn" style="color:var(--cyan)" onclick="devRepairTrainerCode()">🔧 Repair Trainer Code</button>
     </div>
   </div>`;
 }
@@ -533,12 +534,26 @@ async function devPromoteTrainer(){
   const snap=await db.collection('usernames').doc(un).get();
   if(!snap.exists){toast('Username not found: @'+un);return}
   const uid=snap.data().uid;
-  // Generate a trainer code for them
-  const code=genFriendCode();
-  await db.collection('users').doc(uid).update({role:'trainer',trainerCode:code,clients:firebase.firestore.FieldValue.arrayUnion()});
-  await db.collection('trainerCodes').doc(code).set({uid,createdAt:firebase.firestore.FieldValue.serverTimestamp()});
-  toast('✅ @'+un+' is now a Trainer. Code: '+code);
-  alert('@'+un+' promoted to Trainer.\n\nTheir Trainer Code: '+code+'\n\nShare this with them so they can give it to their clients.');
+  try{
+    // Check if they already have a code
+    const userDoc=await db.collection('users').doc(uid).get();
+    const existing=userDoc.data()?.trainerCode;
+    let code;
+    if(existing){
+      code=existing;
+      await db.collection('users').doc(uid).update({role:'trainer'});
+    }else{
+      code=genFriendCode();
+      await db.collection('users').doc(uid).update({role:'trainer',trainerCode:code,clients:[]});
+      await db.collection('trainerCodes').doc(code).set({uid,createdAt:firebase.firestore.FieldValue.serverTimestamp()});
+    }
+    toast('✅ @'+un+' is now a Trainer. Code: '+code);
+    alert('@'+un+' promoted to Trainer.\n\nTheir Trainer Code: '+code+'\n\nShare this with them so they can give it to their clients.\n\n(If they\'re already logged in, they need to refresh the app to see the Trainer tab.)');
+  }catch(e){
+    console.error('Promote error:',e);
+    toast('Failed: '+e.message);
+    alert('Promotion failed: '+e.message+'\n\nCheck that Firestore rules are published with the trainerCodes collection.');
+  }
 }
 async function devDemoteTrainer(){
   const username=prompt('Username to demote (remove trainer status):');if(!username)return;
@@ -552,6 +567,28 @@ async function devDemoteTrainer(){
   await db.collection('users').doc(uid).update({role:firebase.firestore.FieldValue.delete(),trainerCode:firebase.firestore.FieldValue.delete()});
   if(oldCode){try{await db.collection('trainerCodes').doc(oldCode).delete()}catch(e){}}
   toast('@'+un+' demoted');
+}
+async function devRepairTrainerCode(){
+  const username=prompt('Username whose trainer code needs repair:');if(!username)return;
+  const un=username.toLowerCase().trim();
+  const snap=await db.collection('usernames').doc(un).get();
+  if(!snap.exists){toast('Username not found: @'+un);return}
+  const uid=snap.data().uid;
+  try{
+    const userDoc=await db.collection('users').doc(uid).get();
+    const data=userDoc.data();
+    if(data?.role!=='trainer'){
+      if(!confirm('@'+un+' is not a trainer. Promote them and generate a fresh code?'))return;
+    }
+    // Generate fresh code
+    const code=genFriendCode();
+    await db.collection('users').doc(uid).update({role:'trainer',trainerCode:code,clients:data?.clients||[]});
+    await db.collection('trainerCodes').doc(code).set({uid,createdAt:firebase.firestore.FieldValue.serverTimestamp()});
+    // Delete old code if it existed
+    if(data?.trainerCode&&data.trainerCode!==code){try{await db.collection('trainerCodes').doc(data.trainerCode).delete()}catch(e){}}
+    toast('🔧 Repaired! New code: '+code);
+    alert('@'+un+'\'s trainer code repaired.\n\nNew Code: '+code+'\n\nOld code (if any) invalidated.');
+  }catch(e){console.error(e);toast('Repair failed: '+e.message)}
 }
 
 // ═══════════ WORKOUT ═══════════
@@ -587,6 +624,15 @@ async function removeWorkoutDay(){
   currentDay=prog.length?prog[0].id:'';
   buildWorkout();toast('Day removed.');
 }
+function openWorkoutSettings(){
+  const prog=userData.program||[];
+  const day=prog.find(d=>d.id===currentDay);
+  if(!day){toast('Pick a day first!');return}
+  $('workoutSettingsDayTitle').textContent=day.title;
+  $('wsNotesLabel').textContent=(day.notes?'Edit':'Add')+' Day Notes';
+  $('workoutSettingsModal').classList.add('open');
+}
+function closeWorkoutSettings(){$('workoutSettingsModal').classList.remove('open')}
 async function renameWorkoutDay(){
   const prog=userData.program||[];
   const day=prog.find(d=>d.id===currentDay);if(!day)return;
@@ -617,9 +663,6 @@ function renderDay(){const prog=userData.program||[],day=prog.find(d=>d.id===cur
       else h+=`<div class="set-row"><label>S${s+1}</label><input type="number" id="${wK}" placeholder="lbs" value="${savedInputs[wK]||''}"><span class="sep">×</span><input type="number" id="${rK}" placeholder="reps" value="${savedInputs[rK]||''}"><input type="checkbox" id="${cK}" ${savedInputs[cK]?'checked':''}><span class="target">${ex.reps}</span></div>`}
     h+='</div></div>'});
   h+=`<button class="add-ex" onclick="openAdd(${di})">+ Add Exercise</button>`;
-  // Day notes button only (display is now at top)
-  h+=`<div class="day-notes-section"><button class="day-manage-btn" onclick="editDayNotes()" style="font-size:.72rem">📝 ${day.notes?'Edit':'Add'} Day Notes</button></div>`;
-  h+=`<div class="day-manage"><button class="day-manage-btn" onclick="renameWorkoutDay()">✏️ Rename Day</button><button class="day-manage-btn" style="color:var(--red)" onclick="removeWorkoutDay()">🗑 Remove Day</button></div>`;
   $('dayContent').innerHTML=h}
 
 function openEdit(di,ei){editTarget={di,ei};const ex=userData.program[di].exercises[ei];$('editName').value=ex.name;$('editSets').value=ex.sets;$('editReps').value=ex.reps;$('editNotes').value=ex.notes||'';$('editModal').classList.add('open')}
@@ -810,6 +853,7 @@ function renderProfile(){
   if(wkStreakP>0&&thisWeekCount<3){const need=3-thisWeekCount;h+=`<div class="streak-warning">🔥 <strong>${wkStreakP}-week streak!</strong> Need ${need} more session${need>1?'s':''} this week to keep it.</div>`}
   else if(wkStreakP===0&&workoutLog.length>0){h+=`<div class="streak-warning lost">💀 Streak broken. Get 3 sessions this week to start a new one.</div>`}
   h+=`<button class="edit-stats-btn" onclick="openWeighIn()" style="background:rgba(52,211,153,.08);border-color:var(--green);color:var(--green)">📏 Weekly Check-in</button>`;
+  h+=`<button class="edit-stats-btn" onclick="openProgressPhotos()" style="background:rgba(123,92,255,.08);border-color:var(--accent);color:var(--accent2)">📸 Progress Photos <span style="font-size:.6rem;color:var(--dim);margin-left:4px">device-only</span></button>`;
   h+=`<button class="edit-stats-btn" onclick="openSettings()">⚙️ Settings</button>`;
   if(userData.role==='trainer')h+=`<button class="edit-stats-btn" onclick="switchPage('trainer')" style="background:rgba(251,191,36,.08);border-color:var(--gold);color:var(--gold)">👨‍🏫 Trainer Dashboard</button>`;
   h+=renderDevTools();
@@ -1719,6 +1763,164 @@ async function acceptTrainerCode(code){
     renderProfile();
   }catch(e){toast('Could not connect: '+e.message)}
 }
+
+// ═══════════ PROGRESS PHOTOS (IndexedDB, device-only) ═══════════
+let photoDB=null;
+function openPhotoDB(){
+  return new Promise((resolve,reject)=>{
+    if(photoDB){resolve(photoDB);return}
+    const req=indexedDB.open('lexenPhotos',1);
+    req.onerror=()=>reject(req.error);
+    req.onupgradeneeded=(e)=>{
+      const db=e.target.result;
+      if(!db.objectStoreNames.contains('photos')){
+        const store=db.createObjectStore('photos',{keyPath:'id',autoIncrement:true});
+        store.createIndex('date','date',{unique:false});
+        store.createIndex('pose','pose',{unique:false});
+      }
+    };
+    req.onsuccess=()=>{photoDB=req.result;resolve(photoDB)};
+  });
+}
+async function savePhotoToDB(photo){
+  const db=await openPhotoDB();
+  return new Promise((resolve,reject)=>{
+    const tx=db.transaction('photos','readwrite');const store=tx.objectStore('photos');
+    const req=store.add(photo);
+    req.onsuccess=()=>resolve(req.result);req.onerror=()=>reject(req.error);
+  });
+}
+async function getAllPhotos(){
+  const db=await openPhotoDB();
+  return new Promise((resolve,reject)=>{
+    const tx=db.transaction('photos','readonly');const store=tx.objectStore('photos');
+    const req=store.getAll();
+    req.onsuccess=()=>resolve(req.result||[]);req.onerror=()=>reject(req.error);
+  });
+}
+async function deletePhotoFromDB(id){
+  const db=await openPhotoDB();
+  return new Promise((resolve,reject)=>{
+    const tx=db.transaction('photos','readwrite');const store=tx.objectStore('photos');
+    const req=store.delete(id);
+    req.onsuccess=()=>resolve();req.onerror=()=>reject(req.error);
+  });
+}
+
+function openProgressPhotos(){
+  $('photoPoseFilter').value='all';
+  $('progressPhotosModal').classList.add('open');
+  renderProgressPhotos();
+}
+function closeProgressPhotos(){$('progressPhotosModal').classList.remove('open')}
+
+async function renderProgressPhotos(){
+  const grid=$('progressPhotosGrid');if(!grid)return;
+  try{
+    let photos=await getAllPhotos();
+    const filter=$('photoPoseFilter').value;
+    if(filter!=='all')photos=photos.filter(p=>p.pose===filter);
+    photos.sort((a,b)=>new Date(b.date)-new Date(a.date));
+    if(!photos.length){grid.innerHTML='<p style="color:var(--muted);font-size:.78rem;padding:1rem;text-align:center">No photos yet. Tap "Add Photo" to start tracking your progress.</p>';return}
+    let h='';
+    photos.forEach(p=>{
+      const dt=new Date(p.date).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'2-digit'});
+      const poseEmoji={front:'👤',side:'🧍',back:'🔙',other:'📷'}[p.pose]||'📷';
+      const weight=p.weight?` · ${p.weight} lbs`:'';
+      h+=`<div class="photo-card" onclick="viewPhoto(${p.id})">
+        <img src="${p.dataUrl}" alt="Progress">
+        <div class="photo-meta">
+          <div class="photo-date">${dt}</div>
+          <div class="photo-pose">${poseEmoji} ${p.pose}${weight}</div>
+        </div>
+        <button class="photo-del" onclick="event.stopPropagation();deletePhoto(${p.id})">✕</button>
+      </div>`;
+    });
+    // Add compare button if we have 2+ photos
+    if(photos.length>=2){
+      h+=`<div class="photo-compare-row"><button class="m-save-btn" onclick="openPhotoCompare()" style="width:100%;background:var(--accent2);color:#000">🔀 Compare First vs Latest</button></div>`;
+    }
+    grid.innerHTML=h;
+  }catch(e){console.error(e);grid.innerHTML='<p style="color:var(--red);font-size:.78rem;padding:1rem">Failed to load photos: '+e.message+'</p>'}
+}
+
+async function handleProgressPhotoUpload(file){
+  if(!file)return;
+  if(!file.type.startsWith('image/')){toast('Only images supported');return}
+  // Check size — warn if huge
+  if(file.size>10*1024*1024){if(!confirm('Photo is '+(file.size/1048576).toFixed(1)+' MB. Save anyway?\n\n(This uses your device storage)'))return}
+  // Resize using canvas for reasonable storage size
+  const reader=new FileReader();
+  reader.onload=async(e)=>{
+    const img=new Image();
+    img.onload=async()=>{
+      const canvas=document.createElement('canvas');
+      const maxSize=1200;let w=img.width,h=img.height;
+      if(w>maxSize||h>maxSize){if(w>h){h=Math.round(h*maxSize/w);w=maxSize}else{w=Math.round(w*maxSize/h);h=maxSize}}
+      canvas.width=w;canvas.height=h;
+      const ctx=canvas.getContext('2d');ctx.drawImage(img,0,0,w,h);
+      const dataUrl=canvas.toDataURL('image/jpeg',0.82);
+      // Prompt for pose + optional weight
+      const pose=prompt('Pose? (front / side / back / other)','front');
+      if(pose===null)return;
+      const poseNorm=['front','side','back','other'].includes(pose.toLowerCase().trim())?pose.toLowerCase().trim():'other';
+      const curWeight=userData.stats?.weight||'';
+      const weight=prompt('Current weight? (optional)',curWeight);
+      if(weight===null)return;
+      try{
+        await savePhotoToDB({date:new Date().toISOString(),pose:poseNorm,weight:weight.trim(),dataUrl});
+        toast('📸 Photo saved to this device');
+        renderProgressPhotos();
+        // Track achievement
+        const photos=await getAllPhotos();
+        if(photos.length>=1)unlockAch('progress_photo_1');
+        if(photos.length>=4)unlockAch('progress_photo_4');
+        if(photos.length>=12)unlockAch('progress_photo_12');
+      }catch(err){toast('Save failed: '+err.message)}
+    };
+    img.src=e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+async function viewPhoto(id){
+  const photos=await getAllPhotos();
+  const p=photos.find(x=>x.id===id);if(!p)return;
+  const modal=$('photoCompareModal');
+  const dt=new Date(p.date).toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric',year:'numeric'});
+  $('photoCompareBody').innerHTML=`<img src="${p.dataUrl}" style="width:100%;border-radius:10px;margin-bottom:.5rem"><div style="font-size:.75rem;color:var(--muted)">${dt}<br>${p.pose}${p.weight?' · '+p.weight+' lbs':''}</div>`;
+  modal.classList.add('open');
+}
+function closePhotoCompare(){$('photoCompareModal').classList.remove('open')}
+
+async function openPhotoCompare(){
+  const photos=(await getAllPhotos()).sort((a,b)=>new Date(a.date)-new Date(b.date));
+  if(photos.length<2){toast('Need 2+ photos to compare');return}
+  const first=photos[0],latest=photos[photos.length-1];
+  const d1=new Date(first.date).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'2-digit'});
+  const d2=new Date(latest.date).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'2-digit'});
+  const daysBetween=Math.floor((new Date(latest.date)-new Date(first.date))/86400000);
+  const weightDiff=first.weight&&latest.weight?(parseFloat(latest.weight)-parseFloat(first.weight)).toFixed(1):null;
+  $('photoCompareBody').innerHTML=`
+    <div class="compare-grid">
+      <div class="compare-col"><img src="${first.dataUrl}"><div class="compare-cap">${d1}<br>${first.weight?first.weight+' lbs':''}</div></div>
+      <div class="compare-col"><img src="${latest.dataUrl}"><div class="compare-cap">${d2}<br>${latest.weight?latest.weight+' lbs':''}</div></div>
+    </div>
+    <div class="compare-summary">${daysBetween} days${weightDiff!==null?' · '+(weightDiff>0?'+':'')+weightDiff+' lbs':''}</div>`;
+  $('photoCompareModal').classList.add('open');
+}
+
+async function deletePhoto(id){
+  if(!confirm('Delete this photo? Cannot be undone.'))return;
+  await deletePhotoFromDB(id);
+  renderProgressPhotos();toast('Photo deleted');
+}
+
+// Hook up the file input
+document.addEventListener('DOMContentLoaded',()=>{
+  const input=document.getElementById('progressPhotoInput');
+  if(input)input.addEventListener('change',function(){if(this.files[0]){handleProgressPhotoUpload(this.files[0]);this.value=''}});
+});
 
 // ═══════════ EXERCISE LIBRARY ═══════════
 let libFilter='All',libSearch='';
