@@ -236,7 +236,7 @@ function initApp(){
   let tapCount=0,tapTimer=null;
   const logo=document.querySelector('.top-bar h1');
   if(logo)logo.addEventListener('click',()=>{tapCount++;clearTimeout(tapTimer);tapTimer=setTimeout(()=>tapCount=0,2000);if(tapCount>=10){unlockAch('secret_founder');toast('🔑 You found it...');tapCount=0}});
-  document.querySelectorAll('.nav-item').forEach(n=>n.addEventListener('click',()=>switchPage(n.dataset.page)));updateTopBar();syncAcceptedRequests();checkUnreadChats();checkPassiveAchievements();initNotifications();checkFriendRequests();updateTrainerTab();
+  document.querySelectorAll('.nav-item').forEach(n=>n.addEventListener('click',()=>switchPage(n.dataset.page)));updateTopBar();syncAcceptedRequests();checkUnreadChats();checkPassiveAchievements();initNotifications();checkFriendRequests();updateTrainerTab();checkIncomingPokes();setTimeout(()=>checkEventMissionNotif(),5000);
   // Handle PWA shortcut ?page= param
   const params=new URLSearchParams(window.location.search);const startPage=params.get('page');
   switchPage(startPage&&['train','missions','nutrition','chat','ranks','profile'].includes(startPage)?startPage:'profile');
@@ -855,7 +855,7 @@ function renderProfile(){
   h+=`<button class="edit-stats-btn" onclick="openWeighIn()" style="background:rgba(52,211,153,.08);border-color:var(--green);color:var(--green)">📏 Weekly Check-in</button>`;
   h+=`<button class="edit-stats-btn" onclick="openProgressPhotos()" style="background:rgba(123,92,255,.08);border-color:var(--accent);color:var(--accent2)">📸 Progress Photos <span style="font-size:.6rem;color:var(--dim);margin-left:4px">device-only</span></button>`;
   h+=`<button class="edit-stats-btn" onclick="openSettings()">⚙️ Settings</button>`;
-  if(userData.role==='trainer')h+=`<button class="edit-stats-btn" onclick="switchPage('trainer')" style="background:rgba(251,191,36,.08);border-color:var(--gold);color:var(--gold)">👨‍🏫 Trainer Dashboard</button>`;
+  if(userData.role==='trainer')h+=`<button class="edit-stats-btn" onclick="switchSubTab('profile','trainer')" style="background:rgba(251,191,36,.08);border-color:var(--gold);color:var(--gold)">👨‍🏫 Trainer Dashboard</button>`;
   h+=renderDevTools();
   $('profileContent').innerHTML=h;
 }
@@ -889,11 +889,49 @@ function openSettings(){
   $('setBench').value=prs.bench||'';$('setSquat').value=prs.squat||'';$('setDeadlift').value=prs.deadlift||'';$('setOhp').value=prs.ohp||'';
   $('setGoal').value=userData.goal||'';$('setExperience').value=userData.experience||'';
   $('setHideName').checked=!!priv.hideName;$('setHideStats').checked=!!priv.hideStats;
+  // Notification prefs (default all to true)
+  const np=userData.notifPrefs||{};
+  $('setNotifMessages').checked=np.messages!==false;
+  $('setNotifFriendReqs').checked=np.friendRequests!==false;
+  $('setNotifPokes').checked=np.pokes!==false;
+  $('setNotifEvents').checked=np.events!==false;
+  $('setNotifTraining').checked=np.training!==false;
+  // Notif status text
+  const isIOS=/iPad|iPhone|iPod/.test(navigator.userAgent);
+  const isStandalone=window.matchMedia('(display-mode: standalone)').matches||window.navigator.standalone;
+  const btn=$('enableNotifBtn');
+  let statusText='';
+  if(!('Notification' in window)){statusText='❌ This browser doesn\'t support notifications.';if(btn)btn.style.display='none'}
+  else if(isIOS&&!isStandalone){statusText='⚠️ iOS: Install app to home screen first (tap Share → Add to Home Screen in Safari).';if(btn){btn.style.display='';btn.textContent='📱 How to Install'}}
+  else if(notifPermission==='granted'){statusText='✅ Notifications enabled — you\'ll get pings when the app is open or recently closed.';if(btn)btn.style.display='none'}
+  else if(notifPermission==='denied'){statusText='❌ Notifications blocked. Enable in browser/phone settings to receive alerts.';if(btn)btn.style.display='none'}
+  else{statusText='Allow notifications to get alerts for messages, pokes, and event missions.';if(btn){btn.style.display='';btn.textContent='🔔 Enable Notifications'}}
+  $('notifStatus').textContent=statusText;
   // Trainer status
   if(userData.trainer){$('trainerStatus').innerHTML='✅ <strong style="color:var(--green)">Connected to a trainer</strong><br><button class="copy-code-btn" onclick="disconnectTrainer()" style="margin-top:4px">Disconnect</button>';$('trainerCodeRow').style.display='none'}
   else if(userData.role==='trainer'){$('trainerStatus').innerHTML='👨‍🏫 <strong style="color:var(--gold)">You are a trainer</strong><br>Share your code from Profile → Trainer tab';$('trainerCodeRow').style.display='none'}
   else{$('trainerStatus').textContent='Have a trainer? Enter their code to share your progress with them.';$('trainerCodeRow').style.display='';$('setTrainerCode').value=''}
   $('settingsModal').classList.add('open');
+}
+async function enableNotifications(){
+  const isIOS=/iPad|iPhone|iPod/.test(navigator.userAgent);
+  const isStandalone=window.matchMedia('(display-mode: standalone)').matches||window.navigator.standalone;
+  if(isIOS&&!isStandalone){showIOSInstallPrompt();return}
+  if(!('Notification' in window)){toast('Not supported');return}
+  try{
+    const p=await Notification.requestPermission();
+    notifPermission=p;
+    if(p==='granted'){
+      toast('🔔 Notifications enabled!');
+      startRealtimeListeners();
+      // Test notification
+      sendNotif('LexenFitness','Notifications working! 🎉',{tag:'test'});
+      openSettings();
+    }else if(p==='denied'){
+      toast('Permission denied. Check browser/phone settings to re-enable.');
+      openSettings();
+    }
+  }catch(e){toast('Error: '+e.message)}
 }
 async function connectTrainer(){
   const code=$('setTrainerCode').value.trim().toUpperCase();
@@ -923,8 +961,17 @@ async function saveSettings(){
   const prs={bench:$('setBench').value.trim(),squat:$('setSquat').value.trim(),deadlift:$('setDeadlift').value.trim(),ohp:$('setOhp').value.trim()};
   if(prs.bench&&prs.squat&&prs.deadlift&&prs.ohp)unlockAch('set_prs');
   const privacy={hideName:$('setHideName').checked,hideStats:$('setHideStats').checked};
-  await saveUser({username:newUn,name:$('setDisplayName').value.trim()||userData.name,stats,prs,privacy,goal:$('setGoal').value,experience:$('setExperience').value,bio:$('setBio').value.trim().slice(0,200)});
-  await saveLeaderboard();closeSettings();renderProfile();toast('Settings saved!')}
+  const notifPrefs={
+    messages:$('setNotifMessages').checked,
+    friendRequests:$('setNotifFriendReqs').checked,
+    pokes:$('setNotifPokes').checked,
+    events:$('setNotifEvents').checked,
+    training:$('setNotifTraining').checked
+  };
+  await saveUser({username:newUn,name:$('setDisplayName').value.trim()||userData.name,stats,prs,privacy,notifPrefs,goal:$('setGoal').value,experience:$('setExperience').value,bio:$('setBio').value.trim().slice(0,200)});
+  await saveLeaderboard();closeSettings();renderProfile();toast('Settings saved!');
+  // Restart listeners with new prefs
+  if(notifPermission==='granted')startRealtimeListeners();}
 async function changePassword(){const np=$('setNewPass').value;if(!np||np.length<6){toast('6+ chars required');return}try{await U.updatePassword(np);$('setNewPass').value='';toast('Password changed!')}catch(err){toast(friendlyErr(err.code))}}
 function changeProgram(){selectedClass=null;selectedSub=null;selectedProg=null;showScreen('classScreen');buildClassSelect()}
 
@@ -1048,13 +1095,22 @@ async function loadFriendsList(){
   await loadFriendRequests();
   const friends=userData.friends||[];
   if(!friends.length){list.innerHTML='<p style="color:var(--muted);font-size:.76rem">No friends yet — share your code!</p>';return}
+  const myPokeStreaks=userData.pokeStreaks||{};
+  const today=getTodayStr();
+  const pokedToday=userData.pokedToday||{};
   let h='';let loaded=0;
   for(const fid of friends.slice(0,20)){
     try{
       const d=await db.collection('users').doc(fid).get();
       if(!d.exists){h+=`<div class="friend-row" style="opacity:.4"><div class="lb-pic">👤</div><div class="lb-info"><div class="lb-name">Deleted user</div></div></div>`;continue}
       const f=d.data();const r=getRank(f.xp||0);
-      h+=`<div class="friend-row"><div class="lb-pic">${f.profilePic?'<img src="'+f.profilePic+'">':'👤'}</div><div class="lb-info"><div class="lb-name">@${esc(f.username||'hunter')}</div><div class="lb-class">${f.class||''}</div></div><div class="lb-xp">${f.xp||0}</div><div class="lb-rank" style="color:${r.color}">${r.name}</div></div>`;
+      const streak=myPokeStreaks[fid]||0;
+      const pokedTodayFlag=pokedToday[fid]===today;
+      const streakDisplay=streak>0?`<span class="poke-streak">🔥${streak}</span>`:'';
+      const pokeBtn=pokedTodayFlag
+        ?`<button class="poke-btn poked" disabled title="Already poked today">✓</button>`
+        :`<button class="poke-btn" onclick="event.stopPropagation();sendPoke('${fid}','${esc(f.username||'hunter')}')">👋</button>`;
+      h+=`<div class="friend-row"><div class="lb-pic">${f.profilePic?'<img src="'+f.profilePic+'">':'👤'}</div><div class="lb-info"><div class="lb-name">@${esc(f.username||'hunter')} ${streakDisplay}</div><div class="lb-class">${f.class||''}</div></div>${pokeBtn}<div class="lb-xp">${f.xp||0}</div><div class="lb-rank" style="color:${r.color}">${r.name}</div></div>`;
       loaded++;
     }catch(e){
       h+=`<div class="friend-row" style="opacity:.5"><div class="lb-pic">⚠️</div><div class="lb-info"><div class="lb-name" style="color:var(--red)">Load failed</div><div class="lb-class">${e.message}</div></div></div>`;
@@ -1062,6 +1118,76 @@ async function loadFriendsList(){
   }
   if(!loaded&&friends.length)h+=`<p style="color:var(--gold);font-size:.72rem">Friends in your list but can't read their profiles. Update Firestore rules.</p>`;
   list.innerHTML=h;
+}
+
+// ═══════════ POKES ═══════════
+async function sendPoke(fid,fusername){
+  const today=getTodayStr();
+  const pokedToday=userData.pokedToday||{};
+  if(pokedToday[fid]===today){toast('Already poked @'+fusername+' today');return}
+  try{
+    // Read friend's current poke data to update properly
+    const fsnap=await db.collection('users').doc(fid).get();
+    if(!fsnap.exists){toast('User not found');return}
+    const fdata=fsnap.data();
+    const theirIncomingPokes=fdata.pokes||[];
+    const theirPokeStreaks=fdata.pokeStreaks||{};
+    const theirLastReceived=fdata.pokeLastReceived||{};
+
+    // Check if they poked me recently (within 2 days) for streak continuation
+    const myPokeStreaks=userData.pokeStreaks||{};
+    const myLastReceived=userData.pokeLastReceived||{};
+    const theirLastPokeToMe=myLastReceived[fid]?new Date(myLastReceived[fid]):null;
+    const daysSinceTheirPoke=theirLastPokeToMe?(Date.now()-theirLastPokeToMe.getTime())/86400000:999;
+
+    // Continue streak if they poked within 2 days, otherwise restart
+    let newStreak=1;
+    if(daysSinceTheirPoke<=2){
+      newStreak=(myPokeStreaks[fid]||0)+1;
+    }
+
+    // Update THEIR doc: add poke, update streak, record timestamp
+    const newTheirIncoming=[...theirIncomingPokes.filter(p=>p.from!==U.uid||(Date.now()-new Date(p.at).getTime()<86400000)),{from:U.uid,fromName:userData.username||'hunter',at:new Date().toISOString()}].slice(-20);
+    const newTheirStreaks={...theirPokeStreaks,[U.uid]:newStreak};
+    const newTheirLastReceived={...theirLastReceived,[U.uid]:new Date().toISOString()};
+    await db.collection('users').doc(fid).update({
+      pokes:newTheirIncoming,
+      pokeStreaks:newTheirStreaks,
+      pokeLastReceived:newTheirLastReceived
+    });
+
+    // Update MY doc: record I poked them today and my side of the streak
+    pokedToday[fid]=today;
+    const myNewStreaks={...myPokeStreaks,[fid]:newStreak};
+    await saveUser({pokedToday,pokeStreaks:myNewStreaks});
+
+    const gained=addXP(5);
+    await saveUser({xp:userData.xp});
+    if(newStreak>=3)unlockAch('poke_streak_3');
+    if(newStreak>=7)unlockAch('poke_streak_7');
+    if(newStreak>=30)unlockAch('poke_streak_30');
+    unlockAch('poke_first');
+
+    toast(`👋 Poked @${fusername}! +${gained} XP${newStreak>1?' · 🔥'+newStreak+' streak':''}`);
+    loadFriendsList();
+  }catch(e){console.error(e);toast('Poke failed: '+e.message)}
+}
+
+async function checkIncomingPokes(){
+  if(!U)return;
+  const pokes=userData.pokes||[];
+  if(!pokes.length)return;
+  // Filter to pokes from last 24 hours
+  const recent=pokes.filter(p=>(Date.now()-new Date(p.at).getTime())<86400000);
+  if(!recent.length)return;
+  // Show toast once per session
+  if(sessionStorage.getItem('pokesSeen'))return;
+  sessionStorage.setItem('pokesSeen','1');
+  if(recent.length===1){
+    toast(`👋 @${recent[0].fromName} poked you! Time to train.`);
+  }else{
+    toast(`👋 You have ${recent.length} pokes waiting!`);
+  }
 }
 
 // ═══════════ LEADERBOARD (username only) ═══════════
@@ -1463,42 +1589,178 @@ async function checkPassiveAchievements(){
 
 // ═══════════ NOTIFICATIONS ═══════════
 let notifPermission='default';
+let realtimeUnsubs=[];
 function initNotifications(){
-  const isStandalone=window.matchMedia('(display-mode: standalone)').matches||window.navigator.standalone;
-  if(!isStandalone)return;
   if(!('Notification' in window))return;
   notifPermission=Notification.permission;
+  const isStandalone=window.matchMedia('(display-mode: standalone)').matches||window.navigator.standalone;
+  const isIOS=/iPad|iPhone|iPod/.test(navigator.userAgent);
+
+  // iOS: only works if installed as PWA (16.4+)
+  if(isIOS&&!isStandalone){
+    // Don't request — won't work. Prompt user to install instead.
+    setTimeout(()=>{if(!localStorage.getItem('iosInstallPrompted'))showIOSInstallPrompt()},15000);
+    return;
+  }
+  // Android web + Installed PWAs: ask for permission
   if(notifPermission==='default'){
     setTimeout(()=>{
-      Notification.requestPermission().then(p=>{notifPermission=p;if(p==='granted')checkTrainReminder()});
+      Notification.requestPermission().then(p=>{
+        notifPermission=p;
+        if(p==='granted'){
+          toast('🔔 Notifications enabled!');
+          startRealtimeListeners();
+          checkTrainReminder();
+        }
+      });
     },10000);
   }else if(notifPermission==='granted'){
-    // Check immediately on app open
+    // Already granted — start listeners
+    startRealtimeListeners();
     setTimeout(()=>checkTrainReminder(),3000);
   }
   // Also check periodically
-  setInterval(()=>checkTrainReminder(),1800000); // Every 30 min
+  setInterval(()=>checkTrainReminder(),1800000);
 }
+
+function showIOSInstallPrompt(){
+  localStorage.setItem('iosInstallPrompted','1');
+  if(confirm('📱 Install LexenFitness to your Home Screen?\n\nTo get push notifications on iPhone, you need to install this app.\n\n1. Tap the Share button (⬆️) in Safari\n2. Scroll down and tap "Add to Home Screen"\n3. Open the app from your home screen\n\nTap OK for more details.')){
+    alert('Step-by-step:\n\n1. Tap the Share icon at the bottom of Safari (square with arrow up)\n2. Scroll through the options\n3. Tap "Add to Home Screen"\n4. Tap "Add" in the top right\n5. Close Safari, open the LexenFitness app from your home screen\n\nOnce installed, you\'ll get push notifications for messages, friend requests, and pokes.');
+  }
+}
+
+function sendNotif(title,body,opts={}){
+  // Prefer service worker notifications (they persist + handle clicks properly)
+  // Respect per-type user preferences
+  const prefs=userData.notifPrefs||{};
+  if(opts.type&&prefs[opts.type]===false)return;
+  if(notifPermission!=='granted')return;
+  if(navigator.serviceWorker&&navigator.serviceWorker.controller){
+    navigator.serviceWorker.controller.postMessage({
+      type:'SHOW_NOTIFICATION',
+      payload:{title,body,tag:opts.tag||'default',data:opts.data||{}}
+    });
+  }else{
+    // Fallback to basic notification API
+    try{new Notification(title,{body,icon:'icons/icon-192x192.png',badge:'icons/icon-96x96.png',tag:opts.tag})}catch(e){}
+  }
+}
+
 function checkTrainReminder(){
   if(notifPermission!=='granted')return;
+  const prefs=userData.notifPrefs||{};if(prefs.training===false)return;
   const hr=new Date().getHours();
-  if(hr<10||hr>21)return; // Only 10 AM - 9 PM
+  if(hr<10||hr>21)return;
   const todayLogs=workoutLog.filter(e=>{const d=new Date(e.date);return d.toDateString()===new Date().toDateString()});
-  if(todayLogs.length>0)return; // Already trained
+  if(todayLogs.length>0)return;
   const lastNotif=localStorage.getItem('lastTrainNotif');
   const today=getTodayStr();
-  if(lastNotif===today)return; // Already notified today
+  if(lastNotif===today)return;
   localStorage.setItem('lastTrainNotif',today);
   const ws=calcWeeklyStreak();
   const {label}=getXpMultiplier();
   let body='The System is watching. Don\'t let your streak die.';
   if(ws>0)body=`${ws}-week streak on the line. Get in there.`;
   if(label)body+=` ${label}`;
-  try{new Notification('LexenFitness',{body,icon:'icons/icon-192x192.png',badge:'icons/icon-96x96.png'})}catch(e){}
+  sendNotif('LexenFitness',body,{type:'training',tag:'train-reminder'});
 }
-function sendNotif(title,body){
+
+// ─── Real-time listeners for messages, friend requests, pokes, event missions ───
+function startRealtimeListeners(){
+  if(!U)return;
+  // Clear any old
+  realtimeUnsubs.forEach(u=>{try{u()}catch(e){}});
+  realtimeUnsubs=[];
+  const sessionStart=Date.now();
+  const prefs=userData.notifPrefs||{};
+
+  // Messages: listen to incoming chats where user is a member
+  if(prefs.messages!==false){
+    try{
+      const unsub=db.collection('chats').where('members','array-contains',U.uid).onSnapshot(snap=>{
+        snap.docChanges().forEach(change=>{
+          if(change.type!=='modified'&&change.type!=='added')return;
+          const data=change.doc.data();
+          // Only notify if this update is AFTER the session started AND the last sender is not me
+          const lastMsg=data.lastMessage;if(!lastMsg)return;
+          const lastFrom=data.lastFrom;if(lastFrom===U.uid)return;
+          const lastAt=data.lastAt?(data.lastAt.toMillis?data.lastAt.toMillis():new Date(data.lastAt).getTime()):0;
+          if(lastAt<sessionStart)return;
+          // Only notify if app is NOT focused on chat tab
+          const isVisible=!document.hidden&&currentPage==='chat';
+          if(isVisible)return;
+          // Debounce: skip if we notified this chat within last 30s
+          const key='lastMsgNotif_'+change.doc.id;
+          const prev=parseInt(sessionStorage.getItem(key)||'0');
+          if(Date.now()-prev<30000)return;
+          sessionStorage.setItem(key,String(Date.now()));
+          const preview=lastMsg.length>60?lastMsg.slice(0,57)+'...':lastMsg;
+          sendNotif('💬 New Message',preview,{type:'messages',tag:'msg-'+change.doc.id,data:{url:'/lexenfitness/#chat'}});
+        });
+      });
+      realtimeUnsubs.push(unsub);
+    }catch(e){console.error('Msg listener failed:',e)}
+  }
+
+  // Friend requests: listen for incoming pending requests
+  if(prefs.friendRequests!==false){
+    try{
+      const unsub=db.collection('friendRequests').where('to','==',U.uid).where('status','==','pending').onSnapshot(snap=>{
+        snap.docChanges().forEach(change=>{
+          if(change.type!=='added')return;
+          const data=change.doc.data();
+          const ts=data.createdAt?(data.createdAt.toMillis?data.createdAt.toMillis():new Date(data.createdAt).getTime()):0;
+          if(ts<sessionStart)return;
+          sendNotif('👋 Friend Request','@'+(data.fromUsername||'someone')+' wants to be friends',{type:'friendRequests',tag:'friend-'+change.doc.id,data:{url:'/lexenfitness/#profile'}});
+        });
+      });
+      realtimeUnsubs.push(unsub);
+    }catch(e){console.error('Friend req listener failed:',e)}
+  }
+
+  // Pokes: listen for updates to my own user doc where pokes array changes
+  if(prefs.pokes!==false){
+    try{
+      const unsub=db.collection('users').doc(U.uid).onSnapshot(snap=>{
+        if(!snap.exists)return;
+        const data=snap.data();
+        const pokes=data.pokes||[];
+        const lastSeen=parseInt(localStorage.getItem('lastPokeSeen')||'0');
+        const newPokes=pokes.filter(p=>new Date(p.at).getTime()>Math.max(lastSeen,sessionStart));
+        if(newPokes.length){
+          const latest=newPokes[newPokes.length-1];
+          localStorage.setItem('lastPokeSeen',String(Date.now()));
+          sendNotif('👋 Poke!','@'+latest.fromName+' poked you — time to train',{type:'pokes',tag:'poke',data:{url:'/lexenfitness/#profile'}});
+        }
+      });
+      realtimeUnsubs.push(unsub);
+    }catch(e){console.error('Poke listener failed:',e)}
+  }
+}
+
+// Event mission notification — fires once a day when event is available and not done
+function checkEventMissionNotif(){
   if(notifPermission!=='granted')return;
-  try{new Notification(title,{body,icon:'icons/icon-192x192.png'})}catch(e){}
+  const prefs=userData.notifPrefs||{};if(prefs.events===false)return;
+  const today=getTodayStr();
+  const evt=getEventMission(today);if(!evt)return;
+  const evtDone=(userData.eventsCompleted||{})[today];if(evtDone)return;
+  const key='evtNotif_'+today;
+  if(localStorage.getItem(key))return;
+  localStorage.setItem(key,'1');
+  sendNotif('⚡ EVENT MISSION',evt.name+' — '+evt.desc+' (+'+evt.xp+' XP)',{type:'events',tag:'event-'+today,data:{url:'/lexenfitness/#missions'}});
+}
+
+// Handle click from notification (SW posts this)
+if(navigator.serviceWorker){
+  navigator.serviceWorker.addEventListener('message',e=>{
+    if(!e.data)return;
+    if(e.data.type==='NOTIFICATION_CLICK'){
+      const url=e.data.data&&e.data.data.url;
+      if(url){const hash=url.split('#')[1];if(hash)switchPage(hash)}
+    }
+  });
 }
 
 // ═══════════ CARDIO / ACTIVITY LOG ═══════════
@@ -1710,36 +1972,111 @@ async function openClientDetail(uid){
     const d=await db.collection('users').doc(uid).get();
     if(!d.exists){toast('Client not found');return}
     const u=d.data();
-    const logSnap=await db.collection('users').doc(uid).collection('log').orderBy('date','desc').limit(10).get();
+    const logSnap=await db.collection('users').doc(uid).collection('log').orderBy('date','desc').limit(60).get();
     const logs=[];logSnap.forEach(doc=>logs.push(doc.data()));
-    const weighIns=(u.weighIns||[]).slice(-5).reverse();
+    const weighIns=(u.weighIns||[]).slice(-10).reverse();
     const modal=$('profileCardModal');if(!modal)return;
+
+    // Calculate client metrics for trainer
+    const now=Date.now();
+    const last=logs[0]?new Date(logs[0].date).getTime():null;
+    const daysSince=last?Math.floor((now-last)/86400000):999;
+    const statusEmoji=daysSince<=2?'🟢':daysSince<=7?'🟡':'🔴';
+    const statusLabel=daysSince<=2?`Active (${daysSince}d ago)`:daysSince<=7?`Slow (${daysSince}d ago)`:`Inactive (${daysSince}d ago)`;
+
+    // Weekly averages (last 30 days)
+    const recent=logs.filter(e=>new Date(e.date).getTime()>now-30*86400000);
+    const liftsRecent=recent.filter(e=>!e.isRest&&!e.isActivity).length;
+    const actRecent=recent.filter(e=>e.isActivity).length;
+    const restRecent=recent.filter(e=>e.isRest).length;
+    const weeksRecent=Math.max(1,Math.ceil(recent.length/4));
+    const avgPerWeek=(recent.length/weeksRecent).toFixed(1);
+
+    // Weight trend
+    const allWeighIns=u.weighIns||[];
+    let weightChange=null,weightChangeDays=null;
+    if(allWeighIns.length>=2){
+      const first=allWeighIns[0],latest=allWeighIns[allWeighIns.length-1];
+      weightChange=(parseFloat(latest.weight)-parseFloat(first.weight)).toFixed(1);
+      weightChangeDays=Math.floor((new Date(latest.date)-new Date(first.date))/86400000);
+    }
+
+    const rank=u.rank||'E-RANK';
+    const prs=u.prs||{};
+    const st=u.stats||{};
+    const goal=u.nutritionGoal||u.goal||'No goal set';
+
     let h=`<div class="pc-header">
       <div class="pc-pic">${u.profilePic?'<img src="'+u.profilePic+'">':'<div class="pp-placeholder" style="width:60px;height:60px;font-size:1.6rem">👤</div>'}</div>
       <div class="pc-info">
         <div class="pc-username">@${esc(u.username||'hunter')}</div>
-        <div class="pc-class">${u.class||''}${u.subclass?' — '+u.subclass:''}</div>
-        <div class="pc-rank">${u.nutritionGoal||u.goal||'No goal'}</div>
+        <div class="pc-class">${esc(u.class||'')}${u.subclass?' — '+esc(u.subclass):''} · ${esc(rank)}</div>
+        <div style="font-size:.7rem;color:var(--accent2);margin-top:2px">🎯 ${esc(goal)}</div>
+        <div style="font-size:.7rem;margin-top:4px">${statusEmoji} ${esc(statusLabel)}</div>
       </div>
     </div>`;
-    h+=`<div class="section-title" style="margin:.6rem 0 .2rem">RECENT ACTIVITY</div>`;
+
+    // Quick glance stats
+    h+=`<div class="client-stat-grid">
+      <div class="cs-cell"><div class="cs-v">${u.xp||0}</div><div class="cs-l">XP</div></div>
+      <div class="cs-cell"><div class="cs-v">${liftsRecent}</div><div class="cs-l">Lifts/30d</div></div>
+      <div class="cs-cell"><div class="cs-v">${actRecent}</div><div class="cs-l">Cardio/30d</div></div>
+      <div class="cs-cell"><div class="cs-v">${restRecent}</div><div class="cs-l">Rest/30d</div></div>
+      <div class="cs-cell"><div class="cs-v">${avgPerWeek}</div><div class="cs-l">Sess/wk</div></div>
+      <div class="cs-cell"><div class="cs-v">${(u.achievements||[]).length}</div><div class="cs-l">Achieve.</div></div>
+    </div>`;
+
+    // Body stats
+    if(st.height||st.weight||st.age){
+      h+=`<div class="section-title" style="margin:.6rem 0 .2rem">BODY STATS</div>`;
+      h+=`<div style="font-size:.74rem;color:var(--muted);padding:3px 0">${st.height?'📏 '+esc(st.height):''}${st.weight?' · ⚖️ '+esc(st.weight)+' lbs':''}${st.age?' · 🎂 '+esc(st.age):''}${st.bodyFat?' · '+esc(st.bodyFat)+'% BF':''}</div>`;
+    }
+
+    // PRs
+    if(prs.bench||prs.squat||prs.deadlift||prs.ohp){
+      h+=`<div class="section-title" style="margin:.6rem 0 .2rem">PERSONAL RECORDS</div>`;
+      h+=`<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;font-size:.72rem">`;
+      if(prs.bench)h+=`<div>🏋️ Bench: <strong>${esc(prs.bench)} lbs</strong></div>`;
+      if(prs.squat)h+=`<div>🦵 Squat: <strong>${esc(prs.squat)} lbs</strong></div>`;
+      if(prs.deadlift)h+=`<div>⚡ DL: <strong>${esc(prs.deadlift)} lbs</strong></div>`;
+      if(prs.ohp)h+=`<div>💪 OHP: <strong>${esc(prs.ohp)} lbs</strong></div>`;
+      h+=`</div>`;
+    }
+
+    // Weight trend
+    if(weightChange!==null){
+      const arrow=weightChange>0?'📈':weightChange<0?'📉':'➡️';
+      const color=weightChange>0?'var(--gold)':weightChange<0?'var(--green)':'var(--muted)';
+      h+=`<div class="section-title" style="margin:.6rem 0 .2rem">WEIGHT TREND</div>`;
+      h+=`<div style="font-size:.78rem;padding:.4rem;background:var(--surface2);border-radius:6px;text-align:center">${arrow} <strong style="color:${color}">${weightChange>0?'+':''}${weightChange} lbs</strong> over ${weightChangeDays} days (${allWeighIns.length} check-ins)</div>`;
+    }
+
+    // Recent activity
+    h+=`<div class="section-title" style="margin:.6rem 0 .2rem">LAST 10 LOGS</div>`;
     if(!logs.length)h+='<p style="color:var(--muted);font-size:.74rem">No workouts logged yet.</p>';
-    else logs.slice(0,6).forEach(e=>{
+    else logs.slice(0,10).forEach(e=>{
       const dt=new Date(e.date).toLocaleDateString('en-US',{month:'short',day:'numeric'});
       const type=e.isRest?'😴 Rest':e.isActivity?'🏃 Activity':'🏋️ Lift';
-      h+=`<div style="display:flex;justify-content:space-between;font-size:.72rem;padding:3px 0"><span>${type} · ${esc(e.dayTitle||'Workout')}</span><span style="color:var(--dim)">${dt}</span></div>`;
+      const detail=e.isActivity?(e.duration?' · '+e.duration+'m':''):'';
+      h+=`<div style="display:flex;justify-content:space-between;font-size:.72rem;padding:3px 0;border-bottom:1px solid var(--border)"><span>${type} · ${esc(e.dayTitle||'Workout')}${detail}</span><span style="color:var(--dim)">${dt}</span></div>`;
     });
+
     if(weighIns.length){
-      h+=`<div class="section-title" style="margin:.6rem 0 .2rem">WEIGH-INS</div>`;
-      weighIns.forEach(w=>{
+      h+=`<div class="section-title" style="margin:.6rem 0 .2rem">RECENT CHECK-INS</div>`;
+      weighIns.forEach((w,i)=>{
         const dt=new Date(w.date).toLocaleDateString('en-US',{month:'short',day:'numeric'});
-        h+=`<div style="display:flex;justify-content:space-between;font-size:.72rem;padding:3px 0"><span>${w.weight} lbs${w.bodyFat?' · '+w.bodyFat+'% BF':''}</span><span style="color:var(--dim)">${dt}</span></div>`;
+        const prev=i<weighIns.length-1?weighIns[i+1].weight:null;
+        const delta=prev?(parseFloat(w.weight)-parseFloat(prev)).toFixed(1):'';
+        const deltaColor=delta>0?'var(--gold)':delta<0?'var(--green)':'var(--muted)';
+        h+=`<div style="display:flex;justify-content:space-between;font-size:.72rem;padding:3px 0"><span>${esc(w.weight)} lbs${w.bodyFat?' · '+esc(w.bodyFat)+'%':''}${delta?' <span style="color:'+deltaColor+'">('+(delta>0?'+':'')+delta+')</span>':''}</span><span style="color:var(--dim)">${dt}</span></div>`;
+        if(w.notes)h+=`<div style="font-size:.66rem;color:var(--dim);padding:0 0 4px 0;font-style:italic">${esc(w.notes)}</div>`;
       });
     }
-    h+=`<div class="m-actions" style="margin-top:.8rem"><button class="m-cancel" onclick="closeProfileCard()">Close</button><button class="m-save-btn" onclick="messageClient('${uid}')">💬 Message</button></div>`;
+
+    h+=`<div class="m-actions" style="margin-top:.8rem;flex-wrap:wrap;gap:6px"><button class="m-cancel" onclick="closeProfileCard()" style="flex:1">Close</button><button class="m-save-btn" onclick="messageClient('${uid}')" style="flex:1">💬 Message</button></div>`;
     modal.querySelector('.modal').innerHTML=h;
     modal.classList.add('open');
-  }catch(e){toast('Error loading client')}
+  }catch(e){console.error(e);toast('Error: '+e.message)}
 }
 function messageClient(uid){
   closeProfileCard();

@@ -157,9 +157,15 @@ async function sendMessage(){
   $('chatInput').value='';
   const chatId=getChatId(U.uid,currentChatFriend);
   try{
-    await db.collection('chats').doc(chatId).collection('messages').add({
-      from:U.uid,text:text.slice(0,500),ts:firebase.firestore.FieldValue.serverTimestamp()
-    });
+    const msg={from:U.uid,text:text.slice(0,500),ts:firebase.firestore.FieldValue.serverTimestamp()};
+    await db.collection('chats').doc(chatId).collection('messages').add(msg);
+    // Update parent chat doc with last message metadata for notification listeners
+    await db.collection('chats').doc(chatId).set({
+      members:[U.uid,currentChatFriend].sort(),
+      lastMessage:text.slice(0,100),
+      lastFrom:U.uid,
+      lastAt:firebase.firestore.FieldValue.serverTimestamp()
+    },{merge:true});
     unlockAch('chat_first');
     const mc=(userData.messageCount||0)+1;await saveUser({messageCount:mc});if(mc>=10)unlockAch('chat_10');
   }catch(e){toast('Send failed: '+e.message)}

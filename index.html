@@ -224,6 +224,14 @@
 <div class="settings-section">PRIVACY</div>
 <label class="toggle-row"><input type="checkbox" class="toggle-cb" id="setHideName"><span>Hide real name everywhere (username only)</span></label>
 <label class="toggle-row"><input type="checkbox" class="toggle-cb" id="setHideStats"><span>Hide body stats from others</span></label>
+<div class="settings-section">NOTIFICATIONS</div>
+<div id="notifStatus" style="font-size:.68rem;color:var(--muted);margin-bottom:.5rem;line-height:1.4"></div>
+<label class="toggle-row"><input type="checkbox" class="toggle-cb" id="setNotifMessages"><span>💬 New messages</span></label>
+<label class="toggle-row"><input type="checkbox" class="toggle-cb" id="setNotifFriendReqs"><span>👋 Friend requests</span></label>
+<label class="toggle-row"><input type="checkbox" class="toggle-cb" id="setNotifPokes"><span>👋 Pokes</span></label>
+<label class="toggle-row"><input type="checkbox" class="toggle-cb" id="setNotifEvents"><span>⚡ Event missions (daily)</span></label>
+<label class="toggle-row"><input type="checkbox" class="toggle-cb" id="setNotifTraining"><span>🔥 Training reminders</span></label>
+<button class="edit-stats-btn" onclick="enableNotifications()" style="margin-top:.5rem;font-size:.75rem" id="enableNotifBtn">🔔 Enable Notifications</button>
 <div class="settings-section">TRAINER CONNECTION</div>
 <div id="trainerStatus" style="font-size:.72rem;color:var(--muted);margin-bottom:.5rem"></div>
 <div class="settings-row-fields" id="trainerCodeRow"><div class="m-field" style="flex:1"><label>Trainer Code (from your trainer)</label><input type="text" id="setTrainerCode" maxlength="6" placeholder="e.g. ABC123" autocapitalize="characters"></div><button class="m-save-btn" style="flex:0 0 auto;padding:10px 14px;border-radius:8px;align-self:flex-end" onclick="connectTrainer()">Connect</button></div>

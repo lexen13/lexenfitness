@@ -1,9 +1,24 @@
 // ═══════════════════════════════════════════
 //  LEXENFITNESS — DATA v4 (Solo Leveling)
 // ═══════════════════════════════════════════
-const APP_VERSION='1.10.1';
+const APP_VERSION='1.10.3';
 const WELCOME_MESSAGE=`Welcome to Lexen Fitness! A Solo-Leveling inspired, gamified Fitness App to help friends and family stay motivated by giving fitness a game-like experience.\n\nThis app is developed by one person, and is very much still in the testing phase. Not everything will be perfect, but please bear with me. If you have any suggestions, feel free to pass them along as I continue to make this the best app that I can, before I actually have to start buying dev rights with Apple and Google.\n\nFeel free to share this with your own family and friends as we build a community that becomes healthier together!\n\n— Gavin (founder)`;
 const CHANGELOG=[
+  {version:'1.10.3',date:'Apr 2026',title:'Real Push Notifications',items:[
+    '🔔 Real OS notifications for new messages, friend requests, pokes, and event missions',
+    '⚙️ New Notifications settings panel — toggle each type on/off',
+    '📱 iPhone users: tap Share → Add to Home Screen in Safari to enable push notifications',
+    '💬 Messages list now tracks last-message metadata for instant alerts',
+    '🔗 Notification clicks deep-link directly to the right page',
+    '🎯 Daily event mission ping — never miss a 30-50 XP bonus again'
+  ]},
+  {version:'1.10.2',date:'Apr 2026',title:'Pokes, Better Trainer View & Permission Fixes',items:[
+    '👋 Poke your friends! Daily limit, 5 XP per poke, build poke streaks 🔥 (like Snap streaks). 4 new achievements',
+    '📊 Trainer client view now shows XP, rank, PRs, 30-day activity averages, body stats, weight trend, last 10 logs + check-ins',
+    '🔧 Fixed Trainer Dashboard button (was using switchPage instead of sub-tab navigation)',
+    '🔒 Firestore rules updated — dev can now repair/create trainer codes for other users, and new poke writes permitted',
+    '🏆 +4 poke achievements'
+  ]},
   {version:'1.10.1',date:'Apr 2026',title:'Progress Photos & Cleaner Train Page',items:[
     '📸 Progress Photos — device-only (IndexedDB), never uploaded, auto-resized to 1200px. Compare First vs Latest at a glance',
     '⚙️ Workout Settings button — Train page decluttered; Rename/Remove/Notes/Add Day/Change Program all live in one menu now',
@@ -450,6 +465,11 @@ const ACHIEVEMENTS=[
   {id:'progress_photo_1',icon:'📸',name:'Before Shot',desc:'Take your first progress photo',xp:10},
   {id:'progress_photo_4',icon:'📸',name:'Visible Progress',desc:'4 progress photos taken',xp:20},
   {id:'progress_photo_12',icon:'📸',name:'Year in Review',desc:'12 progress photos taken',xp:40},
+  // ── Pokes ──
+  {id:'poke_first',icon:'👋',name:'Poke Buddy',desc:'Send your first poke to a friend',xp:10},
+  {id:'poke_streak_3',icon:'🔥',name:'Back and Forth',desc:'3-day poke streak with a friend',xp:15},
+  {id:'poke_streak_7',icon:'🔥',name:'Dedicated Poker',desc:'7-day poke streak with a friend',xp:30},
+  {id:'poke_streak_30',icon:'🔥',name:'Poke Legend',desc:'30-day poke streak with a friend',xp:75},
 ];
 // ═══════════ COD-STYLE PROGRESSION TRACKS ═══════════
 const PROGRESSION_TRACKS={

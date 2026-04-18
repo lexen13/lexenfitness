@@ -2,7 +2,7 @@
 //  LEXENFITNESS — Service Worker
 //  IMPORTANT: Bump CACHE_NAME with every deploy
 // ═══════════════════════════════════════════
-const CACHE_NAME = 'lexen-v1.10.1';
+const CACHE_NAME = 'lexen-v1.10.3';
 const STATIC_ASSETS = [
   '/lexenfitness/',
   '/lexenfitness/index.html',
@@ -69,6 +69,59 @@ self.addEventListener('fetch', e => {
     }).catch(() => {
       // Network failed (offline) — serve from cache
       return caches.match(e.request);
+    })
+  );
+});
+
+// ═══ PUSH / NOTIFICATIONS ═══
+// Handle messages from the app asking us to show a notification
+self.addEventListener('message', e => {
+  if (!e.data) return;
+  if (e.data.type === 'SHOW_NOTIFICATION') {
+    const { title, body, tag, data } = e.data.payload || {};
+    self.registration.showNotification(title || 'LexenFitness', {
+      body: body || '',
+      icon: '/lexenfitness/icons/icon-192x192.png',
+      badge: '/lexenfitness/icons/icon-96x96.png',
+      tag: tag || 'default',
+      renotify: true,
+      vibrate: [200, 100, 200],
+      data: data || {}
+    });
+  }
+});
+
+// Handle real push events (if ever upgraded to Cloud Functions)
+self.addEventListener('push', e => {
+  let data = {};
+  try { data = e.data ? e.data.json() : {}; } catch(err) { data = { body: e.data ? e.data.text() : '' }; }
+  const title = data.title || 'LexenFitness';
+  const body = data.body || 'You have a new notification';
+  const tag = data.tag || 'push';
+  e.waitUntil(self.registration.showNotification(title, {
+    body,
+    icon: '/lexenfitness/icons/icon-192x192.png',
+    badge: '/lexenfitness/icons/icon-96x96.png',
+    tag,
+    renotify: true,
+    vibrate: [200, 100, 200],
+    data: data.data || {}
+  }));
+});
+
+// Handle notification clicks — focus existing window or open new one
+self.addEventListener('notificationclick', e => {
+  e.notification.close();
+  const targetUrl = (e.notification.data && e.notification.data.url) || '/lexenfitness/';
+  e.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(clientList => {
+      for (const client of clientList) {
+        if (client.url.includes('/lexenfitness') && 'focus' in client) {
+          client.postMessage({ type: 'NOTIFICATION_CLICK', data: e.notification.data || {} });
+          return client.focus();
+        }
+      }
+      if (self.clients.openWindow) return self.clients.openWindow(targetUrl);
     })
   );
 });
