@@ -343,8 +343,15 @@ async function completeMission(mid){
   if(completed.includes(mid))return;
   const m=missions.find(x=>x.id===mid);if(!m)return;
   if(!confirm(`✅ Complete "${m.name}"?\n\n${m.desc}\n\nThis locks in for today.`))return;
-  completed.push(mid);const gained=addXP(m.xp);let bonusMsg='';
-  if(missions.every(x=>completed.includes(x.id))){addXP(50);bonusMsg=' +50 BONUS!';unlockAch('missions_all')}
+  completed.push(mid);
+  let gained=addXP(m.xp);
+  let bonusMsg='';
+  if(missions.every(x=>completed.includes(x.id))){
+    const bonusGained=addXP(50);
+    gained+=bonusGained;
+    bonusMsg=` (+${bonusGained} ALL-MISSIONS BONUS)`;
+    unlockAch('missions_all');
+  }
   if(completed.length>=3)unlockAch('missions_3');
   userData.missionsCompleted[today]=completed;
   userData.missionStreak=calcMissionStreak();
@@ -352,7 +359,7 @@ async function completeMission(mid){
   if(userData.missionStreak>=14)unlockAch('missions_streak_14');
   await saveUser({missionsCompleted:userData.missionsCompleted,missionStreak:userData.missionStreak,xp:userData.xp});
   await saveLeaderboard();updateTopBar();checkRankUp();renderMissions();
-  toast(`${m.icon} ${m.name} +${m.xp} XP${bonusMsg}`);
+  toast(`${m.icon} ${m.name} +${gained} XP${bonusMsg}`);
 }
 function calcMissionStreak(){let streak=0;const d=new Date();for(let i=0;i<365;i++){const ds=new Date(d);ds.setDate(ds.getDate()-i);const key=ds.toISOString().slice(0,10);const missions=getDailyMissions(key,userData.class);const comp=userData.missionsCompleted[key]||[];if(missions.every(m=>comp.includes(m.id)))streak++;else break}return streak}
 
@@ -1096,6 +1103,7 @@ async function loadFriendsList(){
   const friends=userData.friends||[];
   if(!friends.length){list.innerHTML='<p style="color:var(--muted);font-size:.76rem">No friends yet — share your code!</p>';return}
   const myPokeStreaks=userData.pokeStreaks||{};
+  const myLastMutual=userData.pokeLastMutual||{};
   const today=getTodayStr();
   const pokedToday=userData.pokedToday||{};
   let h='';let loaded=0;
@@ -1104,9 +1112,18 @@ async function loadFriendsList(){
       const d=await db.collection('users').doc(fid).get();
       if(!d.exists){h+=`<div class="friend-row" style="opacity:.4"><div class="lb-pic">👤</div><div class="lb-info"><div class="lb-name">Deleted user</div></div></div>`;continue}
       const f=d.data();const r=getRank(f.xp||0);
-      const streak=myPokeStreaks[fid]||0;
+      let streak=myPokeStreaks[fid]||0;
+      const lastMutualDay=myLastMutual[fid];
+      // Display-side decay: if last mutual was 2+ days ago, show 0
+      if(streak>0&&lastMutualDay){
+        const lastM=new Date(lastMutualDay+'T12:00:00');
+        const daysSinceMutual=Math.floor((Date.now()-lastM.getTime())/86400000);
+        if(daysSinceMutual>=2)streak=0;
+      }
       const pokedTodayFlag=pokedToday[fid]===today;
-      const streakDisplay=streak>0?`<span class="poke-streak">🔥${streak}</span>`:'';
+      // Streak at risk: last mutual was yesterday, no mutual today yet
+      const atRisk=streak>0&&lastMutualDay&&lastMutualDay!==today;
+      const streakDisplay=streak>0?`<span class="poke-streak${atRisk?' at-risk':''}" title="${atRisk?'Both poke today to keep streak':'Streak active'}">🔥${streak}${atRisk?'⚠️':''}</span>`:'';
       const pokeBtn=pokedTodayFlag
         ?`<button class="poke-btn poked" disabled title="Already poked today">✓</button>`
         :`<button class="poke-btn" onclick="event.stopPropagation();sendPoke('${fid}','${esc(f.username||'hunter')}')">👋</button>`;
@@ -1126,40 +1143,77 @@ async function sendPoke(fid,fusername){
   const pokedToday=userData.pokedToday||{};
   if(pokedToday[fid]===today){toast('Already poked @'+fusername+' today');return}
   try{
-    // Read friend's current poke data to update properly
+    // Read friend's current poke data
     const fsnap=await db.collection('users').doc(fid).get();
     if(!fsnap.exists){toast('User not found');return}
     const fdata=fsnap.data();
-    const theirIncomingPokes=fdata.pokes||[];
-    const theirPokeStreaks=fdata.pokeStreaks||{};
-    const theirLastReceived=fdata.pokeLastReceived||{};
 
-    // Check if they poked me recently (within 2 days) for streak continuation
-    const myPokeStreaks=userData.pokeStreaks||{};
-    const myLastReceived=userData.pokeLastReceived||{};
-    const theirLastPokeToMe=myLastReceived[fid]?new Date(myLastReceived[fid]):null;
-    const daysSinceTheirPoke=theirLastPokeToMe?(Date.now()-theirLastPokeToMe.getTime())/86400000:999;
+    // Did they poke me today? Check their "pokedToday" map for my uid
+    const theirPokedToday=fdata.pokedToday||{};
+    const theyPokedMeToday=theirPokedToday[U.uid]===today;
 
-    // Continue streak if they poked within 2 days, otherwise restart
-    let newStreak=1;
-    if(daysSinceTheirPoke<=2){
-      newStreak=(myPokeStreaks[fid]||0)+1;
+    // Current streak data — stored symmetrically on both sides
+    const myStreaks=userData.pokeStreaks||{};
+    const myLastMutual=userData.pokeLastMutual||{};
+    const theirStreaks=fdata.pokeStreaks||{};
+    const theirLastMutual=fdata.pokeLastMutual||{};
+
+    // Determine new streak based on mutual rule
+    let newStreak=myStreaks[fid]||0;
+    let newLastMutualDay=myLastMutual[fid]||null;
+
+    if(theyPokedMeToday){
+      // Both poked today — streak advances
+      if(newLastMutualDay===today){
+        // Already mutual today (shouldn't happen but guard anyway)
+      }else{
+        // Check if last mutual day was yesterday (consecutive) or earlier (streak restart)
+        const yesterday=new Date();yesterday.setDate(yesterday.getDate()-1);
+        const yesterdayStr=getDateStr(yesterday);
+        if(newLastMutualDay===yesterdayStr){
+          newStreak=newStreak+1; // consecutive day
+        }else if(newLastMutualDay){
+          // Gap — restart at 1
+          newStreak=1;
+        }else{
+          // First ever mutual
+          newStreak=1;
+        }
+        newLastMutualDay=today;
+      }
+    }
+    // else: I'm poking but they haven't poked back yet.
+    // Don't change the streak value — it stays what it was.
+    // It'll either get bumped when they reciprocate, or decay when a day passes without mutual.
+
+    // Decay check: if the last mutual day is 2+ days ago AND they haven't reciprocated today, streak is dead
+    if(newLastMutualDay){
+      const lastMutual=new Date(newLastMutualDay+'T12:00:00');
+      const daysSinceMutual=Math.floor((Date.now()-lastMutual.getTime())/86400000);
+      if(daysSinceMutual>=2&&!theyPokedMeToday){
+        newStreak=0;
+        newLastMutualDay=null;
+      }
     }
 
-    // Update THEIR doc: add poke, update streak, record timestamp
+    // Update THEIR doc: add the poke entry + apply the same symmetric streak update
+    const theirIncomingPokes=fdata.pokes||[];
     const newTheirIncoming=[...theirIncomingPokes.filter(p=>p.from!==U.uid||(Date.now()-new Date(p.at).getTime()<86400000)),{from:U.uid,fromName:userData.username||'hunter',at:new Date().toISOString()}].slice(-20);
-    const newTheirStreaks={...theirPokeStreaks,[U.uid]:newStreak};
-    const newTheirLastReceived={...theirLastReceived,[U.uid]:new Date().toISOString()};
+    const newTheirStreaks={...theirStreaks,[U.uid]:newStreak};
+    const newTheirLastMutual={...theirLastMutual};
+    if(newLastMutualDay)newTheirLastMutual[U.uid]=newLastMutualDay; else delete newTheirLastMutual[U.uid];
     await db.collection('users').doc(fid).update({
       pokes:newTheirIncoming,
       pokeStreaks:newTheirStreaks,
-      pokeLastReceived:newTheirLastReceived
+      pokeLastMutual:newTheirLastMutual
     });
 
-    // Update MY doc: record I poked them today and my side of the streak
+    // Update MY doc
     pokedToday[fid]=today;
-    const myNewStreaks={...myPokeStreaks,[fid]:newStreak};
-    await saveUser({pokedToday,pokeStreaks:myNewStreaks});
+    const myNewStreaks={...myStreaks,[fid]:newStreak};
+    const myNewLastMutual={...myLastMutual};
+    if(newLastMutualDay)myNewLastMutual[fid]=newLastMutualDay; else delete myNewLastMutual[fid];
+    await saveUser({pokedToday,pokeStreaks:myNewStreaks,pokeLastMutual:myNewLastMutual});
 
     const gained=addXP(5);
     await saveUser({xp:userData.xp});
@@ -1168,10 +1222,16 @@ async function sendPoke(fid,fusername){
     if(newStreak>=30)unlockAch('poke_streak_30');
     unlockAch('poke_first');
 
-    toast(`👋 Poked @${fusername}! +${gained} XP${newStreak>1?' · 🔥'+newStreak+' streak':''}`);
+    let streakMsg='';
+    if(theyPokedMeToday&&newStreak>0)streakMsg=` · 🔥${newStreak} streak`;
+    else if(newStreak>0)streakMsg=` · 🔥${newStreak} (waiting for reply)`;
+    else streakMsg=' · waiting for reply to start streak';
+
+    toast(`👋 Poked @${fusername}! +${gained} XP${streakMsg}`);
     loadFriendsList();
   }catch(e){console.error(e);toast('Poke failed: '+e.message)}
 }
+function getDateStr(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')}
 
 async function checkIncomingPokes(){
   if(!U)return;

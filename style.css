@@ -209,6 +209,8 @@ input[type=checkbox]:checked::after{content:'✓';position:absolute;color:#fff;f
 .poke-btn:hover,.poke-btn:active{transform:scale(1.1);box-shadow:0 2px 8px rgba(123,92,255,.4)}
 .poke-btn.poked{background:var(--surface2);color:var(--muted);cursor:not-allowed;transform:none;box-shadow:none}
 .poke-streak{font-size:.62rem;color:var(--gold);font-weight:700;margin-left:4px;font-family:var(--font-mono)}
+.poke-streak.at-risk{color:var(--orange);animation:pulse-risk 1.5s ease-in-out infinite}
+@keyframes pulse-risk{0%,100%{opacity:1}50%{opacity:.55}}
 
 /* ── Profile ── */
 .profile-card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:1.5rem;text-align:center;margin-bottom:1rem}
