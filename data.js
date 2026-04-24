@@ -1,9 +1,30 @@
 // ═══════════════════════════════════════════
 //  LEXENFITNESS — DATA v4 (Solo Leveling)
 // ═══════════════════════════════════════════
-const APP_VERSION='1.10.6';
+const APP_VERSION='1.12.0';
 const WELCOME_MESSAGE=`Welcome to Lexen Fitness! A Solo-Leveling inspired, gamified Fitness App to help friends and family stay motivated by giving fitness a game-like experience.\n\nThis app is developed by one person, and is very much still in the testing phase. Not everything will be perfect, but please bear with me. If you have any suggestions, feel free to pass them along as I continue to make this the best app that I can, before I actually have to start buying dev rights with Apple and Google.\n\nFeel free to share this with your own family and friends as we build a community that becomes healthier together!\n\n— Gavin (founder)`;
 const CHANGELOG=[
+  {version:'1.12.0',date:'Apr 2026',title:'Internal Levels, Soft Cap & Trial Bonuses',items:[
+    '📊 NEW: Internal levels inside each rank. E-Rank has 10 levels, S-Rank has 100. Small wins on the way to rank-ups',
+    '⚠️ Hard XP cap replaced with 25% SOFT cap — you still earn XP toward trials, just slower. No more "frozen" feeling',
+    '⚔️ Trial bonuses: Iron Gate +250 XP · Gauntlet +500 XP · Awakening +1,000 XP',
+    '📈 Rank Info screen now shows your current level, a progress bar, and XP to next level',
+    '🎯 Level-up toasts when you progress inside your rank',
+    '🏅 Level badge shown next to XP in the top bar'
+  ]},
+  {version:'1.11.1',date:'Apr 2026',title:'Backdate XP Exploit Closed',items:[
+    '🔒 Backdated entries now award ZERO XP (was 50%). Anti-exploit measure.',
+    '💡 Backdating still saves streaks and fills in the log — just no XP or achievements',
+    '📝 Updated all backdate prompts to reflect "no XP" policy'
+  ]},
+  {version:'1.11.0',date:'Apr 2026',title:'Session Mode, Timer & Backdating',items:[
+    '⚔️ NEW: Session Mode — tap "▶ START SESSION" on any workout day. Session clock tracks duration, auto-rest timer between sets, finish to log it all',
+    '📖 Train tab reorganized: Workout / Learn / Logs. New Learn tab now includes training principles, progressive overload, deload, recovery, and the existing exercise library',
+    '📅 Backdate logs up to 7 days. Use "📅 Log for Earlier Day" on the Workout tab. No XP awarded. Backdated entries save streaks but don\'t unlock achievements',
+    '⏱️ Workout duration now shown in the Log with the ⏱ icon',
+    '✏️ Recent Foods: edit the default serving size — tap ✏️ to update weight/macros',
+    '👋 Poke buttons now appear on the Friends leaderboard too'
+  ]},
   {version:'1.10.6',date:'Apr 2026',title:'HOTFIX: App Spinner Fix',items:[
     '🚨 Fixed the app hanging on the loading spinner after v1.10.5 deploy',
     '⏱️ Added a 20-second safety timeout — spinner will never hang forever again',
@@ -135,17 +156,17 @@ const CHANGELOG=[
   ]}
 ];
 const RANKS=[
-  {name:'E-RANK',min:0,color:'#7c7c9a',auto:true,lore:'You have entered the System. The weakest hunters begin here. Prove yourself.',
+  {name:'E-RANK',min:0,color:'#7c7c9a',auto:true,levels:10,xpPerLevel:50,lore:'You have entered the System. The weakest hunters begin here. Prove yourself.',
     title:{Powerlifter:'Novice Lifter',Bodybuilder:'Untested Rookie',Strongman:'Raw Initiate',Athlete:'Unranked Prospect'}},
-  {name:'D-RANK',min:500,color:'#34d399',auto:true,lore:'You survived the early gates. Most hunters plateau here. Will you?',
+  {name:'D-RANK',min:500,color:'#34d399',auto:true,levels:15,xpPerLevel:67,lore:'You survived the early gates. Most hunters plateau here. Will you?',
     title:{Powerlifter:'Iron Lifter',Bodybuilder:'Sculptor',Strongman:'Brawler',Athlete:'Contender'}},
-  {name:'C-RANK',min:1500,color:'#22d3ee',auto:true,lore:'You have drawn the System\'s attention. Stronger gates await.',
+  {name:'C-RANK',min:1500,color:'#22d3ee',auto:true,levels:20,xpPerLevel:100,lore:'You have drawn the System\'s attention. Stronger gates await.',
     title:{Powerlifter:'Iron Will',Bodybuilder:'Aesthetic Warrior',Strongman:'Juggernaut',Athlete:'Competitor'}},
-  {name:'B-RANK',min:3500,color:'#a78bfa',auto:false,trial:'iron_gate',lore:'The Iron Gate separates the committed from the casual. Only discipline passes through.',
+  {name:'B-RANK',min:3500,color:'#a78bfa',auto:false,trial:'iron_gate',levels:30,xpPerLevel:117,lore:'The Iron Gate separates the committed from the casual. Only discipline passes through.',
     title:{Powerlifter:'Powerhouse',Bodybuilder:'Phenom',Strongman:'Warlord',Athlete:'Elite Hunter'}},
-  {name:'A-RANK',min:7000,color:'#fb923c',auto:false,trial:'gauntlet',lore:'The Gauntlet tests your will beyond limits. Few survive. Fewer emerge stronger.',
+  {name:'A-RANK',min:7000,color:'#fb923c',auto:false,trial:'gauntlet',levels:50,xpPerLevel:160,lore:'The Gauntlet tests your will beyond limits. Few survive. Fewer emerge stronger.',
     title:{Powerlifter:'Monster',Bodybuilder:'Olympian',Strongman:'Colossus',Athlete:'All-Star'}},
-  {name:'S-RANK',min:15000,color:'#fbbf24',auto:false,trial:'awakening',lore:'The Awakening. You stand at the pinnacle. The System recognizes you as the strongest.',
+  {name:'S-RANK',min:15000,color:'#fbbf24',auto:false,trial:'awakening',levels:100,xpPerLevel:400,lore:'The Awakening. You stand at the pinnacle. The System recognizes you as the strongest.',
     title:{Powerlifter:'Titan',Bodybuilder:'Mr. Universe',Strongman:'Behemoth',Athlete:'Apex Predator'}}
 ];
 const RANK_TRIALS={

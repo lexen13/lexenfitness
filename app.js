@@ -9,6 +9,12 @@ let currentDay='day1',currentPage='profile',logFilter='all',lbMode='all';
 let editTarget=null,addDayIdx=null,selectedClass=null,selectedSub=null,selectedProg=null;
 let prevRankName=null;
 let authLock=false;
+// Session Mode state
+let sessionActive=false,sessionStartMs=null,sessionPausedMs=0,sessionPauseStartMs=null;
+let sessionTimerHandle=null,restTimerHandle=null,restEndMs=null,restDefaultSec=90;
+let sessionDayId=null;
+// Backdate state for the next log action (null = today)
+let pendingBackdateISO=null;
 const $=id=>document.getElementById(id);
 
 // XSS protection: escape HTML in user/API-sourced strings
@@ -178,6 +184,7 @@ async function saveUser(f){await db.collection('users').doc(U.uid).update(f);Obj
 async function saveLeaderboard(){const r=getEffectiveRank();await db.collection('leaderboard').doc(U.uid).set({username:userData.username||'hunter',xp:userData.xp,class:userData.class,subclass:userData.subclass||'',rank:r.name,profilePic:userData.profilePic||'',bio:userData.bio||'',workouts:getLiftLogs().length,activities:getActivityLogs().length,updatedAt:firebase.firestore.FieldValue.serverTimestamp()})}
 
 // ═══════════ RANK-UP SPLASH ═══════════
+let prevLevelInfo=null;
 function checkRankUp(){
   const newRank=getEffectiveRank();
   if(prevRankName&&newRank.name!==prevRankName){
@@ -186,6 +193,12 @@ function checkRankUp(){
     if(ri>prevRi){showRankUpSplash(newRank)}
   }
   prevRankName=newRank.name;
+  // Level-up detection
+  const lvl=getLevelInfo();
+  if(prevLevelInfo&&(lvl.rank.name===prevLevelInfo.rank.name)&&lvl.level>prevLevelInfo.level){
+    toast(`⬆️ Level Up! Lv ${lvl.level}/${lvl.maxLevel}`);
+  }
+  prevLevelInfo={rank:{name:lvl.rank.name},level:lvl.level};
 }
 function showRankUpSplash(rank){
   const title=(rank.title&&rank.title[userData.class])||rank.name;
@@ -269,14 +282,19 @@ function initApp(){
 }
 function updateTopBar(){
   const r=getEffectiveRank(),info=getXpBarInfo(),cap=getXpCap();
-  const capped=cap!==Infinity&&userData.xp>=cap;
-  $('tbXp').textContent=capped?userData.xp+' XP 🔒':userData.xp+' XP';
-  $('tbXp').style.color=capped?'var(--red)':'';
+  const softCapped=cap.softCap<1;
+  $('tbXp').textContent=softCapped?userData.xp+' XP ⚠':userData.xp+' XP';
+  $('tbXp').style.color=softCapped?'var(--gold)':'';
   const rb=$('tbRank');rb.textContent=r.name;
+  // Level badge (NEW)
+  const lvlInfo=getLevelInfo();
+  let lb=$('tbLevel');
+  if(!lb){lb=document.createElement('span');lb.id='tbLevel';lb.className='tb-level';const xpEl=$('tbXp');if(xpEl&&xpEl.parentNode)xpEl.parentNode.insertBefore(lb,xpEl.nextSibling)}
+  lb.textContent='Lv '+lvlInfo.level+'/'+lvlInfo.maxLevel;
   // XP Multiplier banner
   let mb=$('xpMultBanner');if(!mb){mb=document.createElement('div');mb.id='xpMultBanner';mb.className='xp-mult-banner';const tb=document.querySelector('.top-bar');if(tb)tb.after(mb)}
   const xm=getXpMultiplier();mb.style.display=xm.label?'block':'none';mb.textContent=xm.label||'';rb.style.color=r.color;rb.style.background=r.color+'22';rb.style.border='1px solid '+r.color+'44';
-  const bar=$('tbXpBar');if(bar){bar.style.width=info.pct+'%';bar.style.background=capped?'var(--red)':`linear-gradient(90deg,${r.color},${r.color}cc)`}
+  const bar=$('tbXpBar');if(bar){bar.style.width=info.pct+'%';bar.style.background=softCapped?'var(--gold)':`linear-gradient(90deg,${r.color},${r.color}cc)`}
 }
 function getEffectiveRank(){
   for(let i=RANKS.length-1;i>=0;i--){
@@ -290,30 +308,55 @@ function getEffectiveRank(){
   return RANKS[0];
 }
 
-// ═══════════ XP CAP SYSTEM ═══════════
-// XP hard-caps at the next uncompleted trial threshold
+// ═══════════ INTERNAL LEVEL SYSTEM (Plain Option B) ═══════════
+// Cosmetic-only levels inside each rank — do NOT gate trial unlocks.
+// Trials unlock purely at XP threshold (unchanged from old system).
+function getLevelInfo(xp){
+  if(xp==null)xp=userData.xp||0;
+  // Determine rank by XP (raw, not effective — internal levels use the actual XP tier)
+  let rank=RANKS[0];
+  for(let i=RANKS.length-1;i>=0;i--){if(xp>=RANKS[i].min){rank=RANKS[i];break}}
+  const xpInto=xp-rank.min;
+  const xpPerLevel=rank.xpPerLevel||100;
+  const maxLevel=rank.levels||10;
+  const rawLevel=1+Math.floor(xpInto/xpPerLevel);
+  const level=Math.min(maxLevel,rawLevel);
+  const xpIntoLevel=xpInto-((level-1)*xpPerLevel);
+  const xpToNextLevel=xpPerLevel-xpIntoLevel;
+  const progressPct=level>=maxLevel?100:Math.min(100,(xpIntoLevel/xpPerLevel)*100);
+  return {rank,level,maxLevel,xpIntoLevel,xpPerLevel,xpToNextLevel,progressPct,maxed:level>=maxLevel};
+}
+// ═══════════ XP CAP SYSTEM (SOFT 25%) ═══════════
+// When user hits the trial threshold of an uncompleted trial-gated rank,
+// they earn 25% XP until the trial passes. Not zero. Full-rate resumes after pass.
+const TRIAL_BONUS={iron_gate:250,gauntlet:500,awakening:1000};
 function getXpCap(){
+  // Returns {softCap: 0..1 multiplier, trial: trial object or null}
   for(let i=0;i<RANKS.length;i++){
     if(!RANKS[i].auto&&RANKS[i].trial&&!userData.trialsCompleted.includes(RANKS[i].trial)){
-      return RANKS[i].min; // cap AT this rank's min (can reach it but not pass)
+      // User is past this rank's min without passing trial → soft cap at 25%
+      if(userData.xp>=RANKS[i].min){
+        return {softCap:0.25,trialName:RANKS[i].trial,rankMin:RANKS[i].min};
+      }
+      return {softCap:1,trialName:null};
     }
   }
-  return Infinity; // all trials done, no cap
+  return {softCap:1,trialName:null}; // all trials done
 }
 function addXP(amount){
   const cap=getXpCap();
   const {mult}=getXpMultiplier();
-  const boosted=Math.round(amount*mult);
+  const boosted=Math.round(amount*mult*cap.softCap);
   const before=userData.xp;
-  userData.xp=Math.min(userData.xp+boosted,cap);
+  userData.xp=userData.xp+boosted;
   const gained=userData.xp-before;
-  if(gained<amount&&amount>0){
-    // XP was capped — notify
-    const trial=getAvailableTrial();
-    if(trial)xpCappedMsg=`⚠️ XP CAPPED — Complete ${trial.trial.name} to continue gaining XP`;
-    else xpCappedMsg='';
+  if(cap.softCap<1&&amount>0){
+    const trialName=(RANK_TRIALS[cap.trialName]||{}).name||'the next trial';
+    xpCappedMsg=`⚠️ SOFT-CAPPED at 25% — Complete ${trialName} for full XP + bonus`;
+  }else{
+    xpCappedMsg='';
   }
-  return gained; // actual XP gained after cap
+  return gained;
 }
 let xpCappedMsg='';
 function switchPage(p){currentPage=p;document.querySelectorAll('.nav-item').forEach(n=>n.classList.toggle('active',n.dataset.page===p));document.querySelectorAll('.page').forEach(pg=>pg.classList.remove('active'));$('page-'+p).classList.add('active');
@@ -323,6 +366,13 @@ function switchSubTab(page,tab){
   const container=$('page-'+page);if(!container)return;
   container.querySelectorAll('.stab').forEach(t=>t.classList.toggle('active',t.dataset.st===tab));
   container.querySelectorAll('.sub-page').forEach(p=>p.classList.remove('active'));
+  // Special case: session is active and user taps Workout — keep session visible
+  if(page==='train'&&tab==='workout'&&sessionActive){
+    const sp=$('sessionPage');if(sp){sp.classList.add('active');sp.style.display=''}
+    return;
+  }
+  // Otherwise hide session page if leaving workout tab
+  if(page==='train'&&tab!=='workout'){const sp=$('sessionPage');if(sp)sp.style.display='none'}
   const sp=$('sp-'+tab);if(sp)sp.classList.add('active');
   if(tab==='log')renderLog();if(tab==='rankinfo')$('rankInfoContent').innerHTML=renderRankInfo();if(tab==='leaderboard')renderLeaderboard();
   if(tab==='aicoach')renderAICoach();if(tab==='friendchat')renderChatList();
@@ -339,11 +389,11 @@ function renderMissions(){
   const today=getTodayStr();const missions=getDailyMissions(today,userData.class);
   const completed=userData.missionsCompleted[today]||[];
   const allDone=missions.every(m=>completed.includes(m.id));
-  const cap=getXpCap();const capped=cap!==Infinity&&userData.xp>=cap;
+  const cap=getXpCap();const softCapped=cap.softCap<1;
   const {mult,label:multLabel}=getXpMultiplier();
   let h=`<div class="page-title">DAILY MISSIONS</div><div class="page-sub">${completed.length}/${missions.length} complete · Streak: ${userData.missionStreak} days</div>`;
   if(multLabel)h+=`<div class="xp-mult-badge">${multLabel}</div>`;
-  if(capped){const trial=getAvailableTrial();h+=`<div class="gate-locked-banner">🔒 GATE LOCKED<br><span style="font-size:.72rem;font-family:var(--font-body);letter-spacing:0">XP capped at ${cap}. Complete the trial below to break through.</span></div>`}
+  if(softCapped){const trial=getAvailableTrial();h+=`<div class="gate-locked-banner">⚠️ SOFT-CAPPED · 25% XP<br><span style="font-size:.72rem;font-family:var(--font-body);letter-spacing:0">You're earning 25% XP. Complete ${trial?trial.trial.name:'the next trial'} below for full XP + bonus.</span></div>`}
   const trialInfo=getAvailableTrial();
   if(trialInfo)h+=renderTrialBanner(trialInfo);
   // ── Event Mission ──
@@ -410,8 +460,13 @@ async function claimTrial(trialId){
   userData.trialsCompleted.push(trialId);
   const rank=RANKS.find(r=>r.trial===trialId);
   if(rank){if(rank.name==='B-RANK')unlockAch('rank_b');if(rank.name==='A-RANK')unlockAch('rank_a');if(rank.name==='S-RANK')unlockAch('rank_s')}
-  await saveUser({trialsCompleted:userData.trialsCompleted});await saveLeaderboard();updateTopBar();checkRankUp();
-  toast('⚔️ '+rank.name+' ACHIEVED!');switchPage('missions');
+  // Trial bonus XP (no cap — this is the reward for breaking through)
+  const bonus=TRIAL_BONUS[trialId]||0;
+  if(bonus>0)userData.xp+=bonus;
+  await saveUser({trialsCompleted:userData.trialsCompleted,xp:userData.xp});await saveLeaderboard();updateTopBar();checkRankUp();
+  const trialName=rank?rank.name:'TRIAL';
+  toast(bonus>0?`⚔️ ${trialName} ACHIEVED! +${bonus} XP BONUS`:`⚔️ ${trialName} ACHIEVED!`);
+  switchPage('missions');
 }
 
 // TDEE/Nutrition functions moved to nutrition.js
@@ -420,10 +475,11 @@ async function claimTrial(trialId){
 function renderDevTools(){
   if(!isDev)return'';
   const er=getEffectiveRank();const trial=getAvailableTrial();const cap=getXpCap();
+  const capMsg=cap.softCap<1?'soft-cap 25% (trial pending)':'no cap';
   return`<div class="dev-panel">
     <div class="section-title" style="color:var(--red)">🔧 DEV TOOLS</div>
-    <div style="font-size:.68rem;color:var(--muted);margin:.3rem 0">Current: ${er.name} · XP: ${userData.xp} · Cap: ${cap===Infinity?'∞':cap} · Trials: [${userData.trialsCompleted.join(', ')||'none'}]</div>
-    <div style="font-size:.68rem;color:${trial?'var(--gold)':'var(--green)'};margin-bottom:.4rem">${trial?'🔒 GATE LOCKED — '+trial.trial.name+' (XP capped at '+cap+')':'✅ No gate blocking'}</div>
+    <div style="font-size:.68rem;color:var(--muted);margin:.3rem 0">Current: ${er.name} · XP: ${userData.xp} · ${capMsg} · Trials: [${userData.trialsCompleted.join(', ')||'none'}]</div>
+    <div style="font-size:.68rem;color:${trial?'var(--gold)':'var(--green)'};margin-bottom:.4rem">${trial?'⚠️ SOFT-CAP — '+trial.trial.name+' pending':'✅ No gate blocking'}</div>
     <div class="dev-row">
       <button class="dev-btn" onclick="devSetXP(400)">400 (E)</button>
       <button class="dev-btn" onclick="devSetXP(1400)">1400 (D)</button>
@@ -461,9 +517,10 @@ function renderDevTools(){
   </div>`;
 }
 async function devSetXP(xp){
-  const cap=getXpCap();userData.xp=Math.min(xp,cap);
+  // No hard cap anymore — dev can set any value directly
+  userData.xp=xp;
   await saveUser({xp:userData.xp});await saveLeaderboard();updateTopBar();checkRankUp();renderProfile();
-  toast(userData.xp<xp?`DEV: Capped at ${userData.xp} (trial blocks ${cap}+)`:`DEV: XP set to ${userData.xp}`);
+  toast(`DEV: XP set to ${userData.xp}`);
 }
 async function devAddXP(xp){
   const gained=addXP(xp);await saveUser({xp:userData.xp});await saveLeaderboard();updateTopBar();checkRankUp();renderProfile();
@@ -626,6 +683,8 @@ async function devRepairTrainerCode(){
 
 // ═══════════ WORKOUT ═══════════
 function buildWorkout(){
+  // If a session is active, don't rebuild (preserves session page)
+  if(sessionActive)return;
   const prog=userData.program||[];
   $('workoutTitle').textContent=(userData.class||'WORKOUT').toUpperCase();
   $('workoutSub').textContent=(userData.subclass?userData.subclass+' — ':'')+getEffectiveRank().name;
@@ -686,6 +745,8 @@ async function editDayNotes(){
 function switchDay(id){currentDay=id;document.querySelectorAll('.dtab').forEach(t=>t.classList.toggle('active',t.dataset.d===id));renderDay();updateLogBtn()}
 function renderDay(){const prog=userData.program||[],day=prog.find(d=>d.id===currentDay);if(!day)return;const di=prog.indexOf(day);let h='';
   if(day.subtitle)h+=`<div class="day-subtitle">${esc(day.subtitle)}</div>`;
+  // Start Session button (prominent, at top)
+  h+=`<button class="start-session-btn" onclick="startSession()">▶ START SESSION · ${esc(day.title)}</button>`;
   // Day notes display at top (if set)
   if(day.notes)h+=`<div class="day-notes day-notes-top"><strong>📝 NOTES</strong><br>${esc(day.notes)}</div>`;
   day.exercises.forEach((ex,ei)=>{h+=`<div class="exercise"><div class="ex-header"><span class="ex-num">${ei+1}</span><span class="ex-name">${ex.name}</span><button class="ex-edit" onclick="openEdit(${di},${ei})">✏️</button></div>`;
@@ -697,6 +758,109 @@ function renderDay(){const prog=userData.program||[],day=prog.find(d=>d.id===cur
     h+='</div></div>'});
   h+=`<button class="add-ex" onclick="openAdd(${di})">+ Add Exercise</button>`;
   $('dayContent').innerHTML=h}
+
+// ═══════════ SESSION MODE ═══════════
+function startSession(){
+  const prog=userData.program||[],day=prog.find(d=>d.id===currentDay);
+  if(!day){toast('Pick a day first');return}
+  if(!day.exercises||!day.exercises.length){toast('No exercises in this day yet');return}
+  if(!confirm(`▶ Start session for "${day.title}"?\n\nThe timer will start now. You can pause, but the duration will be logged.`))return;
+  sessionActive=true;sessionStartMs=Date.now();sessionPausedMs=0;sessionPauseStartMs=null;sessionDayId=day.id;
+  renderSession();
+  sessionTimerHandle=setInterval(updateSessionClock,1000);
+  updateSessionClock();
+}
+function pauseSession(){
+  if(!sessionActive)return;
+  if(sessionPauseStartMs){
+    // Resume
+    sessionPausedMs+=Date.now()-sessionPauseStartMs;
+    sessionPauseStartMs=null;
+    $('sessionPauseBtn').textContent='⏸ Pause';
+  }else{
+    sessionPauseStartMs=Date.now();
+    $('sessionPauseBtn').textContent='▶ Resume';
+  }
+}
+function updateSessionClock(){
+  if(!sessionActive)return;
+  let elapsed=Date.now()-sessionStartMs-sessionPausedMs;
+  if(sessionPauseStartMs)elapsed-=(Date.now()-sessionPauseStartMs);
+  const sec=Math.max(0,Math.floor(elapsed/1000));
+  const mm=Math.floor(sec/60),ss=sec%60;
+  const el=$('sessionClock');if(el)el.textContent=String(mm).padStart(2,'0')+':'+String(ss).padStart(2,'0');
+  // Rest timer
+  if(restEndMs){
+    const remaining=Math.max(0,Math.floor((restEndMs-Date.now())/1000));
+    const rm=Math.floor(remaining/60),rs=remaining%60;
+    const rel=$('restClock');if(rel)rel.textContent=String(rm).padStart(2,'0')+':'+String(rs).padStart(2,'0');
+    if(remaining===0){
+      restEndMs=null;
+      try{if(navigator.vibrate)navigator.vibrate([200,100,200])}catch(e){}
+      const rrow=$('restRow');if(rrow)rrow.style.display='none';
+      toast('⏰ Rest complete!');
+    }
+  }
+}
+function startRestTimer(seconds){
+  restEndMs=Date.now()+seconds*1000;
+  const rrow=$('restRow');if(rrow)rrow.style.display='';
+  updateSessionClock();
+}
+function skipRest(){restEndMs=null;const rrow=$('restRow');if(rrow)rrow.style.display='none'}
+function renderSession(){
+  const prog=userData.program||[],day=prog.find(d=>d.id===sessionDayId);if(!day)return;
+  const di=prog.indexOf(day);
+  $('sessionPage').style.display='';
+  $('sp-workout').style.display='none';
+  $('sessionDayTitle').textContent=day.title;
+  $('sessionDaySub').textContent=day.subtitle||'';
+  let h='';
+  if(day.notes)h+=`<div class="day-notes day-notes-top"><strong>📝 NOTES</strong><br>${esc(day.notes)}</div>`;
+  day.exercises.forEach((ex,ei)=>{
+    h+=`<div class="exercise session-ex"><div class="ex-header"><span class="ex-num">${ei+1}</span><span class="ex-name">${esc(ex.name)}</span></div>`;
+    if(ex.notes)h+=`<div class="ex-notes">${esc(ex.notes)}</div>`;
+    h+=`<div class="sets-grid">`;
+    for(let s=0;s<ex.sets;s++){
+      const wK=day.id+'_e'+ei+'_s'+s+'_w',rK=day.id+'_e'+ei+'_s'+s+'_r',cK=day.id+'_e'+ei+'_s'+s+'_c';
+      if(ex.isTime)h+=`<div class="set-row"><label>S${s+1}</label><input type="number" id="${rK}" placeholder="sec" value="${savedInputs[rK]||''}"><span class="sep">sec</span><input type="checkbox" id="${cK}" ${savedInputs[cK]?'checked':''} onchange="onSessionSetCheck(this)"><span class="target">${ex.reps}</span></div>`;
+      else h+=`<div class="set-row"><label>S${s+1}</label><input type="number" id="${wK}" placeholder="lbs" value="${savedInputs[wK]||''}"><span class="sep">×</span><input type="number" id="${rK}" placeholder="reps" value="${savedInputs[rK]||''}"><input type="checkbox" id="${cK}" ${savedInputs[cK]?'checked':''} onchange="onSessionSetCheck(this)"><span class="target">${ex.reps}</span></div>`;
+    }
+    h+='</div></div>';
+  });
+  $('sessionContent').innerHTML=h;
+}
+function onSessionSetCheck(el){
+  // When a set is checked, auto-start rest timer
+  if(el.checked&&restDefaultSec>0)startRestTimer(restDefaultSec);
+}
+function setRestDefault(sec){restDefaultSec=sec;const btns=document.querySelectorAll('.rest-preset');btns.forEach(b=>b.classList.toggle('active',parseInt(b.dataset.sec)===sec));toast(sec===0?'Rest timer off':`Rest ${sec}s after set`)}
+async function finishSession(){
+  if(!sessionActive)return;
+  if(!confirm('Finish this session? Your workout will be logged.'))return;
+  // Calculate duration in seconds
+  let elapsed=Date.now()-sessionStartMs-sessionPausedMs;
+  if(sessionPauseStartMs)elapsed-=(Date.now()-sessionPauseStartMs);
+  const durationSec=Math.max(0,Math.floor(elapsed/1000));
+  // Cleanup timers first — even if log fails
+  clearInterval(sessionTimerHandle);sessionTimerHandle=null;
+  // Capture inputs and log (reuse logWorkout with session flag)
+  await logWorkoutWithSession(sessionDayId,durationSec);
+  // Exit session mode
+  sessionActive=false;sessionStartMs=null;sessionPausedMs=0;sessionPauseStartMs=null;sessionDayId=null;restEndMs=null;
+  $('sessionPage').style.display='none';
+  $('sp-workout').style.display='';
+  buildWorkout();
+}
+function cancelSession(){
+  if(!sessionActive)return;
+  if(!confirm('Cancel session without logging? Your inputs will be kept but the timer discarded.'))return;
+  clearInterval(sessionTimerHandle);sessionTimerHandle=null;
+  sessionActive=false;sessionStartMs=null;sessionPausedMs=0;sessionPauseStartMs=null;sessionDayId=null;restEndMs=null;
+  $('sessionPage').style.display='none';
+  $('sp-workout').style.display='';
+  toast('Session cancelled');
+}
 
 function openEdit(di,ei){editTarget={di,ei};const ex=userData.program[di].exercises[ei];$('editName').value=ex.name;$('editSets').value=ex.sets;$('editReps').value=ex.reps;$('editNotes').value=ex.notes||'';$('editModal').classList.add('open')}
 function closeEdit(){$('editModal').classList.remove('open')}
@@ -712,37 +876,115 @@ function clearInputs(){if(!confirm('Clear inputs?'))return;document.querySelecto
 // ═══════════ LOG WORKOUT ═══════════
 let logLock=false;
 async function logWorkout(){
+  return logWorkoutWithOptions({});
+}
+async function logWorkoutWithSession(dayId,durationSec){
+  return logWorkoutWithOptions({sessionDayId:dayId,durationSec});
+}
+async function logWorkoutWithOptions(opts){
   if(logLock)return;logLock=true;
   try{
-  const prog=userData.program||[],day=prog.find(d=>d.id===currentDay);if(!day){toast('Pick a day!');logLock=false;return}
-  captureInputs();const entry={dayId:day.id,dayTitle:day.title,date:new Date().toISOString(),exercises:[]};let hasData=false,allDone=true,maxW=0;
+  const prog=userData.program||[];
+  const targetDayId=opts.sessionDayId||currentDay;
+  const day=prog.find(d=>d.id===targetDayId);
+  if(!day){toast('Pick a day!');logLock=false;return}
+  captureInputs();
+  const dateISO=opts.backdateISO||pendingBackdateISO||new Date().toISOString();
+  const isBackdated=!!(opts.backdateISO||pendingBackdateISO);
+  pendingBackdateISO=null;
+  const entry={dayId:day.id,dayTitle:day.title,date:dateISO,exercises:[]};
+  if(opts.durationSec)entry.durationSec=opts.durationSec;
+  if(isBackdated)entry.backdated=true;
+  let hasData=false,allDone=true,maxW=0;
   day.exercises.forEach((ex,ei)=>{const sets=[];for(let s=0;s<ex.sets;s++){const wEl=$(day.id+'_e'+ei+'_s'+s+'_w'),rEl=$(day.id+'_e'+ei+'_s'+s+'_r'),cEl=$(day.id+'_e'+ei+'_s'+s+'_c');const w=wEl?wEl.value:'',r=rEl?rEl.value:'',d=cEl?cEl.checked:false;if(w||r)hasData=true;if(!d)allDone=false;if(parseInt(w)>maxW)maxW=parseInt(w);sets.push({weight:w,reps:r,done:d,isTime:!!ex.isTime})}entry.exercises.push({name:ex.name,sets})});
-  if(!hasData){toast('Fill in sets!');return}
+  if(!hasData){toast('Fill in sets!');logLock=false;return}
   const ref=await db.collection('users').doc(U.uid).collection('log').add(entry);entry._id=ref.id;workoutLog.unshift(entry);
-  let xp=50;if(allDone)xp+=50;const hr=new Date().getHours(),wc=getLiftLogs().length;
-  if(wc>=1)unlockAch('first_workout');if(wc>=10)unlockAch('workouts_10');if(wc>=25)unlockAch('workouts_25');if(wc>=50)unlockAch('workouts_50');if(wc>=100)unlockAch('workouts_100');if(wc>=200)unlockAch('workouts_200');
-  if(hr<7)unlockAch('early_bird');if(hr>=21)unlockAch('night_owl');if(allDone)unlockAch('all_sets_done');
-  if(hr===5)unlockAch('secret_5am');
-  const now=new Date();if(now.getHours()===3&&now.getMinutes()===33)unlockAch('secret_3am');
-  if(maxW>=200)unlockAch('heavy_day');if(maxW>=315)unlockAch('monster_lift');if(maxW>=405)unlockAch('titan_lift');if(maxW>=500)unlockAch('heavy_500');
-  const dids=new Set(workoutLog.map(e=>e.dayId));if(dids.size>=4)unlockAch('variety');
-  const wkStreak=calcWeeklyStreak();
-  if(wkStreak>=2)unlockAch('wk_streak_2');if(wkStreak>=4)unlockAch('wk_streak_4');if(wkStreak>=8)unlockAch('wk_streak_8');
-  if(wkStreak>=12)unlockAch('wk_streak_12');if(wkStreak>=26)unlockAch('wk_streak_26');if(wkStreak>=52)unlockAch('wk_streak_52');
-  const hr2=new Date().getHours();if(hr2>=0&&hr2<4)unlockAch('midnight');
-  const fw=calcFullWeeks();if(fw>=1)unlockAch('full_week');if(fw>=5)unlockAch('full_week_5');if(fw>=10)unlockAch('full_week_10');if(fw>=20)unlockAch('full_week_20');
-  // Weekend warrior check
-  const dow=new Date().getDay();if(dow===0||dow===6){const thisWeekLogs=workoutLog.filter(e=>{const d=new Date(e.date);const wk=getMonday(d).toISOString().slice(0,10);return wk===getMonday(new Date()).toISOString().slice(0,10)});const wDays=new Set(thisWeekLogs.map(e=>new Date(e.date).getDay()));if(wDays.has(0)&&wDays.has(6))unlockAch('weekend_warrior')}
-  // PR breaker check (only against other lift logs)
-  if(getLiftLogs().length>=2){const prevMax=Math.max(0,...getLiftLogs().slice(1).flatMap(e=>Array.isArray(e.exercises)?e.exercises.flatMap(ex=>Array.isArray(ex.sets)?ex.sets.map(s=>parseInt(s.weight)||0):[]):[]));if(maxW>prevMax&&prevMax>0)unlockAch('pr_breaker')}
-  const nx=userData.xp+xp;if(nx>=500)unlockAch('rank_d');if(nx>=1500)unlockAch('rank_c');
+  let xp=50;if(allDone)xp+=50;
+  if(isBackdated)xp=0;
+  const hr=new Date(dateISO).getHours();
+  // Only unlock achievements for non-backdated entries
+  if(!isBackdated){
+    const wc=getLiftLogs().filter(e=>!e.backdated).length;
+    if(wc>=1)unlockAch('first_workout');if(wc>=10)unlockAch('workouts_10');if(wc>=25)unlockAch('workouts_25');if(wc>=50)unlockAch('workouts_50');if(wc>=100)unlockAch('workouts_100');if(wc>=200)unlockAch('workouts_200');
+    if(hr<7)unlockAch('early_bird');if(hr>=21)unlockAch('night_owl');if(allDone)unlockAch('all_sets_done');
+    if(hr===5)unlockAch('secret_5am');
+    const now=new Date();if(now.getHours()===3&&now.getMinutes()===33)unlockAch('secret_3am');
+    if(maxW>=200)unlockAch('heavy_day');if(maxW>=315)unlockAch('monster_lift');if(maxW>=405)unlockAch('titan_lift');if(maxW>=500)unlockAch('heavy_500');
+    const dids=new Set(workoutLog.map(e=>e.dayId));if(dids.size>=4)unlockAch('variety');
+    const wkStreak=calcWeeklyStreak();
+    if(wkStreak>=2)unlockAch('wk_streak_2');if(wkStreak>=4)unlockAch('wk_streak_4');if(wkStreak>=8)unlockAch('wk_streak_8');
+    if(wkStreak>=12)unlockAch('wk_streak_12');if(wkStreak>=26)unlockAch('wk_streak_26');if(wkStreak>=52)unlockAch('wk_streak_52');
+    const hr2=new Date().getHours();if(hr2>=0&&hr2<4)unlockAch('midnight');
+    const fw=calcFullWeeks();if(fw>=1)unlockAch('full_week');if(fw>=5)unlockAch('full_week_5');if(fw>=10)unlockAch('full_week_10');if(fw>=20)unlockAch('full_week_20');
+    const dow=new Date().getDay();if(dow===0||dow===6){const thisWeekLogs=workoutLog.filter(e=>{const d=new Date(e.date);const wk=getMonday(d).toISOString().slice(0,10);return wk===getMonday(new Date()).toISOString().slice(0,10)});const wDays=new Set(thisWeekLogs.map(e=>new Date(e.date).getDay()));if(wDays.has(0)&&wDays.has(6))unlockAch('weekend_warrior')}
+    if(getLiftLogs().length>=2){const prevMax=Math.max(0,...getLiftLogs().slice(1).flatMap(e=>Array.isArray(e.exercises)?e.exercises.flatMap(ex=>Array.isArray(ex.sets)?ex.sets.map(s=>parseInt(s.weight)||0):[]):[]));if(maxW>prevMax&&prevMax>0)unlockAch('pr_breaker')}
+    const nx=userData.xp+xp;if(nx>=500)unlockAch('rank_d');if(nx>=1500)unlockAch('rank_c');
+  }
   const gained=addXP(xp);await saveUser({xp:userData.xp});await saveLeaderboard();updateTopBar();checkRankUp();
-  let msg=day.title+' +'+gained+' XP';if(gained<xp)msg+=' (CAPPED — complete trial!)';if(xpCappedMsg)msg=xpCappedMsg;
-  // Clear this day's inputs after logging
+  let msg;
+  if(isBackdated)msg=day.title+' logged for earlier day (no XP)';
+  else{
+    msg=day.title+' +'+gained+' XP';
+    const cap=getXpCap();
+    if(cap.softCap<1)msg+=' (25% soft cap)';
+  }
   day.exercises.forEach((ex,ei)=>{for(let s=0;s<ex.sets;s++){delete savedInputs[day.id+'_e'+ei+'_s'+s+'_w'];delete savedInputs[day.id+'_e'+ei+'_s'+s+'_r'];delete savedInputs[day.id+'_e'+ei+'_s'+s+'_c']}});
-  await db.collection('users').doc(U.uid).collection('meta').doc('inputs').set({data:savedInputs});
+  try{await db.collection('users').doc(U.uid).collection('meta').doc('inputs').set({data:savedInputs})}catch(e){console.warn(e)}
   renderDay();
-  toast(msg)}finally{logLock=false}}
+  toast(msg)}finally{logLock=false}
+}
+function openBackdatePicker(){
+  const modal=$('backdateModal');if(!modal)return;
+  let h=`<h2>📅 What did you forget to log?</h2>`;
+  h+=`<p style="color:var(--muted);font-size:.75rem;line-height:1.4;margin-bottom:.6rem">Pick the type of entry you want to add for an earlier day.</p>`;
+  h+=`<div class="backdate-days">`;
+  h+=`<button class="backdate-day" onclick="openBackdateModal('workout')">🏋️ Workout</button>`;
+  h+=`<button class="backdate-day" onclick="openBackdateModal('activity')">🏃 Cardio / Activity</button>`;
+  h+=`<button class="backdate-day" onclick="openBackdateModal('rest')">😴 Rest Day</button>`;
+  h+=`</div>`;
+  h+=`<div class="m-actions" style="margin-top:.6rem"><button class="m-cancel" onclick="closeBackdateModal()">Cancel</button></div>`;
+  modal.querySelector('.modal').innerHTML=h;
+  modal.classList.add('open');
+}
+// Backdate modal — user picks a date up to 7 days back
+function openBackdateModal(action){
+  const modal=$('backdateModal');if(!modal)return;
+  const today=new Date();const maxBack=7;
+  let h=`<h2>📅 Backdate ${action==='workout'?'Workout':action==='activity'?'Activity':'Rest Day'}</h2>`;
+  h+=`<p style="color:var(--muted);font-size:.78rem;line-height:1.4;margin-bottom:.6rem">Forgot to log earlier? Pick a day in the past week. <strong style="color:var(--gold)">No XP</strong> is awarded for backdated entries, and achievements won't trigger. Streaks CAN be saved.</p>`;
+  h+=`<div class="backdate-days">`;
+  for(let i=0;i<=maxBack;i++){
+    const d=new Date(today);d.setDate(d.getDate()-i);
+    const iso=d.toISOString();
+    const label=i===0?'Today':i===1?'Yesterday':d.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
+    const suffix=i>0?' <span style="color:var(--gold);font-size:.6rem">NO XP</span>':'';
+    h+=`<button class="backdate-day" onclick="pickBackdate('${iso}','${action}')">${label}${suffix}</button>`;
+  }
+  h+=`</div>`;
+  h+=`<div class="m-actions" style="margin-top:.6rem"><button class="m-cancel" onclick="closeBackdateModal()">Cancel</button></div>`;
+  modal.querySelector('.modal').innerHTML=h;
+  modal.classList.add('open');
+}
+function closeBackdateModal(){$('backdateModal').classList.remove('open')}
+function pickBackdate(iso,action){
+  closeBackdateModal();
+  const today=new Date().toISOString().slice(0,10);
+  const picked=iso.slice(0,10);
+  if(picked===today){
+    pendingBackdateISO=null;
+    if(action==='workout')logWorkout();
+    else if(action==='activity')openActivityLog();
+    else if(action==='rest')openRestLog();
+    return;
+  }
+  pendingBackdateISO=iso;
+  if(action==='workout'){
+    if(!confirm(`Log workout for ${new Date(iso).toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'})}?\n\nFill in the sets in the current view, then tap "Log Day" to save. No XP awarded — streak-saving only.`)){pendingBackdateISO=null;return}
+    toast('📅 Fill sets then tap Log Day to save');
+  }
+  else if(action==='activity')openActivityLog();
+  else if(action==='rest')openRestLog();
+}
 function updateLogBtn(){const prog=userData.program||[];const day=prog.find(d=>d.id===currentDay);const btn=$('logDayBtn');if(btn&&day)btn.textContent='📋 Log '+day.title}
 async function logAllDays(){
   if(logLock)return;logLock=true;
@@ -1283,9 +1525,31 @@ async function checkIncomingPokes(){
 let lbData=[];
 async function renderLeaderboard(){let list=[];if(lbMode==='friends'){const fids=[U.uid,...(userData.friends||[])];for(const fid of fids.slice(0,30)){try{const d=await db.collection('leaderboard').doc(fid).get();if(d.exists)list.push({uid:d.id,...d.data()})}catch(e){}}list.sort((a,b)=>b.xp-a.xp)}else{const snap=await db.collection('leaderboard').orderBy('xp','desc').limit(50).get();snap.forEach(d=>list.push({uid:d.id,...d.data()}))}
   lbData=list;
+  const myPokedToday=userData.pokedToday||{};const today=getTodayStr();
+  const myStreaks=userData.pokeStreaks||{};const myLastMutual=userData.pokeLastMutual||{};
   let h=`<div class="log-filters" style="margin-bottom:.7rem"><div class="log-filter ${lbMode==='all'?'active':''}" onclick="lbMode='all';renderLeaderboard()">All Hunters</div><div class="log-filter ${lbMode==='friends'?'active':''}" onclick="lbMode='friends';renderLeaderboard()">Friends</div></div>`;
-  h+=list.length?list.map((u,i)=>{const me=U&&u.uid===U.uid;const r=getRank(u.xp);const pc=i===0?'gold':i===1?'silver':i===2?'bronze':'';
-    return`<div class="lb-row${me?' me':''}" onclick="openProfileCard('${u.uid}')"><span class="lb-pos ${pc}">${i+1}</span><div class="lb-pic">${u.profilePic?'<img src="'+u.profilePic+'">':'👤'}</div><div class="lb-info"><div class="lb-name">@${u.username||'hunter'}</div><div class="lb-class">${u.class||''}${u.subclass?' • '+u.subclass:''}</div></div><div class="lb-xp">${u.xp}</div><div class="lb-rank" style="color:${r.color}">${r.name}</div></div>`}).join(''):'<p style="color:var(--muted);font-size:.82rem">No hunters yet.</p>';
+  h+=list.length?list.map((u,i)=>{
+    const me=U&&u.uid===U.uid;const r=getRank(u.xp);const pc=i===0?'gold':i===1?'silver':i===2?'bronze':'';
+    // Poke button for friends only (not self, not in All mode)
+    let pokeUI='';
+    if(!me&&lbMode==='friends'&&(userData.friends||[]).includes(u.uid)){
+      let streak=myStreaks[u.uid]||0;
+      const lastMutual=myLastMutual[u.uid];
+      if(streak>0&&lastMutual){
+        const lastM=new Date(lastMutual+'T12:00:00');
+        const daysSince=Math.floor((Date.now()-lastM.getTime())/86400000);
+        if(daysSince>=2)streak=0;
+      }
+      const atRisk=streak>0&&lastMutual&&lastMutual!==today;
+      const streakTag=streak>0?`<span class="poke-streak${atRisk?' at-risk':''}">🔥${streak}${atRisk?'⚠️':''}</span>`:'';
+      const poked=myPokedToday[u.uid]===today;
+      const pokeBtn=poked
+        ? `<button class="poke-btn poked" disabled>✓</button>`
+        : `<button class="poke-btn" onclick="event.stopPropagation();sendPoke('${u.uid}','${esc(u.username||'hunter')}')">👋</button>`;
+      pokeUI=streakTag+pokeBtn;
+    }
+    return`<div class="lb-row${me?' me':''}" onclick="openProfileCard('${u.uid}')"><span class="lb-pos ${pc}">${i+1}</span><div class="lb-pic">${u.profilePic?'<img src="'+u.profilePic+'">':'👤'}</div><div class="lb-info"><div class="lb-name">@${esc(u.username||'hunter')}</div><div class="lb-class">${esc(u.class||'')}${u.subclass?' • '+esc(u.subclass):''}</div></div>${pokeUI}<div class="lb-xp">${u.xp}</div><div class="lb-rank" style="color:${r.color}">${r.name}</div></div>`;
+  }).join(''):'<p style="color:var(--muted);font-size:.82rem">No hunters yet.</p>';
   $('lbList').innerHTML=h}
 
 // ═══════════ PROFILE CARD (tap user) ═══════════
@@ -1380,7 +1644,9 @@ function renderLog(){const c=$('logContent');if(!workoutLog.length){c.innerHTML=
           return;
         }
         const maxS=Math.max(...exs.map(x=>x.sets.length));
-        h+='<div class="day-log"><div class="day-log-head"><span class="day-log-title">'+esc(entry.dayTitle||'Workout')+'</span><span><span class="day-log-date">'+ds+'</span> <button class="btn-del" onclick="delLog(\''+entry._id+'\')">✕</button></span></div><div class="log-table-wrap"><table class="log-table"><thead><tr><th>Exercise</th>';
+        const bd=entry.backdated?' <span style="color:var(--gold);font-size:.6rem;font-weight:700;margin-left:4px">📅 BACKDATED</span>':'';
+        const dur=entry.durationSec?' <span style="color:var(--accent);font-size:.62rem;font-weight:700;margin-left:4px">⏱ '+Math.floor(entry.durationSec/60)+'m</span>':'';
+        h+='<div class="day-log"><div class="day-log-head"><span class="day-log-title">'+esc(entry.dayTitle||'Workout')+bd+dur+'</span><span><span class="day-log-date">'+ds+'</span> <button class="btn-del" onclick="delLog(\''+entry._id+'\')">✕</button></span></div><div class="log-table-wrap"><table class="log-table"><thead><tr><th>Exercise</th>';
         for(let i=0;i<maxS;i++)h+='<th>S'+(i+1)+'</th>';h+='</tr></thead><tbody>';
         exs.forEach(ex=>{
           if(!ex.sets.some(s=>s&&(s.reps||s.weight)))return;
@@ -1912,6 +2178,14 @@ function openActivityLog(){
     const est=Math.round(dur*(ACTIVITY_CAL_PER_MIN[type]||5));
     $('actCalories').placeholder='~'+est+' cal (auto)';
   };
+  // Backdate indicator
+  const h2=document.querySelector('#activityModal h2');
+  if(h2){
+    if(pendingBackdateISO){
+      const d=new Date(pendingBackdateISO);
+      h2.textContent='🏃 Log Activity · '+d.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'})+' (no XP)';
+    }else h2.textContent='🏃 Log Activity';
+  }
   $('activityModal').classList.add('open');
 }
 function closeActivityLog(){$('activityModal').classList.remove('open')}
@@ -1923,9 +2197,10 @@ async function saveActivityLog(){
   const calBurned=parseInt($('actCalories').value)||Math.round(dur*(ACTIVITY_CAL_PER_MIN[type]||5));
   const steps=parseInt($('actSteps').value)||0;
   const notes=$('actNotes').value.trim();
-  // Log as a workout entry (counts for streak + XP)
+  const dateISO=pendingBackdateISO||new Date().toISOString();
+  const isBackdated=!!pendingBackdateISO;pendingBackdateISO=null;
   const entry={
-    date:new Date().toISOString(),
+    date:dateISO,
     dayId:'activity_'+Date.now(),
     dayTitle:name,
     isActivity:true,
@@ -1936,16 +2211,23 @@ async function saveActivityLog(){
     notes,
     exercises:[{name,sets:1,reps:dur+'min',sets_data:[{reps:dur}]}]
   };
+  if(isBackdated)entry.backdated=true;
   workoutLog.unshift(entry);
   await db.collection('users').doc(U.uid).collection('log').add(entry);
-  const gained=addXP(15);
-  unlockAch('cardio_first');
-  // Count total activities
-  const actCount=getActivityLogs().length;
-  if(actCount>=5)unlockAch('cardio_5');if(actCount>=20)unlockAch('cardio_20');
+  let xp=15;if(isBackdated)xp=0;
+  const gained=addXP(xp);
+  if(!isBackdated){
+    unlockAch('cardio_first');
+    const actCount=getActivityLogs().filter(e=>!e.backdated).length;
+    if(actCount>=5)unlockAch('cardio_5');if(actCount>=20)unlockAch('cardio_20');
+  }
   await saveUser({xp:userData.xp});await saveLeaderboard();
   updateTopBar();checkRankUp();
-  closeActivityLog();toast(`🏃 ${name} logged! +${gained} XP · ${calBurned} cal burned`);
+  closeActivityLog();
+  let msg;
+  if(isBackdated)msg=`🏃 ${name} logged for earlier day · ${calBurned} cal (no XP)`;
+  else msg=`🏃 ${name} logged! +${gained} XP · ${calBurned} cal burned`;
+  toast(msg);
 }
 
 // ═══════════ REST DAY ═══════════
@@ -1955,6 +2237,13 @@ function openRestLog(){
   document.querySelectorAll('.rest-option').forEach(r=>r.classList.remove('selected'));
   $('restNotes').value='';
   const btn=$('restSaveBtn');btn.disabled=true;btn.textContent='Pick a type';
+  const h2=document.querySelector('#restModal h2');
+  if(h2){
+    if(pendingBackdateISO){
+      const d=new Date(pendingBackdateISO);
+      h2.textContent='😴 Log Rest · '+d.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'})+' (no XP)';
+    }else h2.textContent='😴 Log Rest Day';
+  }
   $('restModal').classList.add('open');
 }
 function closeRestLog(){$('restModal').classList.remove('open')}
@@ -1967,12 +2256,14 @@ async function saveRestLog(){
   if(!selectedRestType)return;
   const isActive=selectedRestType==='active';
   const notes=$('restNotes').value.trim();
-  // Check if already logged rest today
-  const today=new Date().toDateString();
-  const alreadyRest=workoutLog.some(e=>e.isRest&&new Date(e.date).toDateString()===today);
-  if(alreadyRest){toast('Already logged rest today');closeRestLog();return}
+  const dateISO=pendingBackdateISO||new Date().toISOString();
+  const isBackdated=!!pendingBackdateISO;pendingBackdateISO=null;
+  // Check if already logged rest on that day
+  const dayStr=new Date(dateISO).toDateString();
+  const alreadyRest=workoutLog.some(e=>e.isRest&&new Date(e.date).toDateString()===dayStr);
+  if(alreadyRest){toast('Already logged rest for that day');closeRestLog();return}
   const entry={
-    date:new Date().toISOString(),
+    date:dateISO,
     dayId:'rest_'+Date.now(),
     dayTitle:isActive?'Active Rest':'Full Rest',
     isRest:true,
@@ -1980,18 +2271,24 @@ async function saveRestLog(){
     notes,
     exercises:[]
   };
+  if(isBackdated)entry.backdated=true;
   workoutLog.unshift(entry);
   await db.collection('users').doc(U.uid).collection('log').add(entry);
-  const xp=isActive?10:5;
+  let xp=isActive?10:5;if(isBackdated)xp=0;
   const gained=addXP(xp);
-  unlockAch('rest_first');
-  const restCount=getRestLogs().length;
-  if(restCount>=5)unlockAch('rest_5');
-  if(restCount>=20)unlockAch('recovery_pro');
+  if(!isBackdated){
+    unlockAch('rest_first');
+    const restCount=getRestLogs().filter(e=>!e.backdated).length;
+    if(restCount>=5)unlockAch('rest_5');
+    if(restCount>=20)unlockAch('recovery_pro');
+  }
   await saveUser({xp:userData.xp});await saveLeaderboard();
   updateTopBar();
   closeRestLog();
-  toast(`${isActive?'🚶':'🛏️'} ${isActive?'Active':'Full'} rest logged! +${gained} XP`);
+  let msg;
+  if(isBackdated)msg=`${isActive?'🚶':'🛏️'} ${isActive?'Active':'Full'} rest logged for earlier day (no XP)`;
+  else msg=`${isActive?'🚶':'🛏️'} ${isActive?'Active':'Full'} rest logged! +${gained} XP`;
+  toast(msg);
 }
 
 // ═══════════ WEIGH-IN / CHECK-IN ═══════════
@@ -2402,16 +2699,49 @@ document.addEventListener('DOMContentLoaded',()=>{
 let libFilter='All',libSearch='';
 function renderLibrary(){
   const el=$('libraryContent');if(!el)return;
-  let h=`<div class="page-title">EXERCISE LIBRARY</div>
-  <div class="page-sub">Learn proper form — tap any exercise for tutorials</div>
-  <div class="lib-search"><input type="text" class="auth-input" placeholder="Search exercises..." value="${esc(libSearch)}" oninput="libSearch=this.value;renderLibrary()" style="margin:0"></div>
+  let h=`<div class="page-title">LEARN</div>
+  <div class="page-sub">Training principles, progression, and exercise library</div>`;
+  // ── Training Guide (collapsible) ──
+  h+=`<div class="learn-section">
+    <div class="learn-section-title" onclick="toggleLearnSection(this)">
+      <span>📖 TRAINING PRINCIPLES</span><span class="learn-arrow">▼</span>
+    </div>
+    <div class="learn-section-body" style="max-height:none">
+      <div class="learn-block">
+        <div class="learn-block-title">🎯 Progressive Overload</div>
+        <p>Your body adapts to stress. To keep progressing, each week you should aim to either (1) lift more weight, (2) do more reps at the same weight, or (3) improve form at the same load. Don't skip — adding 2.5–5 lbs per week on main lifts is enough.</p>
+      </div>
+      <div class="learn-block">
+        <div class="learn-block-title">🔁 Deload Weeks</div>
+        <p>Every 4-6 weeks, reduce weight 30-40% and stick to 2-3 easy sets. Your CNS and joints need to recover from accumulated stress. Skipping deloads leads to stalled lifts and injury risk. Your Rest Day logs count here too.</p>
+      </div>
+      <div class="learn-block">
+        <div class="learn-block-title">💤 Recovery &amp; Sleep</div>
+        <p>Muscle is built during recovery, not in the gym. Target 7-9 hours of sleep. One bad night kills gym performance; a week of bad sleep kills gains. Prioritize sleep as hard as you prioritize training.</p>
+      </div>
+      <div class="learn-block">
+        <div class="learn-block-title">🥩 Nutrition Fundamentals</div>
+        <p>Hit your protein goal daily (0.8-1g per lb bodyweight). To grow, eat 200-500 cal above maintenance. To cut fat, eat 300-500 cal below. Track via the Nutrition tab. Hydration matters — aim for your bodyweight in ounces.</p>
+      </div>
+      <div class="learn-block">
+        <div class="learn-block-title">📊 How Ranks Work</div>
+        <p>E → D is automatic at 500 XP. After that, <strong>Rank Trials</strong> gate B/A/S ranks. You'll earn XP up to the rank minimum, then get capped until you complete the trial (perfect weeks, heavy lifts, streaks). Trials force you to earn the rank, not just grind XP.</p>
+      </div>
+      <div class="learn-block">
+        <div class="learn-block-title">⚔️ Session Mode</div>
+        <p>Tap "▶ START SESSION" to enter a timed workout. A session clock tracks your total time. Check off a set to auto-start the rest timer. Duration gets saved with your log — watch your workout density improve over time.</p>
+      </div>
+    </div>
+  </div>`;
+  // ── Exercise Library ──
+  h+=`<div class="learn-section-title" style="margin-top:1rem">💪 EXERCISE LIBRARY</div>`;
+  h+=`<div class="lib-search"><input type="text" class="auth-input" placeholder="Search exercises..." value="${esc(libSearch)}" oninput="libSearch=this.value;renderLibrary()" style="margin:0"></div>
   <div class="lib-filters">`;
   h+=`<div class="log-filter${libFilter==='All'?' active':''}" onclick="libFilter='All';renderLibrary()">All</div>`;
   LIBRARY_GROUPS.forEach(g=>{
     h+=`<div class="log-filter${libFilter===g?' active':''}" onclick="libFilter='${g}';renderLibrary()">${g}</div>`;
   });
   h+=`</div>`;
-  // Filter exercises
   let exs=EXERCISE_LIBRARY;
   if(libFilter!=='All')exs=exs.filter(e=>e.group===libFilter);
   if(libSearch.trim()){const q=libSearch.toLowerCase();exs=exs.filter(e=>e.name.toLowerCase().includes(q)||e.group.toLowerCase().includes(q)||(e.tags||[]).some(t=>t.includes(q)))}
@@ -2421,14 +2751,14 @@ function renderLibrary(){
     h+=`<div class="lib-card" onclick="toggleLibCard(this)">
       <div class="lib-card-header">
         <div class="lib-card-info">
-          <div class="lib-card-name">${ex.name}</div>
-          <div class="lib-card-meta"><span class="lib-group" style="color:${groupColor}">${ex.group}</span> · ${ex.reps}</div>
+          <div class="lib-card-name">${esc(ex.name)}</div>
+          <div class="lib-card-meta"><span class="lib-group" style="color:${groupColor}">${esc(ex.group)}</span> · ${esc(ex.reps)}</div>
         </div>
         <span class="lib-card-arrow">▶</span>
       </div>
       <div class="lib-card-body">
-        <div class="lib-cues">${(ex.cues||[]).map(c=>'<div class="lib-cue">→ '+c+'</div>').join('')}</div>
-        <div class="lib-tags">${(ex.tags||[]).map(t=>'<span class="lib-tag">'+t+'</span>').join('')}</div>
+        <div class="lib-cues">${(ex.cues||[]).map(c=>'<div class="lib-cue">→ '+esc(c)+'</div>').join('')}</div>
+        <div class="lib-tags">${(ex.tags||[]).map(t=>'<span class="lib-tag">'+esc(t)+'</span>').join('')}</div>
         <div class="lib-actions">
           <a class="lib-btn video" href="https://www.youtube.com/results?search_query=${ex.yt||ex.name.replace(/ /g,'+')}" target="_blank" rel="noopener">📺 Watch Tutorial</a>
           <button class="lib-btn add" onclick="event.stopPropagation();addFromLibrary('${ex.name.replace(/'/g,"\\'")}',${ex.reps.includes('s')?'true':'false'},'${(ex.reps||'').replace(/'/g,"\\'")}','${(ex.cues||[])[0]?ex.cues[0].replace(/'/g,"\\'"):''}')">➕ Add to Program</button>
@@ -2438,6 +2768,13 @@ function renderLibrary(){
   });
   if(!exs.length)h+=`<p style="color:var(--muted);font-size:.82rem;padding:1rem 0">No exercises found. Try a different search.</p>`;
   el.innerHTML=h;
+}
+function toggleLearnSection(header){
+  const body=header.nextElementSibling;
+  const arrow=header.querySelector('.learn-arrow');
+  if(body.style.maxHeight==='0px'||body.dataset.collapsed==='1'){body.style.maxHeight='none';body.dataset.collapsed='0';if(arrow)arrow.textContent='▼'}
+  else{body.style.maxHeight='0px';body.dataset.collapsed='1';if(arrow)arrow.textContent='▶'}
+  body.style.overflow='hidden';
 }
 function toggleLibCard(card){
   const body=card.querySelector('.lib-card-body');

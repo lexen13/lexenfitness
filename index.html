@@ -99,8 +99,8 @@
 <div class="page" id="page-train">
   <div class="sub-tabs" id="trainTabs">
     <div class="stab active" data-st="workout" onclick="switchSubTab('train','workout')">Workout</div>
-    <div class="stab" data-st="log" onclick="switchSubTab('train','log')">Log</div>
-    <div class="stab" data-st="library" onclick="switchSubTab('train','library')">Library</div>
+    <div class="stab" data-st="library" onclick="switchSubTab('train','library')">Learn</div>
+    <div class="stab" data-st="log" onclick="switchSubTab('train','log')">Logs</div>
   </div>
   <div class="sub-page active" id="sp-workout">
     <div class="page-title" id="workoutTitle">WORKOUT</div>
@@ -117,6 +117,9 @@
       <button class="alt-log-btn activity" onclick="openActivityLog()">🏃 Cardio / Activity</button>
       <button class="alt-log-btn rest" onclick="openRestLog()">😴 Rest Day</button>
     </div>
+    <div class="alt-log-row" style="margin-top:.4rem">
+      <button class="alt-log-btn backdate" onclick="openBackdatePicker()" style="flex:1 1 100%">📅 Log for Earlier Day (no XP)</button>
+    </div>
   </div>
   <div class="sub-page" id="sp-log">
     <div class="page-title">EXERCISE LOG</div>
@@ -125,6 +128,38 @@
   </div>
   <div class="sub-page" id="sp-library">
     <div id="libraryContent"></div>
+  </div>
+  <!-- Session Mode overlay (inside train page, hidden by default) -->
+  <div class="sub-page" id="sessionPage" style="display:none">
+    <div class="session-bar">
+      <div class="session-clock-wrap">
+        <div class="session-clock-label">SESSION</div>
+        <div class="session-clock" id="sessionClock">00:00</div>
+      </div>
+      <div class="session-bar-actions">
+        <button class="session-btn" id="sessionPauseBtn" onclick="pauseSession()">⏸ Pause</button>
+        <button class="session-btn cancel" onclick="cancelSession()">✕</button>
+      </div>
+    </div>
+    <div class="rest-row" id="restRow" style="display:none">
+      <span class="rest-label">REST</span>
+      <span class="rest-clock" id="restClock">00:00</span>
+      <button class="rest-skip" onclick="skipRest()">Skip</button>
+    </div>
+    <div class="rest-presets">
+      <span class="rest-presets-label">Auto-rest:</span>
+      <button class="rest-preset" data-sec="60" onclick="setRestDefault(60)">60s</button>
+      <button class="rest-preset active" data-sec="90" onclick="setRestDefault(90)">90s</button>
+      <button class="rest-preset" data-sec="120" onclick="setRestDefault(120)">2m</button>
+      <button class="rest-preset" data-sec="180" onclick="setRestDefault(180)">3m</button>
+      <button class="rest-preset" data-sec="0" onclick="setRestDefault(0)">Off</button>
+    </div>
+    <div class="session-header">
+      <div class="page-title" id="sessionDayTitle"></div>
+      <div class="page-sub" id="sessionDaySub"></div>
+    </div>
+    <div id="sessionContent"></div>
+    <button class="session-finish-btn" onclick="finishSession()">✓ FINISH SESSION</button>
   </div>
 </div>
 
@@ -364,6 +399,9 @@
 <div class="m-field" style="margin-top:.6rem"><label>Notes <span style="color:var(--dim);font-size:.6rem">(optional)</span></label><input type="text" id="restNotes" placeholder="e.g. Feeling sore from leg day"></div>
 <div class="m-actions"><button class="m-cancel" onclick="closeRestLog()">Cancel</button><button class="m-save-btn" id="restSaveBtn" onclick="saveRestLog()" disabled>Pick a type</button></div>
 </div></div>
+
+<!-- BACKDATE MODAL -->
+<div class="modal-bg" id="backdateModal"><div class="modal"></div></div>
 
 <!-- PHOTO PRIVACY MODAL -->
 <div class="modal-bg" id="photoPrivacyModal"><div class="modal" style="max-width:340px">

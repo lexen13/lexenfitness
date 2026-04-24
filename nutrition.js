@@ -649,7 +649,7 @@ function openRecentFoods(){
   if(!recent.length){
     h+=`<p style="color:var(--muted);font-size:.78rem;padding:1rem 0">No recent foods yet. Log something first!</p>`;
   }else{
-    h+=`<div class="page-sub" style="margin-bottom:.5rem">Tap to log again · Meal ${activeMeal}</div>`;
+    h+=`<div class="page-sub" style="margin-bottom:.5rem">Tap to log · ✏️ to edit the default · Meal ${activeMeal}</div>`;
     h+=`<div class="recent-list">`;
     recent.forEach((f,i)=>{
       h+=`<div class="recent-item" onclick="openRecentServing(${i})">
@@ -657,6 +657,7 @@ function openRecentFoods(){
           <div class="food-item-name">${esc(f.name)}</div>
           <div class="food-item-detail">${esc(f.serving||'')} · ${f.cal} cal · P:${f.protein}g C:${f.carbs}g F:${f.fat}g</div>
         </div>
+        <button class="recent-edit" onclick="event.stopPropagation();editRecentFood(${i})" title="Edit">✏️</button>
         <div class="recent-quick" onclick="event.stopPropagation();quickRelog(${i})">⚡</div>
       </div>`;
     });
@@ -665,6 +666,30 @@ function openRecentFoods(){
   h+=`<div class="m-actions" style="margin-top:.6rem"><button class="m-cancel" onclick="closeRecentFoods()">Close</button></div>`;
   modal.querySelector('.modal').innerHTML=h;
   modal.classList.add('open');
+}
+async function editRecentFood(idx){
+  const recent=userData.recentFoods||[];
+  const f=recent[idx];if(!f)return;
+  const currentServing=f.serving||'1 serving';
+  const newServing=prompt(`Edit default serving for ${f.name}:\n\n(e.g. "150g", "1 cup", "2 slices")`,currentServing);
+  if(!newServing||newServing.trim()===currentServing)return;
+  // Ask if they want to recalculate macros proportionally
+  const oldGrams=parseFloat(currentServing);
+  const newGrams=parseFloat(newServing);
+  let updated={...f,serving:newServing.trim()};
+  if(oldGrams&&newGrams&&oldGrams>0){
+    if(confirm(`Scale macros proportionally?\n\nOld: ${currentServing} = ${f.cal} cal\nNew: ${newServing} = ${Math.round(f.cal*newGrams/oldGrams)} cal\n\nTap OK to recalculate, Cancel to keep current macros.`)){
+      const ratio=newGrams/oldGrams;
+      updated.cal=Math.round(f.cal*ratio);
+      updated.protein=Math.round(f.protein*ratio*10)/10;
+      updated.carbs=Math.round(f.carbs*ratio*10)/10;
+      updated.fat=Math.round(f.fat*ratio*10)/10;
+    }
+  }
+  recent[idx]=updated;
+  await saveUser({recentFoods:recent});
+  openRecentFoods();
+  toast('✏️ Default updated');
 }
 function closeRecentFoods(){$('recentFoodsModal').classList.remove('open')}
 
@@ -718,8 +743,22 @@ async function confirmRecentServing(){
 // ── RANK INFO ──
 function renderRankInfo(){
   const er=getEffectiveRank();
-  let h=`<div class="rank-info-header"><div class="ri-label">[ SYSTEM STATUS ]</div><div class="ri-current" style="color:${er.color}">${er.name}</div><div class="ri-title" style="color:${er.color}">${(er.title&&er.title[userData.class])||er.name}</div><div class="ri-xp">${userData.xp} XP</div></div><div class="ri-divider"></div>`;
+  const lvl=getLevelInfo();
+  const cap=getXpCap();
+  let h=`<div class="rank-info-header"><div class="ri-label">[ SYSTEM STATUS ]</div><div class="ri-current" style="color:${er.color}">${er.name}</div><div class="ri-title" style="color:${er.color}">${(er.title&&er.title[userData.class])||er.name}</div>`;
+  // Level display
+  h+=`<div class="ri-level">Lv <strong>${lvl.level}</strong> / ${lvl.maxLevel}</div>`;
+  // Level progress bar
+  h+=`<div class="ri-level-bar"><div class="ri-level-bar-fill" style="width:${lvl.progressPct}%;background:${er.color}"></div></div>`;
+  if(!lvl.maxed)h+=`<div class="ri-level-sub">${lvl.xpToNextLevel} XP to Lv ${lvl.level+1}</div>`;
+  else h+=`<div class="ri-level-sub" style="color:${er.color}">⚡ MAX LEVEL IN RANK</div>`;
+  h+=`<div class="ri-xp">${userData.xp} XP</div>`;
+  if(cap.softCap<1){
+    const trial=RANK_TRIALS[cap.trialName];
+    h+=`<div class="ri-softcap">⚠️ 25% Soft-Cap · Pass ${trial?trial.name:'trial'} for full XP + <strong>${TRIAL_BONUS[cap.trialName]||0}</strong> bonus</div>`;
+  }
+  h+=`</div><div class="ri-divider"></div>`;
   RANKS.forEach(r=>{const isCurrent=er.name===r.name;const isLocked=userData.xp<r.min;
-    h+=`<div class="ri-rank ${isCurrent?'current':''} ${isLocked?'locked':''}"><div class="ri-rank-badge" style="color:${r.color};border-color:${isLocked?'var(--border)':r.color}">${r.name}</div><div class="ri-rank-info"><div class="ri-rank-title" style="color:${isLocked?'var(--dim)':r.color}">${(r.title&&r.title[userData.class])||r.name}</div><div class="ri-rank-xp">${r.min} XP required</div><div class="ri-rank-lore">${isLocked?'???':r.lore}</div>${r.trial?`<div class="ri-rank-trial">${isLocked?'🔒 Trial required':'⚔️ Trial: '+RANK_TRIALS[r.trial].name}</div>`:''}</div>${isCurrent?'<div class="ri-you">◄ YOU</div>':''}</div>`});
+    h+=`<div class="ri-rank ${isCurrent?'current':''} ${isLocked?'locked':''}"><div class="ri-rank-badge" style="color:${r.color};border-color:${isLocked?'var(--border)':r.color}">${r.name}</div><div class="ri-rank-info"><div class="ri-rank-title" style="color:${isLocked?'var(--dim)':r.color}">${(r.title&&r.title[userData.class])||r.name}</div><div class="ri-rank-xp">${r.min} XP · ${r.levels||10} levels</div><div class="ri-rank-lore">${isLocked?'???':r.lore}</div>${r.trial?`<div class="ri-rank-trial">${isLocked?'🔒 Trial required':'⚔️ Trial: '+RANK_TRIALS[r.trial].name+' (+'+(TRIAL_BONUS[r.trial]||0)+' XP bonus)'}</div>`:''}</div>${isCurrent?'<div class="ri-you">◄ YOU</div>':''}</div>`});
   return h;
 }
