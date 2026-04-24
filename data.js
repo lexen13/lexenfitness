@@ -1,9 +1,16 @@
 // ═══════════════════════════════════════════
 //  LEXENFITNESS — DATA v4 (Solo Leveling)
 // ═══════════════════════════════════════════
-const APP_VERSION='1.12.0';
+const APP_VERSION='1.12.1';
 const WELCOME_MESSAGE=`Welcome to Lexen Fitness! A Solo-Leveling inspired, gamified Fitness App to help friends and family stay motivated by giving fitness a game-like experience.\n\nThis app is developed by one person, and is very much still in the testing phase. Not everything will be perfect, but please bear with me. If you have any suggestions, feel free to pass them along as I continue to make this the best app that I can, before I actually have to start buying dev rights with Apple and Google.\n\nFeel free to share this with your own family and friends as we build a community that becomes healthier together!\n\n— Gavin (founder)`;
 const CHANGELOG=[
+  {version:'1.12.1',date:'Apr 2026',title:'HOTFIX: Missions Blank & Workout Menu',items:[
+    '🚨 Fixed Missions/Achievements page going completely blank (stale variable ref after v1.12.0)',
+    '🏋️ Workout tab now opens a program picker menu — tap a workout to open it',
+    '‹ New "All Workouts" back button appears when viewing a specific day',
+    '⚔️ Fixed Session Mode screen staying blank after Start — now renders correctly on first call',
+    '🏃 Cardio/Rest/Backdate buttons moved to the workout menu (easier to find)'
+  ]},
   {version:'1.12.0',date:'Apr 2026',title:'Internal Levels, Soft Cap & Trial Bonuses',items:[
     '📊 NEW: Internal levels inside each rank. E-Rank has 10 levels, S-Rank has 100. Small wins on the way to rank-ups',
     '⚠️ Hard XP cap replaced with 25% SOFT cap — you still earn XP toward trials, just slower. No more "frozen" feeling',

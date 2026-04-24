@@ -166,6 +166,23 @@ input[type=checkbox]:checked::after{content:'✓';position:absolute;color:#fff;f
 .backdate-day{padding:12px 14px;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:10px;font-size:.82rem;font-weight:600;cursor:pointer;text-align:left;transition:all .15s;display:flex;justify-content:space-between;align-items:center}
 .backdate-day:hover,.backdate-day:active{border-color:var(--accent);background:var(--surface2)}
 
+/* ── Workout Menu (program picker) ── */
+.wk-menu-header{padding:.6rem 0 .2rem;margin-bottom:.8rem;border-bottom:1px solid var(--border)}
+.wk-menu-title{font-family:var(--font-mono);font-size:.88rem;font-weight:800;color:var(--text);letter-spacing:2px;text-transform:uppercase}
+.wk-menu-sub{font-family:var(--font-mono);font-size:.68rem;color:var(--muted);letter-spacing:1px;margin-top:4px}
+.wk-menu-list{display:grid;grid-template-columns:1fr;gap:10px;margin-bottom:1rem}
+.wk-menu-card{background:linear-gradient(135deg,var(--surface) 0%,var(--surface2) 100%);border:1px solid var(--border);border-radius:12px;padding:14px 16px;cursor:pointer;transition:all .15s;position:relative;overflow:hidden}
+.wk-menu-card::before{content:'';position:absolute;top:0;left:0;width:4px;height:100%;background:linear-gradient(180deg,var(--accent),var(--accent2))}
+.wk-menu-card:hover,.wk-menu-card:active{transform:translateY(-1px);border-color:var(--accent);box-shadow:0 4px 14px rgba(123,92,255,.2)}
+.wk-menu-card-title{font-family:var(--font-display);font-weight:800;font-size:1.05rem;color:var(--text);letter-spacing:-.3px;line-height:1.2}
+.wk-menu-card-sub{font-family:var(--font-mono);font-size:.68rem;color:var(--accent2);letter-spacing:1px;margin-top:3px}
+.wk-menu-card-meta{display:flex;justify-content:space-between;align-items:center;font-family:var(--font-mono);font-size:.64rem;color:var(--muted);margin-top:8px;padding-top:6px;border-top:1px dashed var(--border)}
+.wk-menu-add{width:100%;padding:12px;background:transparent;border:2px dashed var(--border);color:var(--muted);border-radius:12px;font-family:var(--font-mono);font-size:.78rem;font-weight:700;letter-spacing:1px;cursor:pointer;transition:all .15s}
+.wk-menu-add:hover,.wk-menu-add:active{border-color:var(--green);color:var(--green);border-style:solid}
+.wk-menu-empty{text-align:center;padding:2rem 1rem}
+.dtab.back-btn{color:var(--muted);border-color:var(--border);background:var(--surface);font-size:.7rem;flex-shrink:0}
+.dtab.back-btn:hover,.dtab.back-btn:active{color:var(--accent);border-color:var(--accent)}
+
 /* ── Learn Tab ── */
 .learn-section{margin:.6rem 0 .4rem}
 .learn-section-title{display:flex;justify-content:space-between;align-items:center;font-family:var(--font-mono);font-size:.78rem;font-weight:800;color:var(--accent2);letter-spacing:1.5px;cursor:pointer;padding:8px 0;border-bottom:1px solid var(--border)}

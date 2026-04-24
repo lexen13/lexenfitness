@@ -15,6 +15,8 @@ let sessionTimerHandle=null,restTimerHandle=null,restEndMs=null,restDefaultSec=9
 let sessionDayId=null;
 // Backdate state for the next log action (null = today)
 let pendingBackdateISO=null;
+// Workout view state: 'menu' (program picker) or 'day' (logging a specific day)
+let workoutView='menu';
 const $=id=>document.getElementById(id);
 
 // XSS protection: escape HTML in user/API-sourced strings
@@ -374,6 +376,8 @@ function switchSubTab(page,tab){
   // Otherwise hide session page if leaving workout tab
   if(page==='train'&&tab!=='workout'){const sp=$('sessionPage');if(sp)sp.style.display='none'}
   const sp=$('sp-'+tab);if(sp)sp.classList.add('active');
+  // When switching back into Train → Workout from another sub-tab, rebuild the menu/day view
+  if(page==='train'&&tab==='workout'&&!sessionActive){buildWorkout()}
   if(tab==='log')renderLog();if(tab==='rankinfo')$('rankInfoContent').innerHTML=renderRankInfo();if(tab==='leaderboard')renderLeaderboard();
   if(tab==='aicoach')renderAICoach();if(tab==='friendchat')renderChatList();
   if(tab==='friends'){renderFriendsPage();pendingFriendReqs=0;updateFriendBadge()};if(tab==='mystats')renderProfile();
@@ -401,14 +405,14 @@ function renderMissions(){
   if(evt){
     const evtDone=(userData.eventsCompleted||{})[today];
     if(evtDone)h+=`<div class="event-card done"><div class="event-label">⚡ EVENT</div><div class="mission-icon">${evt.icon}</div><div class="mission-info"><div class="mission-name">${evt.name}</div><div class="mission-desc">${evt.desc}</div></div><div class="mission-xp locked">DONE</div></div>`;
-    else h+=`<div class="event-card" onclick="completeEvent()"><div class="event-label">⚡ EVENT</div><div class="mission-icon">${evt.icon}</div><div class="mission-info"><div class="mission-name">${evt.name}</div><div class="mission-desc">${evt.desc}</div></div><div class="mission-xp">${capped?'🔒':'+'+Math.round(evt.xp*mult)+' XP'}</div></div>`;
+    else h+=`<div class="event-card" onclick="completeEvent()"><div class="event-label">⚡ EVENT</div><div class="mission-icon">${evt.icon}</div><div class="mission-info"><div class="mission-name">${evt.name}</div><div class="mission-desc">${evt.desc}</div></div><div class="mission-xp">${softCapped?'25% XP':'+'+Math.round(evt.xp*mult)+' XP'}</div></div>`;
   }
   // ── Daily Missions ──
   h+=missions.map(m=>{const done=completed.includes(m.id);
     if(done)return`<div class="mission-card done"><div class="mission-check">✅</div><div class="mission-icon">${m.icon}</div><div class="mission-info"><div class="mission-name">${m.name}</div><div class="mission-desc">${m.desc}</div></div><div class="mission-xp locked">DONE</div></div>`;
-    return`<div class="mission-card" onclick="completeMission('${m.id}')"><div class="mission-check">⬜</div><div class="mission-icon">${m.icon}</div><div class="mission-info"><div class="mission-name">${m.name}</div><div class="mission-desc">${m.desc}</div></div><div class="mission-xp">${capped?'🔒':'+'+Math.round(m.xp*mult)+' XP'}</div></div>`;
+    return`<div class="mission-card" onclick="completeMission('${m.id}')"><div class="mission-check">⬜</div><div class="mission-icon">${m.icon}</div><div class="mission-info"><div class="mission-name">${m.name}</div><div class="mission-desc">${m.desc}</div></div><div class="mission-xp">${softCapped?'25% XP':'+'+Math.round(m.xp*mult)+' XP'}</div></div>`;
   }).join('');
-  if(allDone)h+=`<div class="mission-bonus">🌟 ALL MISSIONS COMPLETE! ${capped?'(XP capped)':'+50 BONUS XP'} 🌟</div>`;
+  if(allDone)h+=`<div class="mission-bonus">🌟 ALL MISSIONS COMPLETE! ${softCapped?'(25% cap)':'+50 BONUS XP'} 🌟</div>`;
   // ── Progression Track ──
   h+=renderProgressionTrack();
   $('missionsContent').innerHTML=h;
@@ -688,9 +692,67 @@ function buildWorkout(){
   const prog=userData.program||[];
   $('workoutTitle').textContent=(userData.class||'WORKOUT').toUpperCase();
   $('workoutSub').textContent=(userData.subclass?userData.subclass+' — ':'')+getEffectiveRank().name;
-  if(!prog.length){$('dayTabs').innerHTML='';$('dayContent').innerHTML='<p style="color:var(--muted);font-size:.82rem">No days in your program.</p><button class="add-ex" onclick="addWorkoutDay()" style="margin-top:.5rem">+ Add Workout Day</button>';return}
+  if(workoutView==='menu'||!prog.length){
+    renderWorkoutMenu();
+  }else{
+    renderWorkoutDay();
+  }
+}
+function renderWorkoutMenu(){
+  const prog=userData.program||[];
+  // Hide day-logging UI elements
+  const dayTabs=$('dayTabs');if(dayTabs)dayTabs.innerHTML='';
+  const dayContent=$('dayContent');
+  // Hide workout actions in menu mode
+  document.querySelectorAll('#sp-workout .workout-actions, #sp-workout .alt-log-row').forEach(el=>el.style.display='none');
+  if(!prog.length){
+    dayContent.innerHTML=`<div class="wk-menu-empty"><p style="color:var(--muted);font-size:.82rem;margin-bottom:1rem">No workouts in your program yet.</p><button class="start-session-btn" onclick="addWorkoutDay()" style="background:var(--green);color:#0a0a14">+ Create Your First Workout</button></div>`;
+    return;
+  }
+  let h=`<div class="wk-menu-header"><div class="wk-menu-title">Choose a workout</div><div class="wk-menu-sub">${prog.length} in your program · tap to begin</div></div>`;
+  h+=`<div class="wk-menu-list">`;
+  prog.forEach(d=>{
+    const exCount=(d.exercises||[]).length;
+    // Get last logged date for this day
+    const lastLog=workoutLog.find(e=>e.dayId===d.id&&!e.isRest&&!e.isActivity);
+    const lastDate=lastLog?new Date(lastLog.date).toLocaleDateString('en-US',{month:'short',day:'numeric'}):'Never';
+    h+=`<div class="wk-menu-card" onclick="openWorkoutDay('${d.id}')">
+      <div class="wk-menu-card-title">${esc(d.title)}</div>
+      ${d.subtitle?`<div class="wk-menu-card-sub">${esc(d.subtitle)}</div>`:''}
+      <div class="wk-menu-card-meta">
+        <span>${exCount} exercise${exCount!==1?'s':''}</span>
+        <span>Last: ${lastDate}</span>
+      </div>
+    </div>`;
+  });
+  h+=`</div>`;
+  h+=`<button class="wk-menu-add" onclick="addWorkoutDay()">+ Create New Workout</button>`;
+  h+=`<div class="alt-log-row" style="margin-top:1rem">
+    <button class="alt-log-btn activity" onclick="openActivityLog()">🏃 Cardio / Activity</button>
+    <button class="alt-log-btn rest" onclick="openRestLog()">😴 Rest Day</button>
+  </div>`;
+  h+=`<div class="alt-log-row" style="margin-top:.4rem">
+    <button class="alt-log-btn backdate" onclick="openBackdatePicker()" style="flex:1 1 100%">📅 Log for Earlier Day (no XP)</button>
+  </div>`;
+  dayContent.innerHTML=h;
+}
+function openWorkoutDay(dayId){
+  currentDay=dayId;
+  workoutView='day';
+  renderWorkoutDay();
+}
+function backToWorkoutMenu(){
+  workoutView='menu';
+  renderWorkoutMenu();
+}
+function renderWorkoutDay(){
+  const prog=userData.program||[];
   if(!prog.find(d=>d.id===currentDay))currentDay=prog[0].id;
-  $('dayTabs').innerHTML=prog.map(d=>`<div class="dtab${d.id===currentDay?' active':''}" data-d="${d.id}" onclick="switchDay('${d.id}')">${d.title}</div>`).join('')+`<div class="dtab" style="color:var(--green);border-color:var(--green)" onclick="addWorkoutDay()">+</div>`;
+  // Build day tabs showing current + switch hint
+  $('dayTabs').innerHTML=`<div class="dtab back-btn" onclick="backToWorkoutMenu()">‹ All Workouts</div>`+
+    prog.map(d=>`<div class="dtab${d.id===currentDay?' active':''}" data-d="${d.id}" onclick="switchDay('${d.id}')">${esc(d.title)}</div>`).join('');
+  // Show workout actions
+  document.querySelectorAll('#sp-workout .workout-actions, #sp-workout .alt-log-row').forEach(el=>el.style.display='');
   renderDay();updateLogBtn();
 }
 async function addWorkoutDay(){
@@ -703,6 +765,7 @@ async function addWorkoutDay(){
   prog.push({id:'day'+Date.now(),title:title.toUpperCase(),subtitle:sub||'',exercises:[]});
   await saveUser({program:prog});
   currentDay=prog[prog.length-1].id;
+  workoutView='day'; // Jump into the new day so user can add exercises
   buildWorkout();toast('Day added!');
 }
 async function removeWorkoutDay(){
@@ -811,8 +874,11 @@ function skipRest(){restEndMs=null;const rrow=$('restRow');if(rrow)rrow.style.di
 function renderSession(){
   const prog=userData.program||[],day=prog.find(d=>d.id===sessionDayId);if(!day)return;
   const di=prog.indexOf(day);
-  $('sessionPage').style.display='';
-  $('sp-workout').style.display='none';
+  // Hide all other sub-pages on train, show session page
+  document.querySelectorAll('#page-train .sub-page').forEach(p=>p.classList.remove('active'));
+  const sp=$('sessionPage');
+  sp.style.display='';
+  sp.classList.add('active');
   $('sessionDayTitle').textContent=day.title;
   $('sessionDaySub').textContent=day.subtitle||'';
   let h='';
@@ -838,18 +904,15 @@ function setRestDefault(sec){restDefaultSec=sec;const btns=document.querySelecto
 async function finishSession(){
   if(!sessionActive)return;
   if(!confirm('Finish this session? Your workout will be logged.'))return;
-  // Calculate duration in seconds
   let elapsed=Date.now()-sessionStartMs-sessionPausedMs;
   if(sessionPauseStartMs)elapsed-=(Date.now()-sessionPauseStartMs);
   const durationSec=Math.max(0,Math.floor(elapsed/1000));
-  // Cleanup timers first — even if log fails
   clearInterval(sessionTimerHandle);sessionTimerHandle=null;
-  // Capture inputs and log (reuse logWorkout with session flag)
   await logWorkoutWithSession(sessionDayId,durationSec);
-  // Exit session mode
   sessionActive=false;sessionStartMs=null;sessionPausedMs=0;sessionPauseStartMs=null;sessionDayId=null;restEndMs=null;
-  $('sessionPage').style.display='none';
-  $('sp-workout').style.display='';
+  // Proper page restore
+  const sp=$('sessionPage');sp.classList.remove('active');sp.style.display='none';
+  const w=$('sp-workout');if(w)w.classList.add('active');
   buildWorkout();
 }
 function cancelSession(){
@@ -857,8 +920,8 @@ function cancelSession(){
   if(!confirm('Cancel session without logging? Your inputs will be kept but the timer discarded.'))return;
   clearInterval(sessionTimerHandle);sessionTimerHandle=null;
   sessionActive=false;sessionStartMs=null;sessionPausedMs=0;sessionPauseStartMs=null;sessionDayId=null;restEndMs=null;
-  $('sessionPage').style.display='none';
-  $('sp-workout').style.display='';
+  const sp=$('sessionPage');sp.classList.remove('active');sp.style.display='none';
+  const w=$('sp-workout');if(w)w.classList.add('active');
   toast('Session cancelled');
 }
 
