@@ -1,9 +1,15 @@
 // ═══════════════════════════════════════════
 //  LEXENFITNESS — DATA v4 (Solo Leveling)
 // ═══════════════════════════════════════════
-const APP_VERSION='1.12.1';
+const APP_VERSION='1.12.2';
 const WELCOME_MESSAGE=`Welcome to Lexen Fitness! A Solo-Leveling inspired, gamified Fitness App to help friends and family stay motivated by giving fitness a game-like experience.\n\nThis app is developed by one person, and is very much still in the testing phase. Not everything will be perfect, but please bear with me. If you have any suggestions, feel free to pass them along as I continue to make this the best app that I can, before I actually have to start buying dev rights with Apple and Google.\n\nFeel free to share this with your own family and friends as we build a community that becomes healthier together!\n\n— Gavin (founder)`;
 const CHANGELOG=[
+  {version:'1.12.2',date:'Apr 2026',title:'HOTFIX: Session Save & Bleed-Through',items:[
+    '🔧 Fixed Session Mode "Finish Workout" failing to save (DOM ID collision — session and day view had duplicate input IDs)',
+    '🧹 Fixed deleted entry values bleeding into the next workout (savedInputs not cleared on delete)',
+    '⚔️ Session Mode is now an overlay on the workout view, not a separate page — single source of truth for inputs',
+    '🛡️ All Save / Log Day / Cardio / Rest buttons now work correctly during AND after a session'
+  ]},
   {version:'1.12.1',date:'Apr 2026',title:'HOTFIX: Missions Blank & Workout Menu',items:[
     '🚨 Fixed Missions/Achievements page going completely blank (stale variable ref after v1.12.0)',
     '🏋️ Workout tab now opens a program picker menu — tap a workout to open it',

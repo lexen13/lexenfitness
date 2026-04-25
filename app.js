@@ -368,13 +368,6 @@ function switchSubTab(page,tab){
   const container=$('page-'+page);if(!container)return;
   container.querySelectorAll('.stab').forEach(t=>t.classList.toggle('active',t.dataset.st===tab));
   container.querySelectorAll('.sub-page').forEach(p=>p.classList.remove('active'));
-  // Special case: session is active and user taps Workout — keep session visible
-  if(page==='train'&&tab==='workout'&&sessionActive){
-    const sp=$('sessionPage');if(sp){sp.classList.add('active');sp.style.display=''}
-    return;
-  }
-  // Otherwise hide session page if leaving workout tab
-  if(page==='train'&&tab!=='workout'){const sp=$('sessionPage');if(sp)sp.style.display='none'}
   const sp=$('sp-'+tab);if(sp)sp.classList.add('active');
   // When switching back into Train → Workout from another sub-tab, rebuild the menu/day view
   if(page==='train'&&tab==='workout'&&!sessionActive){buildWorkout()}
@@ -823,20 +816,40 @@ function renderDay(){const prog=userData.program||[],day=prog.find(d=>d.id===cur
   $('dayContent').innerHTML=h}
 
 // ═══════════ SESSION MODE ═══════════
+// Session overlays the regular workout day view rather than rendering a separate page.
+// Same input IDs, same captureInputs flow, no DOM duplication.
 function startSession(){
   const prog=userData.program||[],day=prog.find(d=>d.id===currentDay);
   if(!day){toast('Pick a day first');return}
   if(!day.exercises||!day.exercises.length){toast('No exercises in this day yet');return}
   if(!confirm(`▶ Start session for "${day.title}"?\n\nThe timer will start now. You can pause, but the duration will be logged.`))return;
   sessionActive=true;sessionStartMs=Date.now();sessionPausedMs=0;sessionPauseStartMs=null;sessionDayId=day.id;
-  renderSession();
+  // Toggle UI: show session overlays, hide normal action row, show finish btn
+  const ov=$('sessionOverlay');if(ov)ov.style.display='';
+  const wa=$('workoutActions');if(wa)wa.style.display='none';
+  const a1=$('altLogRow1');if(a1)a1.style.display='none';
+  const a2=$('altLogRow2');if(a2)a2.style.display='none';
+  const fb=$('sessionFinishBtn');if(fb)fb.style.display='';
+  // Add visual indicator to day content
+  const dc=$('dayContent');if(dc)dc.classList.add('in-session');
   sessionTimerHandle=setInterval(updateSessionClock,1000);
   updateSessionClock();
+  // Auto-attach rest-timer triggers to existing checkboxes
+  attachSessionCheckboxHandlers();
+}
+function attachSessionCheckboxHandlers(){
+  document.querySelectorAll('#dayContent input[type=checkbox]').forEach(cb=>{
+    cb.addEventListener('change',onSessionSetCheck);
+  });
+}
+function onSessionSetCheck(e){
+  if(!sessionActive)return;
+  const el=e.target;
+  if(el.checked&&restDefaultSec>0)startRestTimer(restDefaultSec);
 }
 function pauseSession(){
   if(!sessionActive)return;
   if(sessionPauseStartMs){
-    // Resume
     sessionPausedMs+=Date.now()-sessionPauseStartMs;
     sessionPauseStartMs=null;
     $('sessionPauseBtn').textContent='⏸ Pause';
@@ -852,7 +865,6 @@ function updateSessionClock(){
   const sec=Math.max(0,Math.floor(elapsed/1000));
   const mm=Math.floor(sec/60),ss=sec%60;
   const el=$('sessionClock');if(el)el.textContent=String(mm).padStart(2,'0')+':'+String(ss).padStart(2,'0');
-  // Rest timer
   if(restEndMs){
     const remaining=Math.max(0,Math.floor((restEndMs-Date.now())/1000));
     const rm=Math.floor(remaining/60),rs=remaining%60;
@@ -871,36 +883,17 @@ function startRestTimer(seconds){
   updateSessionClock();
 }
 function skipRest(){restEndMs=null;const rrow=$('restRow');if(rrow)rrow.style.display='none'}
-function renderSession(){
-  const prog=userData.program||[],day=prog.find(d=>d.id===sessionDayId);if(!day)return;
-  const di=prog.indexOf(day);
-  // Hide all other sub-pages on train, show session page
-  document.querySelectorAll('#page-train .sub-page').forEach(p=>p.classList.remove('active'));
-  const sp=$('sessionPage');
-  sp.style.display='';
-  sp.classList.add('active');
-  $('sessionDayTitle').textContent=day.title;
-  $('sessionDaySub').textContent=day.subtitle||'';
-  let h='';
-  if(day.notes)h+=`<div class="day-notes day-notes-top"><strong>📝 NOTES</strong><br>${esc(day.notes)}</div>`;
-  day.exercises.forEach((ex,ei)=>{
-    h+=`<div class="exercise session-ex"><div class="ex-header"><span class="ex-num">${ei+1}</span><span class="ex-name">${esc(ex.name)}</span></div>`;
-    if(ex.notes)h+=`<div class="ex-notes">${esc(ex.notes)}</div>`;
-    h+=`<div class="sets-grid">`;
-    for(let s=0;s<ex.sets;s++){
-      const wK=day.id+'_e'+ei+'_s'+s+'_w',rK=day.id+'_e'+ei+'_s'+s+'_r',cK=day.id+'_e'+ei+'_s'+s+'_c';
-      if(ex.isTime)h+=`<div class="set-row"><label>S${s+1}</label><input type="number" id="${rK}" placeholder="sec" value="${savedInputs[rK]||''}"><span class="sep">sec</span><input type="checkbox" id="${cK}" ${savedInputs[cK]?'checked':''} onchange="onSessionSetCheck(this)"><span class="target">${ex.reps}</span></div>`;
-      else h+=`<div class="set-row"><label>S${s+1}</label><input type="number" id="${wK}" placeholder="lbs" value="${savedInputs[wK]||''}"><span class="sep">×</span><input type="number" id="${rK}" placeholder="reps" value="${savedInputs[rK]||''}"><input type="checkbox" id="${cK}" ${savedInputs[cK]?'checked':''} onchange="onSessionSetCheck(this)"><span class="target">${ex.reps}</span></div>`;
-    }
-    h+='</div></div>';
-  });
-  $('sessionContent').innerHTML=h;
-}
-function onSessionSetCheck(el){
-  // When a set is checked, auto-start rest timer
-  if(el.checked&&restDefaultSec>0)startRestTimer(restDefaultSec);
-}
 function setRestDefault(sec){restDefaultSec=sec;const btns=document.querySelectorAll('.rest-preset');btns.forEach(b=>b.classList.toggle('active',parseInt(b.dataset.sec)===sec));toast(sec===0?'Rest timer off':`Rest ${sec}s after set`)}
+function exitSessionUI(){
+  // Reset overlays back to normal
+  const ov=$('sessionOverlay');if(ov)ov.style.display='none';
+  const wa=$('workoutActions');if(wa)wa.style.display='';
+  const a1=$('altLogRow1');if(a1)a1.style.display='';
+  const a2=$('altLogRow2');if(a2)a2.style.display='';
+  const fb=$('sessionFinishBtn');if(fb)fb.style.display='none';
+  const dc=$('dayContent');if(dc)dc.classList.remove('in-session');
+  const rrow=$('restRow');if(rrow)rrow.style.display='none';
+}
 async function finishSession(){
   if(!sessionActive)return;
   if(!confirm('Finish this session? Your workout will be logged.'))return;
@@ -908,11 +901,10 @@ async function finishSession(){
   if(sessionPauseStartMs)elapsed-=(Date.now()-sessionPauseStartMs);
   const durationSec=Math.max(0,Math.floor(elapsed/1000));
   clearInterval(sessionTimerHandle);sessionTimerHandle=null;
+  // Save the session log — reads from the SAME #dayContent inputs
   await logWorkoutWithSession(sessionDayId,durationSec);
   sessionActive=false;sessionStartMs=null;sessionPausedMs=0;sessionPauseStartMs=null;sessionDayId=null;restEndMs=null;
-  // Proper page restore
-  const sp=$('sessionPage');sp.classList.remove('active');sp.style.display='none';
-  const w=$('sp-workout');if(w)w.classList.add('active');
+  exitSessionUI();
   buildWorkout();
 }
 function cancelSession(){
@@ -920,8 +912,7 @@ function cancelSession(){
   if(!confirm('Cancel session without logging? Your inputs will be kept but the timer discarded.'))return;
   clearInterval(sessionTimerHandle);sessionTimerHandle=null;
   sessionActive=false;sessionStartMs=null;sessionPausedMs=0;sessionPauseStartMs=null;sessionDayId=null;restEndMs=null;
-  const sp=$('sessionPage');sp.classList.remove('active');sp.style.display='none';
-  const w=$('sp-workout');if(w)w.classList.add('active');
+  exitSessionUI();
   toast('Session cancelled');
 }
 
@@ -1729,7 +1720,31 @@ function renderLog(){const c=$('logContent');if(!workoutLog.length){c.innerHTML=
 }
 function setFilter(f){logFilter=f;renderLog()}
 function toggleWk(el){const b=el.nextElementSibling;if(b.style.maxHeight&&b.style.maxHeight!=='0px'){b.style.maxHeight='0px';b.style.overflow='hidden'}else{b.style.maxHeight=b.scrollHeight+'px';b.style.overflow='visible'}}
-async function delLog(id){if(!confirm('Delete?'))return;await db.collection('users').doc(U.uid).collection('log').doc(id).delete();workoutLog=workoutLog.filter(e=>e._id!==id);renderLog();toast('Deleted.')}
+async function delLog(id){
+  if(!confirm('Delete?'))return;
+  // Find the entry first so we know which day to clean
+  const entry=workoutLog.find(e=>e._id===id);
+  await db.collection('users').doc(U.uid).collection('log').doc(id).delete();
+  workoutLog=workoutLog.filter(e=>e._id!==id);
+  // Clean any leftover savedInputs for this day (defensive)
+  if(entry&&entry.dayId&&!entry.isRest&&!entry.isActivity){
+    const day=(userData.program||[]).find(d=>d.id===entry.dayId);
+    if(day){
+      day.exercises.forEach((ex,ei)=>{
+        for(let s=0;s<(ex.sets||0);s++){
+          delete savedInputs[entry.dayId+'_e'+ei+'_s'+s+'_w'];
+          delete savedInputs[entry.dayId+'_e'+ei+'_s'+s+'_r'];
+          delete savedInputs[entry.dayId+'_e'+ei+'_s'+s+'_c'];
+        }
+      });
+      try{await db.collection('users').doc(U.uid).collection('meta').doc('inputs').set({data:savedInputs})}catch(e){console.warn(e)}
+      // If user is currently viewing this day, refresh the inputs
+      if(currentDay===entry.dayId&&workoutView==='day')renderDay();
+    }
+  }
+  renderLog();
+  toast('Deleted.');
+}
 function getMonday(d){const dt=new Date(d);const day=dt.getDay();dt.setDate(dt.getDate()-day+(day===0?-6:1));dt.setHours(0,0,0,0);return dt}
 function getWeekNum(mon){if(!workoutLog.length)return 1;const dates=workoutLog.map(e=>getMonday(new Date(e.date)).getTime());return Math.round((mon-new Date(Math.min(...dates)))/(7*864e5))+1}
 function toast(m){const t=$('toast');t.textContent=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2500)}

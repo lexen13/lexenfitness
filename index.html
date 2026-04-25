@@ -103,23 +103,52 @@
     <div class="stab" data-st="log" onclick="switchSubTab('train','log')">Logs</div>
   </div>
   <div class="sub-page active" id="sp-workout">
+    <!-- Session overlays (only visible during active session) -->
+    <div id="sessionOverlay" style="display:none">
+      <div class="session-bar">
+        <div class="session-clock-wrap">
+          <div class="session-clock-label">SESSION</div>
+          <div class="session-clock" id="sessionClock">00:00</div>
+        </div>
+        <div class="session-bar-actions">
+          <button class="session-btn" id="sessionPauseBtn" onclick="pauseSession()">⏸ Pause</button>
+          <button class="session-btn cancel" onclick="cancelSession()">✕</button>
+        </div>
+      </div>
+      <div class="rest-row" id="restRow" style="display:none">
+        <span class="rest-label">REST</span>
+        <span class="rest-clock" id="restClock">00:00</span>
+        <button class="rest-skip" onclick="skipRest()">Skip</button>
+      </div>
+      <div class="rest-presets">
+        <span class="rest-presets-label">Auto-rest:</span>
+        <button class="rest-preset" data-sec="60" onclick="setRestDefault(60)">60s</button>
+        <button class="rest-preset active" data-sec="90" onclick="setRestDefault(90)">90s</button>
+        <button class="rest-preset" data-sec="120" onclick="setRestDefault(120)">2m</button>
+        <button class="rest-preset" data-sec="180" onclick="setRestDefault(180)">3m</button>
+        <button class="rest-preset" data-sec="0" onclick="setRestDefault(0)">Off</button>
+      </div>
+    </div>
     <div class="page-title" id="workoutTitle">WORKOUT</div>
     <div class="page-sub" id="workoutSub"></div>
     <div class="day-tabs" id="dayTabs"></div>
     <div id="dayContent"></div>
-    <div class="workout-actions">
+    <!-- Default action row (hidden during session) -->
+    <div class="workout-actions" id="workoutActions">
       <button class="wa-log" id="logDayBtn" onclick="logWorkout()">📋 Log Day</button>
       <button class="wa-save" onclick="saveInputs()">💾 Save</button>
       <button class="wa-clear" onclick="clearInputs()">Clear</button>
       <button class="wa-settings" onclick="openWorkoutSettings()" title="Workout Settings">⚙️</button>
     </div>
-    <div class="alt-log-row">
+    <div class="alt-log-row" id="altLogRow1">
       <button class="alt-log-btn activity" onclick="openActivityLog()">🏃 Cardio / Activity</button>
       <button class="alt-log-btn rest" onclick="openRestLog()">😴 Rest Day</button>
     </div>
-    <div class="alt-log-row" style="margin-top:.4rem">
+    <div class="alt-log-row" id="altLogRow2" style="margin-top:.4rem">
       <button class="alt-log-btn backdate" onclick="openBackdatePicker()" style="flex:1 1 100%">📅 Log for Earlier Day (no XP)</button>
     </div>
+    <!-- Session finish button (only visible during active session) -->
+    <button class="session-finish-btn" id="sessionFinishBtn" onclick="finishSession()" style="display:none">✓ FINISH SESSION</button>
   </div>
   <div class="sub-page" id="sp-log">
     <div class="page-title">EXERCISE LOG</div>
@@ -129,38 +158,7 @@
   <div class="sub-page" id="sp-library">
     <div id="libraryContent"></div>
   </div>
-  <!-- Session Mode overlay (inside train page, hidden by default) -->
-  <div class="sub-page" id="sessionPage" style="display:none">
-    <div class="session-bar">
-      <div class="session-clock-wrap">
-        <div class="session-clock-label">SESSION</div>
-        <div class="session-clock" id="sessionClock">00:00</div>
-      </div>
-      <div class="session-bar-actions">
-        <button class="session-btn" id="sessionPauseBtn" onclick="pauseSession()">⏸ Pause</button>
-        <button class="session-btn cancel" onclick="cancelSession()">✕</button>
-      </div>
-    </div>
-    <div class="rest-row" id="restRow" style="display:none">
-      <span class="rest-label">REST</span>
-      <span class="rest-clock" id="restClock">00:00</span>
-      <button class="rest-skip" onclick="skipRest()">Skip</button>
-    </div>
-    <div class="rest-presets">
-      <span class="rest-presets-label">Auto-rest:</span>
-      <button class="rest-preset" data-sec="60" onclick="setRestDefault(60)">60s</button>
-      <button class="rest-preset active" data-sec="90" onclick="setRestDefault(90)">90s</button>
-      <button class="rest-preset" data-sec="120" onclick="setRestDefault(120)">2m</button>
-      <button class="rest-preset" data-sec="180" onclick="setRestDefault(180)">3m</button>
-      <button class="rest-preset" data-sec="0" onclick="setRestDefault(0)">Off</button>
-    </div>
-    <div class="session-header">
-      <div class="page-title" id="sessionDayTitle"></div>
-      <div class="page-sub" id="sessionDaySub"></div>
-    </div>
-    <div id="sessionContent"></div>
-    <button class="session-finish-btn" onclick="finishSession()">✓ FINISH SESSION</button>
-  </div>
+  <!-- Session UI is now inline in sp-workout, no separate page needed -->
 </div>
 
 <!-- ══ MISSIONS ══ -->
