@@ -345,6 +345,30 @@ input[type=checkbox]:checked::after{content:'✓';position:absolute;color:#fff;f
 .log-table .c-done{color:var(--green)}.log-table .c-miss{color:var(--muted)}.log-table .c-empty{color:var(--border)}
 .btn-del{background:none;border:none;color:var(--dim);cursor:pointer;font-size:.68rem;font-family:var(--font-mono)}
 .btn-del:hover{color:var(--red)}
+.btn-edit-food{background:none;border:none;color:var(--dim);cursor:pointer;font-size:.78rem;padding:4px 6px;margin-right:2px}
+.btn-edit-food:hover{color:var(--accent)}
+
+/* ── Reorder Workouts ── */
+.reorder-list{display:flex;flex-direction:column;gap:6px;margin:.5rem 0}
+.reorder-item{display:flex;align-items:center;gap:10px;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:10px 12px}
+.reorder-pos{font-family:var(--font-mono);font-size:.78rem;font-weight:800;color:var(--accent2);width:22px;text-align:center}
+.reorder-info{flex:1;min-width:0}
+.reorder-name{font-weight:700;font-size:.86rem;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.reorder-meta{font-family:var(--font-mono);font-size:.62rem;color:var(--muted);margin-top:2px}
+.reorder-arrows{display:flex;flex-direction:column;gap:3px}
+.reorder-arrow{width:32px;height:24px;background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:5px;font-size:.65rem;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0}
+.reorder-arrow:hover:not(:disabled){border-color:var(--accent);color:var(--accent)}
+.reorder-arrow:disabled{opacity:.3;cursor:not-allowed}
+.trial-task.has-detail{cursor:pointer}
+.trial-task.has-detail:hover{background:var(--surface)}
+
+/* ── Training Goal Picker ── */
+.tg-options{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin:.6rem 0}
+.tg-opt{padding:14px 4px;background:var(--surface);border:2px solid var(--border);color:var(--text);border-radius:10px;font-family:var(--font-display);font-size:1.4rem;font-weight:800;cursor:pointer;transition:all .15s;display:flex;flex-direction:column;align-items:center;gap:0;line-height:1}
+.tg-opt-sub{font-family:var(--font-mono);font-size:.55rem;color:var(--muted);font-weight:600;letter-spacing:1px;margin-top:2px}
+.tg-opt:hover,.tg-opt:active{border-color:var(--accent);background:var(--surface2);transform:translateY(-1px)}
+.tg-opt.selected{border-color:var(--accent2);background:rgba(251,191,36,.08);color:var(--accent2)}
+.tg-opt.selected .tg-opt-sub{color:var(--accent2)}
 
 /* ── Modal ── */
 .modal-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);backdrop-filter:blur(4px);z-index:200;align-items:flex-end;justify-content:center}

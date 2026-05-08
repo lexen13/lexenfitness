@@ -1,9 +1,31 @@
 // ═══════════════════════════════════════════
 //  LEXENFITNESS — DATA v4 (Solo Leveling)
 // ═══════════════════════════════════════════
-const APP_VERSION='1.12.2';
+const APP_VERSION='1.14.0';
 const WELCOME_MESSAGE=`Welcome to Lexen Fitness! A Solo-Leveling inspired, gamified Fitness App to help friends and family stay motivated by giving fitness a game-like experience.\n\nThis app is developed by one person, and is very much still in the testing phase. Not everything will be perfect, but please bear with me. If you have any suggestions, feel free to pass them along as I continue to make this the best app that I can, before I actually have to start buying dev rights with Apple and Google.\n\nFeel free to share this with your own family and friends as we build a community that becomes healthier together!\n\n— Gavin (founder)`;
 const CHANGELOG=[
+  {version:'1.14.0',date:'Apr 2026',title:'Personal Training Goals + Locked Past Weeks',items:[
+    '🎯 NEW: Set your weekly training goal (3-7 lift sessions/week). Iron Gate "perfect weeks" now scales to YOUR commitment',
+    '📅 First-time prompt: existing users will be asked their training goal on next app open',
+    '🔒 Past weeks are LOCKED once scored — changing your goal only affects current and future weeks. Your history is permanent',
+    '✓ Stricter "perfect" definition: each session must have at least one filled+done set, every filled set must be checked',
+    '⚙️ Edit your training goal anytime in Profile → Settings → Workouts per week'
+  ]},
+  {version:'1.13.1',date:'Apr 2026',title:'HOTFIX: Perfect Weeks Calculation',items:[
+    '🔧 Iron Gate "perfect weeks" was requiring 4 unique workout days per week — now counts 4+ sessions regardless of which day was repeated',
+    '🔧 Empty unfilled sets no longer break a perfect week — only sets with data must be checked off ✓',
+    '👁️ NEW: Tap the perfect-weeks task on the trial banner to see your last 8 weeks broken down (perfect, missing sessions, or unchecked sets)',
+    '📝 Updated trial description to explain what counts'
+  ]},
+  {version:'1.13.0',date:'Apr 2026',title:'Reorder Workouts & Edit Logged Foods',items:[
+    '↕️ Reorder workouts in your program — Workout Settings ⚙️ → Reorder Workouts → tap arrows to move up/down',
+    '✏️ Edit any logged food — tap the pencil icon next to a food entry to change name, weight, calories, or macros',
+    '⚖️ Auto-scale macros: change "100g" to "150g" then tap auto-scale to recalculate everything proportionally',
+    '🕰️ Works on past meals too (any day in your nutrition history)'
+  ]},
+  {version:'1.12.3',date:'Apr 2026',title:'HOTFIX: Hide Start Session Button During Session',items:[
+    '🔧 Start Session button now hides once a session is in progress (was redundant with the timer overlay)'
+  ]},
   {version:'1.12.2',date:'Apr 2026',title:'HOTFIX: Session Save & Bleed-Through',items:[
     '🔧 Fixed Session Mode "Finish Workout" failing to save (DOM ID collision — session and day view had duplicate input IDs)',
     '🧹 Fixed deleted entry values bleeding into the next workout (savedInputs not cleared on delete)',
@@ -184,7 +206,7 @@ const RANKS=[
 ];
 const RANK_TRIALS={
   iron_gate:{name:'THE IRON GATE',rank:'B-RANK',desc:'Only the disciplined pass through.',icon:'🚪',
-    tasks:[{id:'perfect_weeks_3',desc:'Complete 3 perfect weeks (all sets ✓, all days logged)',target:3}]},
+    tasks:[{id:'perfect_weeks_3',desc:'3 perfect weeks (4+ sessions, every filled set checked off ✓)',target:3}]},
   gauntlet:{name:'THE GAUNTLET',rank:'A-RANK',desc:'The System demands proof of relentless will.',icon:'⚔️',
     tasks:[{id:'streak_14',desc:'14-day consecutive logging streak',target:14},{id:'log_pr',desc:'Log a 225+ lb compound lift',target:225}]},
   awakening:{name:'THE AWAKENING',rank:'S-RANK',desc:'Final trial. Transcend your limits.',icon:'👁️',

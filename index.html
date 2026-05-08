@@ -252,6 +252,11 @@
 <div class="settings-section">PREFERENCES</div>
 <div class="m-field"><label>Goal</label><select id="setGoal"><option value="">Select...</option></select></div>
 <div class="m-field"><label>Experience</label><select id="setExperience"><option value="">Select...</option></select></div>
+<div class="m-field" style="margin-top:.5rem">
+  <label>Workouts per week (lift sessions only)</label>
+  <button type="button" class="edit-stats-btn" onclick="openTrainingGoalPrompt(false)" id="setTrainingGoalBtn" style="text-align:left;font-size:.8rem;padding:10px 12px">— /week (tap to set)</button>
+  <p style="font-size:.62rem;color:var(--dim);margin-top:4px;line-height:1.4">Used for the Iron Gate "perfect weeks" trial. Past weeks are locked under the goal that was active when scored.</p>
+</div>
 <div class="settings-section">BIO / ABOUT ME</div>
 <div class="m-field"><label>Bio (200 chars max — shows on your profile)</label><textarea id="setBio" class="auth-input" rows="3" maxlength="200" placeholder="Tell other hunters about yourself..." style="resize:vertical;min-height:60px"></textarea></div>
 <div class="settings-section">PRIVACY</div>
@@ -339,6 +344,9 @@
 
 <!-- RECENT FOODS MODAL -->
 <div class="modal-bg" id="recentFoodsModal"><div class="modal" style="max-height:80vh;overflow-y:auto"></div></div>
+
+<!-- EDIT LOGGED FOOD MODAL -->
+<div class="modal-bg" id="editFoodModal"><div class="modal"></div></div>
 
 <!-- RECENT SERVING MODAL -->
 <div class="modal-bg" id="recentServingModal"><div class="modal"></div></div>
@@ -441,11 +449,18 @@
 <div class="settings-section">PROGRAM</div>
 <div class="workout-settings-btns">
   <button class="ws-btn" onclick="closeWorkoutSettings();addWorkoutDay()">➕ Add New Workout Day</button>
+  <button class="ws-btn" onclick="closeWorkoutSettings();openReorderWorkouts()">↕️ Reorder Workouts</button>
   <button class="ws-btn" onclick="closeWorkoutSettings();logAllDays()">📋 Log All Filled Days</button>
   <button class="ws-btn" onclick="closeWorkoutSettings();changeProgram()">🔄 Change Class / Program</button>
 </div>
 <div class="m-actions" style="margin-top:.8rem"><button class="m-cancel" onclick="closeWorkoutSettings()">Close</button></div>
 </div></div>
+
+<!-- REORDER WORKOUTS MODAL -->
+<div class="modal-bg" id="reorderWorkoutsModal"><div class="modal" style="max-height:80vh;overflow-y:auto"></div></div>
+
+<!-- TRAINING GOAL MODAL -->
+<div class="modal-bg" id="trainingGoalModal"><div class="modal"></div></div>
 
 <!-- PROGRESS PHOTOS MODAL -->
 <div class="modal-bg" id="progressPhotosModal"><div class="modal" style="max-height:85vh;overflow-y:auto">

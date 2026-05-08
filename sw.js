@@ -2,7 +2,7 @@
 //  LEXENFITNESS — Service Worker
 //  IMPORTANT: Bump CACHE_NAME with every deploy
 // ═══════════════════════════════════════════
-const CACHE_NAME = 'lexen-v1.12.2';
+const CACHE_NAME = 'lexen-v1.14.0';
 const STATIC_ASSETS = [
   '/lexenfitness/',
   '/lexenfitness/index.html',

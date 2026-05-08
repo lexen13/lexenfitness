@@ -169,6 +169,7 @@ function renderNutritionPage(){
     if(items.length){
       h+=items.map((f,i)=>`<div class="food-item">
         <div class="food-item-info"><div class="food-item-name">${esc(f.name)}</div><div class="food-item-detail">${esc(f.serving||'')} · ${f.cal} cal · P:${f.protein}g C:${f.carbs}g F:${f.fat}g</div></div>
+        <button class="btn-edit-food" onclick="${isToday?`editLoggedFood(${m},${i})`:`editPastLoggedFood('${viewDate}',${m},${i})`}" title="Edit">✏️</button>
         ${isToday?`<button class="btn-del" onclick="removeMealItem(${m},${i})">✕</button>`:`<button class="btn-del" onclick="removePastMealItem('${viewDate}',${m},${i})">✕</button>`}
       </div>`).join('');
     }else{
@@ -485,6 +486,81 @@ async function removePastMealItem(date,meal,idx){
   setDayLog(date,dayLog);
   await saveUser({foodLog:userData.foodLog});
   renderNutritionPage();toast('Removed.');
+}
+
+// ── EDIT LOGGED FOOD ──
+let editLoggedFoodCtx=null; // { date, meal, idx }
+function editLoggedFood(meal,idx){
+  openEditLoggedFood(getTodayStr(),meal,idx);
+}
+function editPastLoggedFood(date,meal,idx){
+  openEditLoggedFood(date,meal,idx);
+}
+function openEditLoggedFood(date,meal,idx){
+  const dayLog=getDayLog(date);
+  const f=dayLog.meals&&dayLog.meals[meal]&&dayLog.meals[meal][idx];
+  if(!f){toast('Item not found');return}
+  editLoggedFoodCtx={date,meal,idx,original:{...f}};
+  const modal=$('editFoodModal');if(!modal)return;
+  let h=`<h2>✏️ Edit Logged Food</h2>
+    <p style="color:var(--muted);font-size:.7rem;margin-bottom:.7rem">${date===getTodayStr()?'Today':new Date(date+'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'})} · Meal ${meal}</p>
+    <div class="m-field"><label>Food name</label><input type="text" id="ef-name" value="${esc(f.name||'')}"></div>
+    <div class="m-field"><label>Serving / Weight</label><input type="text" id="ef-serving" value="${esc(f.serving||'')}" placeholder="e.g. 150g, 1 cup"></div>
+    <div class="m-row" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:.4rem">
+      <div class="m-field"><label>Calories</label><input type="number" id="ef-cal" value="${f.cal||0}" inputmode="numeric"></div>
+      <div class="m-field"><label>Protein (g)</label><input type="number" id="ef-protein" value="${f.protein||0}" inputmode="decimal" step="0.1"></div>
+    </div>
+    <div class="m-row" style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+      <div class="m-field"><label>Carbs (g)</label><input type="number" id="ef-carbs" value="${f.carbs||0}" inputmode="decimal" step="0.1"></div>
+      <div class="m-field"><label>Fat (g)</label><input type="number" id="ef-fat" value="${f.fat||0}" inputmode="decimal" step="0.1"></div>
+    </div>
+    <button class="m-save-btn" onclick="scaleEditedFood()" style="background:var(--surface2);color:var(--accent2);font-size:.74rem;padding:8px;margin-top:.5rem;width:100%">⚖️ Auto-scale macros from new weight</button>
+    <p style="color:var(--dim);font-size:.62rem;margin-top:4px;text-align:center">Tap if you only changed the weight — recalculates macros proportionally</p>
+    <div class="m-actions" style="margin-top:.7rem">
+      <button class="m-cancel" onclick="closeEditLoggedFood()">Cancel</button>
+      <button class="m-save-btn" onclick="saveEditedLoggedFood()">Save Changes</button>
+    </div>`;
+  modal.querySelector('.modal').innerHTML=h;
+  modal.classList.add('open');
+}
+function closeEditLoggedFood(){$('editFoodModal').classList.remove('open');editLoggedFoodCtx=null}
+function scaleEditedFood(){
+  if(!editLoggedFoodCtx)return;
+  const orig=editLoggedFoodCtx.original;
+  const oldServing=orig.serving||'';
+  const newServing=$('ef-serving').value.trim();
+  const oldGrams=parseFloat(oldServing);
+  const newGrams=parseFloat(newServing);
+  if(!oldGrams||!newGrams||oldGrams<=0){
+    toast('Need numeric weights in both servings (e.g. "100g" → "150g")');
+    return;
+  }
+  const ratio=newGrams/oldGrams;
+  $('ef-cal').value=Math.round((orig.cal||0)*ratio);
+  $('ef-protein').value=Math.round((orig.protein||0)*ratio*10)/10;
+  $('ef-carbs').value=Math.round((orig.carbs||0)*ratio*10)/10;
+  $('ef-fat').value=Math.round((orig.fat||0)*ratio*10)/10;
+  toast(`Scaled ${ratio.toFixed(2)}× from ${oldGrams}g to ${newGrams}g`);
+}
+async function saveEditedLoggedFood(){
+  if(!editLoggedFoodCtx)return;
+  const {date,meal,idx}=editLoggedFoodCtx;
+  const dayLog=getDayLog(date);
+  if(!dayLog.meals||!dayLog.meals[meal]||!dayLog.meals[meal][idx]){toast('Item gone');closeEditLoggedFood();return}
+  const updated={
+    name:$('ef-name').value.trim()||'Food',
+    serving:$('ef-serving').value.trim(),
+    cal:parseInt($('ef-cal').value)||0,
+    protein:parseFloat($('ef-protein').value)||0,
+    carbs:parseFloat($('ef-carbs').value)||0,
+    fat:parseFloat($('ef-fat').value)||0
+  };
+  dayLog.meals[meal][idx]={...dayLog.meals[meal][idx],...updated};
+  setDayLog(date,dayLog);
+  await saveUser({foodLog:userData.foodLog});
+  closeEditLoggedFood();
+  renderNutritionPage();
+  toast('✓ Updated');
 }
 
 function editPastMeal(date){

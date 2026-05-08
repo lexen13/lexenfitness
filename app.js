@@ -276,11 +276,52 @@ function initApp(){
     try{checkFriendRequests()}catch(e){console.warn(e)}
     try{updateTrainerTab()}catch(e){console.warn(e)}
     try{checkIncomingPokes()}catch(e){console.warn(e)}
+    try{lockLastWeekIfNeeded()}catch(e){console.warn(e)}
+    // First-time training goal prompt — for users who haven't set it yet
+    if(userData.weeklyTrainingGoal===undefined||userData.weeklyTrainingGoal===null){
+      setTimeout(()=>openTrainingGoalPrompt(true),1200);
+    }
   },100);
   setTimeout(()=>{try{checkEventMissionNotif()}catch(e){console.warn(e)}},5000);
   // Handle PWA shortcut ?page= param
   const params=new URLSearchParams(window.location.search);const startPage=params.get('page');
   switchPage(startPage&&['train','missions','nutrition','chat','ranks','profile'].includes(startPage)?startPage:'profile');
+}
+// First-time training goal prompt — locks all past weeks under the chosen goal
+function openTrainingGoalPrompt(firstTime){
+  const modal=$('trainingGoalModal');if(!modal)return;
+  const current=userData.weeklyTrainingGoal||4;
+  let h=firstTime
+    ?`<h2>⚔️ Quick Setup</h2><p style="color:var(--muted);font-size:.78rem;line-height:1.5;margin-bottom:.7rem">How many days per week do you intend to train? (Lift sessions only — active rest doesn't count.)</p><p style="color:var(--gold);font-size:.7rem;line-height:1.45;margin-bottom:.8rem">This sets your <strong>perfect-week</strong> target for the Iron Gate trial. Pick honestly — past weeks will be locked under this number, future weeks will count against whatever you have set at the time.</p>`
+    :`<h2>📅 Workouts per Week</h2><p style="color:var(--muted);font-size:.78rem;line-height:1.5;margin-bottom:.7rem">How many lift sessions do you intend to do per week?</p><p style="color:var(--gold);font-size:.7rem;line-height:1.45;margin-bottom:.8rem"><strong>⚠️ Past weeks won't change.</strong> They're already locked under your previous goal. This only affects the current and future weeks.</p>`;
+  h+=`<div class="tg-options">`;
+  for(let n=3;n<=7;n++){
+    h+=`<button class="tg-opt${n===current?' selected':''}" data-n="${n}" onclick="pickTrainingGoal(${n})">${n}<span class="tg-opt-sub">/week</span></button>`;
+  }
+  h+=`</div>`;
+  if(!firstTime){
+    h+=`<div class="m-actions" style="margin-top:.8rem"><button class="m-cancel" onclick="closeTrainingGoalModal()">Cancel</button></div>`;
+  }
+  modal.querySelector('.modal').innerHTML=h;
+  modal.classList.add('open');
+  modal.dataset.firstTime=firstTime?'1':'0';
+}
+function closeTrainingGoalModal(){$('trainingGoalModal').classList.remove('open')}
+async function pickTrainingGoal(n){
+  const modal=$('trainingGoalModal');
+  const firstTime=modal&&modal.dataset.firstTime==='1';
+  const old=userData.weeklyTrainingGoal;
+  userData.weeklyTrainingGoal=n;
+  await saveUser({weeklyTrainingGoal:n});
+  if(firstTime){
+    // First-time setup: lock all past weeks under this goal
+    const changes=await lockHistoricalWeeks(n);
+    if(changes>0)toast(`🔒 ${changes} past week${changes!==1?'s':''} locked. Future weeks count against ${n}/wk.`);
+    else toast(`Goal set: ${n} workouts/week`);
+  }else{
+    if(old!==n)toast(`Goal updated: ${n}/week. Past weeks unchanged.`);
+  }
+  closeTrainingGoalModal();
 }
 function updateTopBar(){
   const r=getEffectiveRank(),info=getXpBarInfo(),cap=getXpCap();
@@ -441,17 +482,157 @@ function getAvailableTrial(){for(let i=RANKS.length-1;i>=0;i--){if(userData.xp>=
 function renderTrialBanner(info){
   const t=info.trial;const progress=getTrialProgress(t);
   let h=`<div class="trial-banner"><div class="trial-header"><span class="trial-icon">${t.icon}</span><div><div class="trial-name">${t.name}</div><div class="trial-desc">${t.desc}</div></div></div>`;
-  t.tasks.forEach((task,i)=>{const p=progress[i];const pct=Math.min(100,(p/task.target)*100);
-    h+=`<div class="trial-task"><div class="trial-task-desc">${task.desc}</div><div class="trial-bar"><div class="trial-bar-fill" style="width:${pct}%"></div></div><div class="trial-task-num">${p} / ${task.target}</div></div>`});
+  t.tasks.forEach((task,i)=>{
+    const p=progress[i];const pct=Math.min(100,(p/task.target)*100);
+    const isPerfectWeeks=task.id==='perfect_weeks_3';
+    h+=`<div class="trial-task${isPerfectWeeks?' has-detail':''}"${isPerfectWeeks?' onclick="togglePerfectWeeksDetail(this)"':''}>
+      <div class="trial-task-desc">${task.desc}${isPerfectWeeks?' <span style="color:var(--accent);font-size:.62rem">▼ tap</span>':''}</div>
+      <div class="trial-bar"><div class="trial-bar-fill" style="width:${pct}%"></div></div>
+      <div class="trial-task-num">${p} / ${task.target}</div>
+      ${isPerfectWeeks?'<div class="trial-detail" style="display:none">'+renderPerfectWeeksBreakdown()+'</div>':''}
+    </div>`;
+  });
   const allDone=t.tasks.every((task,i)=>progress[i]>=task.target);
   if(allDone)h+=`<button class="trial-claim" onclick="claimTrial('${info.rank.trial}')">⚔️ CLAIM ${info.rank.name}</button>`;
   h+=`</div>`;return h;
+}
+function togglePerfectWeeksDetail(el){
+  const d=el.querySelector('.trial-detail');if(!d)return;
+  d.style.display=d.style.display==='none'?'':'none';
+}
+function renderPerfectWeeksBreakdown(){
+  const goal=getWeeklyGoal();
+  const locked=userData.perfectWeeksLocked||{};
+  const currentMon=getMonday(new Date()).toISOString().slice(0,10);
+  // Find weeks with any data
+  const weeks=new Set();
+  getLiftLogs().forEach(e=>{
+    const m=getMonday(new Date(e.date)).toISOString().slice(0,10);
+    weeks.add(m);
+  });
+  // Also include weeks that are locked (but might have no data)
+  Object.keys(locked).forEach(k=>weeks.add(k));
+  const sorted=Array.from(weeks).sort((a,b)=>b.localeCompare(a)).slice(0,8);
+  if(!sorted.length)return '<div style="color:var(--muted);font-size:.7rem;padding:8px 0">No lift sessions logged yet.</div>';
+  let h=`<div style="font-size:.62rem;color:var(--muted);margin-top:8px;padding-top:8px;border-top:1px dashed var(--border)">
+    <div style="margin-bottom:4px;font-weight:700;color:var(--text)">Last 8 weeks · target: ${goal}/wk</div>`;
+  sorted.forEach(wk=>{
+    const date=new Date(wk+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'});
+    const isCurrent=wk===currentMon;
+    const isLocked=!isCurrent&&locked[wk]!==undefined;
+    let status='';
+    if(isLocked){
+      // Show locked status only — what the goal was at lock time is gone, but the result is final
+      status=locked[wk]
+        ?'<span style="color:var(--green)">✓ PERFECT 🔒</span>'
+        :'<span style="color:var(--dim)">— locked</span>';
+    }else{
+      // Live evaluate against current goal
+      const r=evaluateWeek(wk,goal);
+      if(r.perfect)status='<span style="color:var(--green)">✓ PERFECT</span>';
+      else if(r.sessions===0)status='<span style="color:var(--dim)">no sessions</span>';
+      else if(r.sessions<r.target)status=`<span style="color:var(--gold)">${r.sessions}/${r.target} sessions</span>`;
+      else if(r.sessionsWithDone<r.sessions)status=`<span style="color:var(--red)">${r.sessions-r.sessionsWithDone} blank session${r.sessions-r.sessionsWithDone!==1?'s':''}</span>`;
+      else if(r.failedSets>0)status=`<span style="color:var(--red)">${r.failedSets} unchecked set${r.failedSets!==1?'s':''}</span>`;
+    }
+    const tag=isCurrent?' <span style="color:var(--accent2)">(current)</span>':'';
+    h+=`<div style="display:flex;justify-content:space-between;padding:2px 0">Week of ${date}${tag}: ${status}</div>`;
+  });
+  h+=`<div style="font-size:.58rem;color:var(--dim);margin-top:6px;font-style:italic">🔒 Past weeks are locked — they don't change when you adjust your goal</div>`;
+  h+='</div>';
+  return h;
 }
 function getTrialProgress(trial){return trial.tasks.map(task=>{switch(task.id){
   case 'perfect_weeks_3':return calcPerfectWeeks();case 'streak_14':case 'streak_30':return calcDayStreak();
   case 'log_pr':return Math.max(0,...getLiftLogs().flatMap(e=>Array.isArray(e.exercises)?e.exercises.flatMap(ex=>Array.isArray(ex.sets)?ex.sets.map(s=>parseInt(s.weight)||0):[]):[]));
   case 'missions_7':return userData.missionStreak;case 'workouts_50':return getLiftLogs().length;default:return 0}})}
-function calcPerfectWeeks(){const w={};getLiftLogs().forEach(e=>{if(!Array.isArray(e.exercises))return;const m=getMonday(new Date(e.date)).toISOString().slice(0,10);if(!w[m])w[m]={days:new Set(),allDone:true};w[m].days.add(e.dayId);if(!e.exercises.every(ex=>Array.isArray(ex.sets)&&ex.sets.every(s=>s.done)))w[m].allDone=false});return Object.values(w).filter(wk=>wk.days.size>=4&&wk.allDone).length}
+// ═══════════ PERFECT WEEKS ═══════════
+// "Perfect" = at least max(weeklyTrainingGoal, 3) sessions in the week,
+//   each session has at least one filled+done set, and every filled set is checked.
+// Past weeks are locked into userData.perfectWeeksLocked once scored.
+// Current week is calculated live.
+function getWeeklyGoal(){return Math.max(3,Math.min(7,userData.weeklyTrainingGoal||4))}
+function evaluateWeek(monIso,goal){
+  // Returns {sessions, filledSets, failedSets, sessionsWithDone, perfect, reason}
+  const monStart=new Date(monIso+'T00:00:00').getTime();
+  const monEnd=monStart+7*86400000;
+  let sessions=0,filledSets=0,failedSets=0,sessionsWithDone=0;
+  getLiftLogs().forEach(e=>{
+    const t=new Date(e.date).getTime();
+    if(t<monStart||t>=monEnd)return;
+    if(!Array.isArray(e.exercises))return;
+    sessions++;
+    let sessionHasDone=false;
+    e.exercises.forEach(ex=>{
+      if(!Array.isArray(ex.sets))return;
+      ex.sets.forEach(s=>{
+        const hasData=s&&((s.weight&&String(s.weight).trim())||(s.reps&&String(s.reps).trim()));
+        if(hasData){filledSets++;if(s.done)sessionHasDone=true;else failedSets++}
+      });
+    });
+    if(sessionHasDone)sessionsWithDone++;
+  });
+  const target=Math.max(3,Math.min(7,goal||4));
+  const enoughSessions=sessions>=target;
+  const everySessionHasDone=sessionsWithDone===sessions&&sessions>0;
+  const noFailedSets=failedSets===0;
+  const perfect=enoughSessions&&everySessionHasDone&&noFailedSets;
+  let reason='';
+  if(perfect)reason='perfect';
+  else if(sessions===0)reason='no sessions';
+  else if(!enoughSessions)reason=`${sessions}/${target} sessions`;
+  else if(!everySessionHasDone)reason=`${sessions-sessionsWithDone} blank session${sessions-sessionsWithDone!==1?'s':''}`;
+  else if(failedSets>0)reason=`${failedSets} unchecked set${failedSets!==1?'s':''}`;
+  return {sessions,filledSets,failedSets,sessionsWithDone,perfect,reason,target};
+}
+function calcPerfectWeeks(){
+  // Sum locked past weeks + live evaluate current week
+  const locked=userData.perfectWeeksLocked||{};
+  const currentMon=getMonday(new Date()).toISOString().slice(0,10);
+  let count=0;
+  Object.keys(locked).forEach(k=>{if(k!==currentMon&&locked[k])count++});
+  // Current week — live calc
+  const live=evaluateWeek(currentMon,getWeeklyGoal());
+  if(live.perfect)count++;
+  return count;
+}
+// Lock all past weeks in workoutLog using a given goal (used for first-time setup)
+async function lockHistoricalWeeks(goal){
+  const locked=userData.perfectWeeksLocked||{};
+  const currentMon=getMonday(new Date()).toISOString().slice(0,10);
+  // Find all distinct weeks we have data for
+  const weeks=new Set();
+  getLiftLogs().forEach(e=>{
+    const m=getMonday(new Date(e.date)).toISOString().slice(0,10);
+    if(m!==currentMon)weeks.add(m);
+  });
+  let changes=0;
+  weeks.forEach(monIso=>{
+    if(locked[monIso]!==undefined)return; // already locked, don't overwrite
+    const r=evaluateWeek(monIso,goal);
+    locked[monIso]=r.perfect;
+    changes++;
+  });
+  if(changes>0){
+    userData.perfectWeeksLocked=locked;
+    await saveUser({perfectWeeksLocked:locked});
+  }
+  return changes;
+}
+// Lock last week if Monday rolled over (call on app load)
+async function lockLastWeekIfNeeded(){
+  const now=new Date();
+  const currentMon=getMonday(now).toISOString().slice(0,10);
+  const lastMon=new Date(getMonday(now).getTime()-7*86400000).toISOString().slice(0,10);
+  const locked=userData.perfectWeeksLocked||{};
+  if(locked[lastMon]!==undefined)return; // already locked
+  // Only lock if there were any sessions in that week
+  const r=evaluateWeek(lastMon,getWeeklyGoal());
+  if(r.sessions===0)return; // no activity, don't bother locking
+  locked[lastMon]=r.perfect;
+  userData.perfectWeeksLocked=locked;
+  try{await saveUser({perfectWeeksLocked:locked})}catch(e){console.warn('lockLastWeek failed:',e)}
+}
 async function claimTrial(trialId){
   if(userData.trialsCompleted.includes(trialId))return;
   userData.trialsCompleted.push(trialId);
@@ -781,6 +962,51 @@ function openWorkoutSettings(){
   $('workoutSettingsModal').classList.add('open');
 }
 function closeWorkoutSettings(){$('workoutSettingsModal').classList.remove('open')}
+
+// ── Reorder Workouts ──
+function openReorderWorkouts(){
+  const modal=$('reorderWorkoutsModal');if(!modal)return;
+  renderReorderWorkouts();
+  modal.classList.add('open');
+}
+function renderReorderWorkouts(){
+  const modal=$('reorderWorkoutsModal');
+  const prog=userData.program||[];
+  let h=`<h2>↕️ Reorder Workouts</h2>
+    <p style="color:var(--muted);font-size:.74rem;line-height:1.4;margin-bottom:.7rem">Tap arrows to move workouts up or down in your program.</p>`;
+  if(!prog.length){
+    h+=`<p style="color:var(--muted);font-size:.78rem;padding:1rem 0">No workouts to reorder.</p>`;
+  }else{
+    h+=`<div class="reorder-list">`;
+    prog.forEach((d,i)=>{
+      const exCount=(d.exercises||[]).length;
+      h+=`<div class="reorder-item">
+        <div class="reorder-pos">${i+1}</div>
+        <div class="reorder-info">
+          <div class="reorder-name">${esc(d.title)}</div>
+          <div class="reorder-meta">${exCount} exercise${exCount!==1?'s':''}</div>
+        </div>
+        <div class="reorder-arrows">
+          <button class="reorder-arrow" onclick="moveWorkoutDay(${i},-1)" ${i===0?'disabled':''}>▲</button>
+          <button class="reorder-arrow" onclick="moveWorkoutDay(${i},1)" ${i===prog.length-1?'disabled':''}>▼</button>
+        </div>
+      </div>`;
+    });
+    h+=`</div>`;
+  }
+  h+=`<div class="m-actions" style="margin-top:.8rem"><button class="m-cancel" onclick="closeReorderWorkouts()">Done</button></div>`;
+  modal.querySelector('.modal').innerHTML=h;
+}
+function closeReorderWorkouts(){$('reorderWorkoutsModal').classList.remove('open');buildWorkout()}
+async function moveWorkoutDay(idx,delta){
+  const prog=userData.program||[];
+  const newIdx=idx+delta;
+  if(newIdx<0||newIdx>=prog.length)return;
+  const item=prog.splice(idx,1)[0];
+  prog.splice(newIdx,0,item);
+  await saveUser({program:prog});
+  renderReorderWorkouts();
+}
 async function renameWorkoutDay(){
   const prog=userData.program||[];
   const day=prog.find(d=>d.id===currentDay);if(!day)return;
@@ -801,8 +1027,8 @@ async function editDayNotes(){
 function switchDay(id){currentDay=id;document.querySelectorAll('.dtab').forEach(t=>t.classList.toggle('active',t.dataset.d===id));renderDay();updateLogBtn()}
 function renderDay(){const prog=userData.program||[],day=prog.find(d=>d.id===currentDay);if(!day)return;const di=prog.indexOf(day);let h='';
   if(day.subtitle)h+=`<div class="day-subtitle">${esc(day.subtitle)}</div>`;
-  // Start Session button (prominent, at top)
-  h+=`<button class="start-session-btn" onclick="startSession()">▶ START SESSION · ${esc(day.title)}</button>`;
+  // Start Session button (prominent, at top) — hidden during active session
+  if(!sessionActive)h+=`<button class="start-session-btn" onclick="startSession()">▶ START SESSION · ${esc(day.title)}</button>`;
   // Day notes display at top (if set)
   if(day.notes)h+=`<div class="day-notes day-notes-top"><strong>📝 NOTES</strong><br>${esc(day.notes)}</div>`;
   day.exercises.forEach((ex,ei)=>{h+=`<div class="exercise"><div class="ex-header"><span class="ex-num">${ei+1}</span><span class="ex-name">${ex.name}</span><button class="ex-edit" onclick="openEdit(${di},${ei})">✏️</button></div>`;
@@ -824,6 +1050,9 @@ function startSession(){
   if(!day.exercises||!day.exercises.length){toast('No exercises in this day yet');return}
   if(!confirm(`▶ Start session for "${day.title}"?\n\nThe timer will start now. You can pause, but the duration will be logged.`))return;
   sessionActive=true;sessionStartMs=Date.now();sessionPausedMs=0;sessionPauseStartMs=null;sessionDayId=day.id;
+  // Re-render day view to hide the Start Session button (preserves any typed inputs via savedInputs)
+  captureInputs();
+  renderDay();
   // Toggle UI: show session overlays, hide normal action row, show finish btn
   const ov=$('sessionOverlay');if(ov)ov.style.display='';
   const wa=$('workoutActions');if(wa)wa.style.display='none';
@@ -1221,6 +1450,12 @@ function openSettings(){
   $('setBench').value=prs.bench||'';$('setSquat').value=prs.squat||'';$('setDeadlift').value=prs.deadlift||'';$('setOhp').value=prs.ohp||'';
   $('setGoal').value=userData.goal||'';$('setExperience').value=userData.experience||'';
   $('setHideName').checked=!!priv.hideName;$('setHideStats').checked=!!priv.hideStats;
+  // Training goal button label
+  const tgBtn=$('setTrainingGoalBtn');
+  if(tgBtn){
+    const g=userData.weeklyTrainingGoal;
+    tgBtn.textContent=g?`📅 ${g} workouts/week (tap to change)`:'— /week (tap to set)';
+  }
   // Notification prefs (default all to true)
   const np=userData.notifPrefs||{};
   $('setNotifMessages').checked=np.messages!==false;
