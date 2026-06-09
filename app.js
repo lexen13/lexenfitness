@@ -276,7 +276,7 @@ function initApp(){
     try{checkFriendRequests()}catch(e){console.warn(e)}
     try{updateTrainerTab()}catch(e){console.warn(e)}
     try{checkIncomingPokes()}catch(e){console.warn(e)}
-    try{lockLastWeekIfNeeded()}catch(e){console.warn(e)}
+    migratePerfectWeekLocks().then(()=>lockLastWeekIfNeeded()).catch(e=>console.warn(e));
     // First-time training goal prompt — for users who haven't set it yet
     if(userData.weeklyTrainingGoal===undefined||userData.weeklyTrainingGoal===null){
       setTimeout(()=>openTrainingGoalPrompt(true),1200);
@@ -292,7 +292,7 @@ function openTrainingGoalPrompt(firstTime){
   const modal=$('trainingGoalModal');if(!modal)return;
   const current=userData.weeklyTrainingGoal||4;
   let h=firstTime
-    ?`<h2>⚔️ Quick Setup</h2><p style="color:var(--muted);font-size:.78rem;line-height:1.5;margin-bottom:.7rem">How many days per week do you intend to train? (Lift sessions only — active rest doesn't count.)</p><p style="color:var(--gold);font-size:.7rem;line-height:1.45;margin-bottom:.8rem">This sets your <strong>perfect-week</strong> target for the Iron Gate trial. Pick honestly — past weeks will be locked under this number, future weeks will count against whatever you have set at the time.</p>`
+    ?`<h2>⚔️ Quick Setup</h2><p style="color:var(--muted);font-size:.78rem;line-height:1.5;margin-bottom:.7rem">How many days per week do you intend to train? Lifts, cardio, and active rest all count — but at least 3 days must be lifts.</p><p style="color:var(--gold);font-size:.7rem;line-height:1.45;margin-bottom:.8rem">This sets your <strong>perfect-week</strong> target for the Iron Gate trial. Pick honestly — past weeks will be locked under this number, future weeks will count against whatever you have set at the time.</p>`
     :`<h2>📅 Workouts per Week</h2><p style="color:var(--muted);font-size:.78rem;line-height:1.5;margin-bottom:.7rem">How many lift sessions do you intend to do per week?</p><p style="color:var(--gold);font-size:.7rem;line-height:1.45;margin-bottom:.8rem"><strong>⚠️ Past weeks won't change.</strong> They're already locked under your previous goal. This only affects the current and future weeks.</p>`;
   h+=`<div class="tg-options">`;
   for(let n=3;n<=7;n++){
@@ -390,18 +390,9 @@ function addXP(amount){
   const cap=getXpCap();
   const {mult}=getXpMultiplier();
   const boosted=Math.round(amount*mult*cap.softCap);
-  const before=userData.xp;
-  userData.xp=userData.xp+boosted;
-  const gained=userData.xp-before;
-  if(cap.softCap<1&&amount>0){
-    const trialName=(RANK_TRIALS[cap.trialName]||{}).name||'the next trial';
-    xpCappedMsg=`⚠️ SOFT-CAPPED at 25% — Complete ${trialName} for full XP + bonus`;
-  }else{
-    xpCappedMsg='';
-  }
-  return gained;
+  userData.xp+=boosted;
+  return boosted;
 }
-let xpCappedMsg='';
 function switchPage(p){currentPage=p;document.querySelectorAll('.nav-item').forEach(n=>n.classList.toggle('active',n.dataset.page===p));document.querySelectorAll('.page').forEach(pg=>pg.classList.remove('active'));$('page-'+p).classList.add('active');
   if(p==='train')buildWorkout();if(p==='profile'){updateTrainerTab();renderProfile();renderFriendsPage()}if(p==='missions'){renderMissions();renderAchievements()}
   if(p==='nutrition')renderNutritionPage();if(p==='ranks')renderLeaderboard();if(p==='chat')renderChatPage()}
@@ -522,18 +513,16 @@ function renderPerfectWeeksBreakdown(){
     const isLocked=!isCurrent&&locked[wk]!==undefined;
     let status='';
     if(isLocked){
-      // Show locked status only — what the goal was at lock time is gone, but the result is final
       status=locked[wk]
         ?'<span style="color:var(--green)">✓ PERFECT 🔒</span>'
         :'<span style="color:var(--dim)">— locked</span>';
     }else{
-      // Live evaluate against current goal
       const r=evaluateWeek(wk,goal);
       if(r.perfect)status='<span style="color:var(--green)">✓ PERFECT</span>';
-      else if(r.sessions===0)status='<span style="color:var(--dim)">no sessions</span>';
-      else if(r.sessions<r.target)status=`<span style="color:var(--gold)">${r.sessions}/${r.target} sessions</span>`;
-      else if(r.sessionsWithDone<r.sessions)status=`<span style="color:var(--red)">${r.sessions-r.sessionsWithDone} blank session${r.sessions-r.sessionsWithDone!==1?'s':''}</span>`;
-      else if(r.failedSets>0)status=`<span style="color:var(--red)">${r.failedSets} unchecked set${r.failedSets!==1?'s':''}</span>`;
+      else{
+        const color=r.sessions===0?'var(--dim)':r.sessions<r.target?'var(--gold)':'var(--red)';
+        status=`<span style="color:${color}">${r.reason}</span>`;
+      }
     }
     const tag=isCurrent?' <span style="color:var(--accent2)">(current)</span>':'';
     h+=`<div style="display:flex;justify-content:space-between;padding:2px 0">Week of ${date}${tag}: ${status}</div>`;
@@ -553,37 +542,40 @@ function getTrialProgress(trial){return trial.tasks.map(task=>{switch(task.id){
 // Current week is calculated live.
 function getWeeklyGoal(){return Math.max(3,Math.min(7,userData.weeklyTrainingGoal||4))}
 function evaluateWeek(monIso,goal){
-  // Returns {sessions, filledSets, failedSets, sessionsWithDone, perfect, reason}
+  // A session = lift, cardio activity, or ACTIVE rest (same definition as the weekly streak).
+  // Guard: at least 3 of the sessions must be actual lifts, so rest/cardio can't carry a whole week.
+  // Set-quality rules apply to lifts only: every filled set checked, every lift has ≥1 done set.
   const monStart=new Date(monIso+'T00:00:00').getTime();
   const monEnd=monStart+7*86400000;
-  let sessions=0,filledSets=0,failedSets=0,sessionsWithDone=0;
-  getLiftLogs().forEach(e=>{
+  let lifts=0,otherSessions=0,failedSets=0,liftsWithDone=0;
+  workoutLog.forEach(e=>{
     const t=new Date(e.date).getTime();
     if(t<monStart||t>=monEnd)return;
+    if(e.isActivity||(e.isRest&&e.restType==='active')){otherSessions++;return}
+    if(e.isRest)return; // full rest never counts as a session
     if(!Array.isArray(e.exercises))return;
-    sessions++;
-    let sessionHasDone=false;
+    lifts++;
+    let liftHasDone=false;
     e.exercises.forEach(ex=>{
       if(!Array.isArray(ex.sets))return;
       ex.sets.forEach(s=>{
         const hasData=s&&((s.weight&&String(s.weight).trim())||(s.reps&&String(s.reps).trim()));
-        if(hasData){filledSets++;if(s.done)sessionHasDone=true;else failedSets++}
+        if(hasData){if(s.done)liftHasDone=true;else failedSets++}
       });
     });
-    if(sessionHasDone)sessionsWithDone++;
+    if(liftHasDone)liftsWithDone++;
   });
+  const sessions=lifts+otherSessions;
   const target=Math.max(3,Math.min(7,goal||4));
-  const enoughSessions=sessions>=target;
-  const everySessionHasDone=sessionsWithDone===sessions&&sessions>0;
-  const noFailedSets=failedSets===0;
-  const perfect=enoughSessions&&everySessionHasDone&&noFailedSets;
+  const perfect=sessions>=target&&lifts>=Math.min(3,target)&&liftsWithDone===lifts&&lifts>0&&failedSets===0;
   let reason='';
   if(perfect)reason='perfect';
   else if(sessions===0)reason='no sessions';
-  else if(!enoughSessions)reason=`${sessions}/${target} sessions`;
-  else if(!everySessionHasDone)reason=`${sessions-sessionsWithDone} blank session${sessions-sessionsWithDone!==1?'s':''}`;
-  else if(failedSets>0)reason=`${failedSets} unchecked set${failedSets!==1?'s':''}`;
-  return {sessions,filledSets,failedSets,sessionsWithDone,perfect,reason,target};
+  else if(sessions<target)reason=`${sessions}/${target} sessions`;
+  else if(lifts<Math.min(3,target))reason=`only ${lifts} lift${lifts!==1?'s':''} (need 3)`;
+  else if(liftsWithDone<lifts)reason=`${lifts-liftsWithDone} blank session${lifts-liftsWithDone!==1?'s':''}`;
+  else reason=`${failedSets} unchecked set${failedSets!==1?'s':''}`;
+  return {sessions,lifts,failedSets,sessionsWithDone:liftsWithDone,perfect,reason,target};
 }
 function calcPerfectWeeks(){
   // Sum locked past weeks + live evaluate current week
@@ -632,6 +624,22 @@ async function lockLastWeekIfNeeded(){
   locked[lastMon]=r.perfect;
   userData.perfectWeeksLocked=locked;
   try{await saveUser({perfectWeeksLocked:locked})}catch(e){console.warn('lockLastWeek failed:',e)}
+}
+// One-time migration (v1.14.1): weeks locked before the active-rest fix were scored
+// without counting cardio/active-rest sessions. Re-check and upgrade false→true only.
+async function migratePerfectWeekLocks(){
+  if(userData.pwLockVersion===2)return;
+  const locked=userData.perfectWeeksLocked;
+  if(locked&&Object.keys(locked).length){
+    const goal=getWeeklyGoal();
+    let upgraded=0;
+    Object.keys(locked).forEach(wk=>{
+      if(locked[wk]===false&&evaluateWeek(wk,goal).perfect){locked[wk]=true;upgraded++}
+    });
+    if(upgraded>0)toast(`🔓 ${upgraded} past week${upgraded!==1?'s':''} upgraded to PERFECT (rest-day fix)`);
+  }
+  userData.pwLockVersion=2;
+  try{await saveUser({perfectWeeksLocked:locked||{},pwLockVersion:2})}catch(e){console.warn('pw migration failed:',e)}
 }
 async function claimTrial(trialId){
   if(userData.trialsCompleted.includes(trialId))return;
@@ -1327,7 +1335,6 @@ function calcWeeklyStreak(){
   }
   return streak;
 }
-function calcStreak(){return calcWeeklyStreak()}
 function calcFullWeeks(){const w={};getLiftLogs().forEach(e=>{const m=getMonday(new Date(e.date)).toISOString().slice(0,10);if(!w[m])w[m]=new Set();w[m].add(e.dayId)});return Object.values(w).filter(s=>s.size>=4).length}
 
 // ═══════════ ACHIEVEMENTS ═══════════
@@ -1956,29 +1963,14 @@ function renderLog(){const c=$('logContent');if(!workoutLog.length){c.innerHTML=
 function setFilter(f){logFilter=f;renderLog()}
 function toggleWk(el){const b=el.nextElementSibling;if(b.style.maxHeight&&b.style.maxHeight!=='0px'){b.style.maxHeight='0px';b.style.overflow='hidden'}else{b.style.maxHeight=b.scrollHeight+'px';b.style.overflow='visible'}}
 async function delLog(id){
+  if(!id||id==='undefined'){toast('Can\'t delete this entry — refresh the app and try again');return}
   if(!confirm('Delete?'))return;
-  // Find the entry first so we know which day to clean
-  const entry=workoutLog.find(e=>e._id===id);
-  await db.collection('users').doc(U.uid).collection('log').doc(id).delete();
-  workoutLog=workoutLog.filter(e=>e._id!==id);
-  // Clean any leftover savedInputs for this day (defensive)
-  if(entry&&entry.dayId&&!entry.isRest&&!entry.isActivity){
-    const day=(userData.program||[]).find(d=>d.id===entry.dayId);
-    if(day){
-      day.exercises.forEach((ex,ei)=>{
-        for(let s=0;s<(ex.sets||0);s++){
-          delete savedInputs[entry.dayId+'_e'+ei+'_s'+s+'_w'];
-          delete savedInputs[entry.dayId+'_e'+ei+'_s'+s+'_r'];
-          delete savedInputs[entry.dayId+'_e'+ei+'_s'+s+'_c'];
-        }
-      });
-      try{await db.collection('users').doc(U.uid).collection('meta').doc('inputs').set({data:savedInputs})}catch(e){console.warn(e)}
-      // If user is currently viewing this day, refresh the inputs
-      if(currentDay===entry.dayId&&workoutView==='day')renderDay();
-    }
-  }
-  renderLog();
-  toast('Deleted.');
+  try{
+    await db.collection('users').doc(U.uid).collection('log').doc(id).delete();
+    workoutLog=workoutLog.filter(e=>e._id!==id);
+    renderLog();
+    toast('Deleted.');
+  }catch(e){console.error(e);toast('Delete failed: '+e.message)}
 }
 function getMonday(d){const dt=new Date(d);const day=dt.getDay();dt.setDate(dt.getDate()-day+(day===0?-6:1));dt.setHours(0,0,0,0);return dt}
 function getWeekNum(mon){if(!workoutLog.length)return 1;const dates=workoutLog.map(e=>getMonday(new Date(e.date)).getTime());return Math.round((mon-new Date(Math.min(...dates)))/(7*864e5))+1}
@@ -2525,8 +2517,9 @@ async function saveActivityLog(){
     exercises:[{name,sets:1,reps:dur+'min',sets_data:[{reps:dur}]}]
   };
   if(isBackdated)entry.backdated=true;
+  const aref=await db.collection('users').doc(U.uid).collection('log').add(entry);
+  entry._id=aref.id;
   workoutLog.unshift(entry);
-  await db.collection('users').doc(U.uid).collection('log').add(entry);
   let xp=15;if(isBackdated)xp=0;
   const gained=addXP(xp);
   if(!isBackdated){
@@ -2585,8 +2578,9 @@ async function saveRestLog(){
     exercises:[]
   };
   if(isBackdated)entry.backdated=true;
+  const rref=await db.collection('users').doc(U.uid).collection('log').add(entry);
+  entry._id=rref.id;
   workoutLog.unshift(entry);
-  await db.collection('users').doc(U.uid).collection('log').add(entry);
   let xp=isActive?10:5;if(isBackdated)xp=0;
   const gained=addXP(xp);
   if(!isBackdated){

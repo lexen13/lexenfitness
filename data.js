@@ -1,9 +1,16 @@
 // ═══════════════════════════════════════════
 //  LEXENFITNESS — DATA v4 (Solo Leveling)
 // ═══════════════════════════════════════════
-const APP_VERSION='1.14.0';
+const APP_VERSION='1.14.1';
 const WELCOME_MESSAGE=`Welcome to Lexen Fitness! A Solo-Leveling inspired, gamified Fitness App to help friends and family stay motivated by giving fitness a game-like experience.\n\nThis app is developed by one person, and is very much still in the testing phase. Not everything will be perfect, but please bear with me. If you have any suggestions, feel free to pass them along as I continue to make this the best app that I can, before I actually have to start buying dev rights with Apple and Google.\n\nFeel free to share this with your own family and friends as we build a community that becomes healthier together!\n\n— Gavin (founder)`;
 const CHANGELOG=[
+  {version:'1.14.1',date:'Jun 2026',title:'Tracker Alignment & Delete Fixes',items:[
+    '🔧 Iron Gate perfect weeks now count cardio & active rest as sessions — same as the weekly streak (at least 3 days must still be lifts)',
+    '🔓 One-time fix: past weeks wrongly scored as failed (because rest days didn\'t count) are upgraded to PERFECT. Earned weeks are never downgraded',
+    '🔧 Fixed deleting cardio/rest entries logged in the same session — they were saved without an ID, so deletes silently failed or misbehaved',
+    '🔧 Deleting an old log entry no longer wipes the values you\'ve typed for today\'s workout',
+    '🧹 Internal cleanup: removed dead code paths from the XP and streak systems'
+  ]},
   {version:'1.14.0',date:'Apr 2026',title:'Personal Training Goals + Locked Past Weeks',items:[
     '🎯 NEW: Set your weekly training goal (3-7 lift sessions/week). Iron Gate "perfect weeks" now scales to YOUR commitment',
     '📅 First-time prompt: existing users will be asked their training goal on next app open',
@@ -206,7 +213,7 @@ const RANKS=[
 ];
 const RANK_TRIALS={
   iron_gate:{name:'THE IRON GATE',rank:'B-RANK',desc:'Only the disciplined pass through.',icon:'🚪',
-    tasks:[{id:'perfect_weeks_3',desc:'3 perfect weeks (4+ sessions, every filled set checked off ✓)',target:3}]},
+    tasks:[{id:'perfect_weeks_3',desc:'3 perfect weeks — hit your weekly goal (lifts, cardio & active rest count, min 3 lifts), every filled set checked ✓',target:3}]},
   gauntlet:{name:'THE GAUNTLET',rank:'A-RANK',desc:'The System demands proof of relentless will.',icon:'⚔️',
     tasks:[{id:'streak_14',desc:'14-day consecutive logging streak',target:14},{id:'log_pr',desc:'Log a 225+ lb compound lift',target:225}]},
   awakening:{name:'THE AWAKENING',rank:'S-RANK',desc:'Final trial. Transcend your limits.',icon:'👁️',
