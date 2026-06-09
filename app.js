@@ -195,12 +195,21 @@ function checkRankUp(){
     if(ri>prevRi){showRankUpSplash(newRank)}
   }
   prevRankName=newRank.name;
-  // Level-up detection
+  // Level-up detection → animated burst
   const lvl=getLevelInfo();
   if(prevLevelInfo&&(lvl.rank.name===prevLevelInfo.rank.name)&&lvl.level>prevLevelInfo.level){
-    toast(`⬆️ Level Up! Lv ${lvl.level}/${lvl.maxLevel}`);
+    showLevelUpBurst(lvl);
   }
   prevLevelInfo={rank:{name:lvl.rank.name},level:lvl.level};
+}
+function showLevelUpBurst(lvl){
+  let b=$('levelBurst');
+  if(!b){b=document.createElement('div');b.id='levelBurst';b.className='level-burst';document.body.appendChild(b)}
+  b.innerHTML=`<div class="lb-arrow">⬆</div><div class="lb-text">LEVEL UP</div><div class="lb-num">Lv ${lvl.level}<span class="lb-max">/${lvl.maxLevel}</span></div>`;
+  b.classList.remove('show');void b.offsetWidth; // restart animation
+  b.classList.add('show');
+  try{if(navigator.vibrate)navigator.vibrate(80)}catch(e){}
+  setTimeout(()=>b.classList.remove('show'),2200);
 }
 function showRankUpSplash(rank){
   const title=(rank.title&&rank.title[userData.class])||rank.name;
@@ -227,6 +236,13 @@ function showRankUpSplash(rank){
 // ═══════════ XP BAR (smooth multi-fill) ═══════════
 function getXpBarInfo(){
   const r=getEffectiveRank(),nr=getNextRank(userData.xp);
+  // Trial-gated: XP already crossed the next rank's threshold but the trial blocks it
+  const ri=RANKS.indexOf(r);
+  const gateRank=RANKS[ri+1];
+  if(gateRank&&!gateRank.auto&&gateRank.trial&&!userData.trialsCompleted.includes(gateRank.trial)&&userData.xp>=gateRank.min){
+    const t=RANK_TRIALS[gateRank.trial];
+    return {pct:100,label:`${userData.xp} XP`,sublabel:`⚔️ Pass ${t?t.name:'the trial'} to claim ${gateRank.name}`,color:r.color};
+  }
   if(!nr) return {pct:100,label:`${userData.xp} XP`,sublabel:'MAX RANK',color:r.color};
   const rangeXp=nr.min-r.min, progress=userData.xp-r.min;
   const pct=Math.min(100,(progress/rangeXp)*100);
@@ -277,15 +293,83 @@ function initApp(){
     try{updateTrainerTab()}catch(e){console.warn(e)}
     try{checkIncomingPokes()}catch(e){console.warn(e)}
     migratePerfectWeekLocks().then(()=>lockLastWeekIfNeeded()).catch(e=>console.warn(e));
+    try{grantFounderPass()}catch(e){console.warn(e)}
+    try{checkWeeklyRecap()}catch(e){console.warn(e)}
     // First-time training goal prompt — for users who haven't set it yet
     if(userData.weeklyTrainingGoal===undefined||userData.weeklyTrainingGoal===null){
       setTimeout(()=>openTrainingGoalPrompt(true),1200);
     }
   },100);
   setTimeout(()=>{try{checkEventMissionNotif()}catch(e){console.warn(e)}},5000);
+  // Persist active session whenever the app is backgrounded or closed
+  document.addEventListener('visibilitychange',()=>{if(document.hidden&&sessionActive)persistSession()});
+  window.addEventListener('pagehide',()=>{if(sessionActive)persistSession()});
   // Handle PWA shortcut ?page= param
   const params=new URLSearchParams(window.location.search);const startPage=params.get('page');
+  // Resume an interrupted session — overrides the start page
+  let resumed=false;
+  try{resumed=restoreSession()}catch(e){console.warn(e)}
+  if(resumed){switchPage('train');return}
   switchPage(startPage&&['train','missions','nutrition','chat','ranks','profile'].includes(startPage)?startPage:'profile');
+}
+// One-time Iron Gate pass for the founder account (skip, not pass — no bonus XP)
+async function grantFounderPass(){
+  if(userData.username!=='gyabinlee11')return;
+  if((userData.trialsCompleted||[]).includes('iron_gate'))return;
+  userData.trialsCompleted.push('iron_gate');
+  await saveUser({trialsCompleted:userData.trialsCompleted});
+  await saveLeaderboard();updateTopBar();checkRankUp();
+  toast('⚔️ The System has granted you passage through the Iron Gate.');
+}
+// ═══════════ WEEKLY RECAP ═══════════
+// Shown once per week, on first open of a new week — summarizes LAST week.
+async function checkWeeklyRecap(){
+  const currentMon=getMonday(new Date()).toISOString().slice(0,10);
+  const lastMon=new Date(getMonday(new Date()).getTime()-7*86400000).toISOString().slice(0,10);
+  // Snapshot XP at week start (for next week's recap)
+  if(!userData.xpWeekStart||userData.xpWeekStart.monday!==currentMon){
+    const prevSnap=userData.xpWeekStart;
+    userData.xpWeekStart={monday:currentMon,xp:userData.xp};
+    // Carry last week's snapshot forward for the recap calc
+    if(prevSnap&&prevSnap.monday===lastMon)userData.xpLastWeekStart=prevSnap;
+    try{await saveUser({xpWeekStart:userData.xpWeekStart,xpLastWeekStart:userData.xpLastWeekStart||null})}catch(e){}
+  }
+  if(userData.lastRecapWeek===currentMon)return; // already shown this week
+  const lastWeek=evaluateWeek(lastMon,getWeeklyGoal());
+  if(lastWeek.sessions===0)return; // nothing to recap, don't nag
+  const weekBefore=evaluateWeek(new Date(getMonday(new Date()).getTime()-14*86400000).toISOString().slice(0,10),getWeeklyGoal());
+  setTimeout(()=>showWeeklyRecap(lastMon,lastWeek,weekBefore),2500);
+  userData.lastRecapWeek=currentMon;
+  try{await saveUser({lastRecapWeek:currentMon})}catch(e){}
+}
+function showWeeklyRecap(lastMon,wk,prev){
+  const modal=$('weeklyRecapModal');if(!modal)return;
+  // Volume + minutes for last week
+  const monStart=new Date(lastMon+'T00:00:00').getTime(),monEnd=monStart+7*86400000;
+  let vol=0,mins=0;
+  workoutLog.forEach(e=>{const t=new Date(e.date).getTime();if(t<monStart||t>=monEnd)return;
+    if(e.durationSec)mins+=e.durationSec/60;
+    (e.exercises||[]).forEach(ex=>(ex.sets||[]).forEach(s=>{vol+=(parseFloat(s.weight)||0)*(parseFloat(s.reps)||0)}));
+  });
+  const lw=userData.xpLastWeekStart;
+  const xpGained=lw&&lw.monday===lastMon?Math.max(0,(userData.xpWeekStart?userData.xpWeekStart.xp:userData.xp)-lw.xp):null;
+  const delta=wk.sessions-prev.sessions;
+  const deltaTxt=prev.sessions===0?'':delta>0?`<span style="color:var(--green)">▲ ${delta} more than the week before</span>`:delta<0?`<span style="color:var(--gold)">▼ ${Math.abs(delta)} fewer than the week before</span>`:`<span style="color:var(--muted)">same as the week before</span>`;
+  const dateLabel=new Date(lastMon+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'});
+  let h=`<h2>📜 Your Week in Review</h2>
+    <p style="color:var(--muted);font-size:.7rem;margin-bottom:.7rem">Week of ${dateLabel} — it's in the books. Permanently.</p>
+    <div class="recap-hero ${wk.perfect?'perfect':''}">${wk.perfect?'⚔️ PERFECT WEEK':wk.sessions+' / '+wk.target+' SESSIONS'}</div>
+    <div class="recap-grid">
+      <div class="recap-stat"><div class="rv">${wk.sessions}</div><div class="rl">Sessions</div></div>
+      <div class="recap-stat"><div class="rv">${wk.lifts}</div><div class="rl">Lifts</div></div>
+      <div class="recap-stat"><div class="rv">${vol>=1000?(vol/1000).toFixed(1)+'k':Math.round(vol)}</div><div class="rl">lbs moved</div></div>
+      <div class="recap-stat"><div class="rv">${Math.round(mins)}</div><div class="rl">Minutes</div></div>
+    </div>
+    ${xpGained!==null?`<div class="recap-xp">+${xpGained} XP earned</div>`:''}
+    ${deltaTxt?`<div class="recap-delta">${deltaTxt}</div>`:''}
+    <div class="m-actions" style="margin-top:.8rem"><button class="m-save-btn" onclick="$('weeklyRecapModal').classList.remove('open')" style="width:100%">⚔️ NEW WEEK. LET'S GO.</button></div>`;
+  modal.querySelector('.modal').innerHTML=h;
+  modal.classList.add('open');
 }
 // First-time training goal prompt — locks all past weeks under the chosen goal
 function openTrainingGoalPrompt(firstTime){
@@ -326,18 +410,16 @@ async function pickTrainingGoal(n){
 function updateTopBar(){
   const r=getEffectiveRank(),info=getXpBarInfo(),cap=getXpCap();
   const softCapped=cap.softCap<1;
-  $('tbXp').textContent=softCapped?userData.xp+' XP ⚠':userData.xp+' XP';
-  $('tbXp').style.color=softCapped?'var(--gold)':'';
-  const rb=$('tbRank');rb.textContent=r.name;
-  // Level badge (NEW)
   const lvlInfo=getLevelInfo();
-  let lb=$('tbLevel');
-  if(!lb){lb=document.createElement('span');lb.id='tbLevel';lb.className='tb-level';const xpEl=$('tbXp');if(xpEl&&xpEl.parentNode)xpEl.parentNode.insertBefore(lb,xpEl.nextSibling)}
-  lb.textContent='Lv '+lvlInfo.level+'/'+lvlInfo.maxLevel;
+  // Merged pill: "Lv 12 · 4846 XP" (level + XP in one, less crowding)
+  $('tbXp').textContent='Lv '+lvlInfo.level+' · '+userData.xp+' XP'+(softCapped?' ⚠':'');
+  $('tbXp').style.color=softCapped?'var(--gold)':'';
+  const oldLb=$('tbLevel');if(oldLb)oldLb.remove(); // retire the separate badge
+  const rb=$('tbRank');rb.textContent=r.name;
   // XP Multiplier banner
   let mb=$('xpMultBanner');if(!mb){mb=document.createElement('div');mb.id='xpMultBanner';mb.className='xp-mult-banner';const tb=document.querySelector('.top-bar');if(tb)tb.after(mb)}
   const xm=getXpMultiplier();mb.style.display=xm.label?'block':'none';mb.textContent=xm.label||'';rb.style.color=r.color;rb.style.background=r.color+'22';rb.style.border='1px solid '+r.color+'44';
-  const bar=$('tbXpBar');if(bar){bar.style.width=info.pct+'%';bar.style.background=softCapped?'var(--gold)':`linear-gradient(90deg,${r.color},${r.color}cc)`}
+  const bar=$('tbXpBar');if(bar){bar.style.transition='width .5s ease';bar.style.width=info.pct+'%';bar.style.background=softCapped?'var(--gold)':`linear-gradient(90deg,${r.color},${r.color}cc)`}
 }
 function getEffectiveRank(){
   for(let i=RANKS.length-1;i>=0;i--){
@@ -422,7 +504,7 @@ function renderMissions(){
   const {mult,label:multLabel}=getXpMultiplier();
   let h=`<div class="page-title">DAILY MISSIONS</div><div class="page-sub">${completed.length}/${missions.length} complete · Streak: ${userData.missionStreak} days</div>`;
   if(multLabel)h+=`<div class="xp-mult-badge">${multLabel}</div>`;
-  if(softCapped){const trial=getAvailableTrial();h+=`<div class="gate-locked-banner">⚠️ SOFT-CAPPED · 25% XP<br><span style="font-size:.72rem;font-family:var(--font-body);letter-spacing:0">You're earning 25% XP. Complete ${trial?trial.trial.name:'the next trial'} below for full XP + bonus.</span></div>`}
+  if(softCapped){const trial=getAvailableTrial();h+=`<div class="trial-active-banner">⚔️ TRIAL ACTIVE · XP at 25% — break through ${trial?trial.trial.name:'the trial'} below for full XP + bonus</div>`}
   const trialInfo=getAvailableTrial();
   if(trialInfo)h+=renderTrialBanner(trialInfo);
   // ── Event Mission ──
@@ -430,14 +512,14 @@ function renderMissions(){
   if(evt){
     const evtDone=(userData.eventsCompleted||{})[today];
     if(evtDone)h+=`<div class="event-card done"><div class="event-label">⚡ EVENT</div><div class="mission-icon">${evt.icon}</div><div class="mission-info"><div class="mission-name">${evt.name}</div><div class="mission-desc">${evt.desc}</div></div><div class="mission-xp locked">DONE</div></div>`;
-    else h+=`<div class="event-card" onclick="completeEvent()"><div class="event-label">⚡ EVENT</div><div class="mission-icon">${evt.icon}</div><div class="mission-info"><div class="mission-name">${evt.name}</div><div class="mission-desc">${evt.desc}</div></div><div class="mission-xp">${softCapped?'25% XP':'+'+Math.round(evt.xp*mult)+' XP'}</div></div>`;
+    else h+=`<div class="event-card" onclick="completeEvent()"><div class="event-label">⚡ EVENT</div><div class="mission-icon">${evt.icon}</div><div class="mission-info"><div class="mission-name">${evt.name}</div><div class="mission-desc">${evt.desc}</div></div><div class="mission-xp">${'+'+Math.round(evt.xp*mult*(softCapped?0.25:1))+' XP'+(softCapped?' ⚠':'')}</div></div>`;
   }
   // ── Daily Missions ──
   h+=missions.map(m=>{const done=completed.includes(m.id);
     if(done)return`<div class="mission-card done"><div class="mission-check">✅</div><div class="mission-icon">${m.icon}</div><div class="mission-info"><div class="mission-name">${m.name}</div><div class="mission-desc">${m.desc}</div></div><div class="mission-xp locked">DONE</div></div>`;
-    return`<div class="mission-card" onclick="completeMission('${m.id}')"><div class="mission-check">⬜</div><div class="mission-icon">${m.icon}</div><div class="mission-info"><div class="mission-name">${m.name}</div><div class="mission-desc">${m.desc}</div></div><div class="mission-xp">${softCapped?'25% XP':'+'+Math.round(m.xp*mult)+' XP'}</div></div>`;
+    return`<div class="mission-card" onclick="completeMission('${m.id}')"><div class="mission-check">⬜</div><div class="mission-icon">${m.icon}</div><div class="mission-info"><div class="mission-name">${m.name}</div><div class="mission-desc">${m.desc}</div></div><div class="mission-xp">${'+'+Math.round(m.xp*mult*(softCapped?0.25:1))+' XP'+(softCapped?' ⚠':'')}</div></div>`;
   }).join('');
-  if(allDone)h+=`<div class="mission-bonus">🌟 ALL MISSIONS COMPLETE! ${softCapped?'(25% cap)':'+50 BONUS XP'} 🌟</div>`;
+  if(allDone)h+=`<div class="mission-bonus">🌟 ALL MISSIONS COMPLETE! +${Math.round(50*(softCapped?0.25:1))} BONUS XP 🌟</div>`;
   // ── Progression Track ──
   h+=renderProgressionTrack();
   $('missionsContent').innerHTML=h;
@@ -1058,21 +1140,60 @@ function startSession(){
   if(!day.exercises||!day.exercises.length){toast('No exercises in this day yet');return}
   if(!confirm(`▶ Start session for "${day.title}"?\n\nThe timer will start now. You can pause, but the duration will be logged.`))return;
   sessionActive=true;sessionStartMs=Date.now();sessionPausedMs=0;sessionPauseStartMs=null;sessionDayId=day.id;
-  // Re-render day view to hide the Start Session button (preserves any typed inputs via savedInputs)
+  enterSessionUI();
+  persistSession();
+}
+// Shared UI entry — used by startSession and session restore
+function enterSessionUI(){
   captureInputs();
   renderDay();
-  // Toggle UI: show session overlays, hide normal action row, show finish btn
   const ov=$('sessionOverlay');if(ov)ov.style.display='';
   const wa=$('workoutActions');if(wa)wa.style.display='none';
   const a1=$('altLogRow1');if(a1)a1.style.display='none';
   const a2=$('altLogRow2');if(a2)a2.style.display='none';
   const fb=$('sessionFinishBtn');if(fb)fb.style.display='';
-  // Add visual indicator to day content
   const dc=$('dayContent');if(dc)dc.classList.add('in-session');
+  clearInterval(sessionTimerHandle);
   sessionTimerHandle=setInterval(updateSessionClock,1000);
   updateSessionClock();
-  // Auto-attach rest-timer triggers to existing checkboxes
   attachSessionCheckboxHandlers();
+}
+// ── Session persistence (survives app close / page reload) ──
+const SESSION_LS_KEY='lexen_session';
+function persistSession(){
+  try{
+    if(!sessionActive){localStorage.removeItem(SESSION_LS_KEY);return}
+    captureInputs();
+    localStorage.setItem(SESSION_LS_KEY,JSON.stringify({
+      startMs:sessionStartMs,pausedMs:sessionPausedMs,pauseStartMs:sessionPauseStartMs,
+      dayId:sessionDayId,restSec:restDefaultSec,inputs:savedInputs,savedAt:Date.now()
+    }));
+  }catch(e){console.warn('persistSession:',e)}
+}
+function clearPersistedSession(){try{localStorage.removeItem(SESSION_LS_KEY)}catch(e){}}
+// Returns true if a session was restored (caller should navigate to Train)
+function restoreSession(){
+  try{
+    const raw=localStorage.getItem(SESSION_LS_KEY);
+    if(!raw)return false;
+    const s=JSON.parse(raw);
+    // Stale guard: sessions older than 12 hours are discarded
+    if(!s.startMs||Date.now()-s.startMs>12*3600000){clearPersistedSession();return false}
+    const day=(userData.program||[]).find(d=>d.id===s.dayId);
+    if(!day){clearPersistedSession();return false}
+    // Restore typed inputs first so renderDay re-fills them
+    if(s.inputs&&typeof s.inputs==='object')Object.assign(savedInputs,s.inputs);
+    sessionActive=true;sessionStartMs=s.startMs;sessionPausedMs=s.pausedMs||0;
+    sessionPauseStartMs=s.pauseStartMs||null;sessionDayId=s.dayId;restDefaultSec=s.restSec||90;
+    currentDay=s.dayId;workoutView='day';
+    // Rebuild day tabs + workout view, then layer session UI on top
+    renderWorkoutDay();
+    enterSessionUI();
+    if(sessionPauseStartMs)$('sessionPauseBtn').textContent='▶ Resume';
+    const elapsed=Math.floor((Date.now()-s.startMs-(s.pausedMs||0))/60000);
+    toast(`⚔️ Session resumed — ${elapsed} min on the clock`);
+    return true;
+  }catch(e){console.warn('restoreSession:',e);clearPersistedSession();return false}
 }
 function attachSessionCheckboxHandlers(){
   document.querySelectorAll('#dayContent input[type=checkbox]').forEach(cb=>{
@@ -1094,6 +1215,7 @@ function pauseSession(){
     sessionPauseStartMs=Date.now();
     $('sessionPauseBtn').textContent='▶ Resume';
   }
+  persistSession();
 }
 function updateSessionClock(){
   if(!sessionActive)return;
@@ -1140,7 +1262,7 @@ async function finishSession(){
   clearInterval(sessionTimerHandle);sessionTimerHandle=null;
   // Save the session log — reads from the SAME #dayContent inputs
   await logWorkoutWithSession(sessionDayId,durationSec);
-  sessionActive=false;sessionStartMs=null;sessionPausedMs=0;sessionPauseStartMs=null;sessionDayId=null;restEndMs=null;
+  sessionActive=false;clearPersistedSession();sessionStartMs=null;sessionPausedMs=0;sessionPauseStartMs=null;sessionDayId=null;restEndMs=null;
   exitSessionUI();
   buildWorkout();
 }
@@ -1148,7 +1270,7 @@ function cancelSession(){
   if(!sessionActive)return;
   if(!confirm('Cancel session without logging? Your inputs will be kept but the timer discarded.'))return;
   clearInterval(sessionTimerHandle);sessionTimerHandle=null;
-  sessionActive=false;sessionStartMs=null;sessionPausedMs=0;sessionPauseStartMs=null;sessionDayId=null;restEndMs=null;
+  sessionActive=false;clearPersistedSession();sessionStartMs=null;sessionPausedMs=0;sessionPauseStartMs=null;sessionDayId=null;restEndMs=null;
   exitSessionUI();
   toast('Session cancelled');
 }
@@ -1190,6 +1312,7 @@ async function logWorkoutWithOptions(opts){
   day.exercises.forEach((ex,ei)=>{const sets=[];for(let s=0;s<ex.sets;s++){const wEl=$(day.id+'_e'+ei+'_s'+s+'_w'),rEl=$(day.id+'_e'+ei+'_s'+s+'_r'),cEl=$(day.id+'_e'+ei+'_s'+s+'_c');const w=wEl?wEl.value:'',r=rEl?rEl.value:'',d=cEl?cEl.checked:false;if(w||r)hasData=true;if(!d)allDone=false;if(parseInt(w)>maxW)maxW=parseInt(w);sets.push({weight:w,reps:r,done:d,isTime:!!ex.isTime})}entry.exercises.push({name:ex.name,sets})});
   if(!hasData){toast('Fill in sets!');logLock=false;return}
   const ref=await db.collection('users').doc(U.uid).collection('log').add(entry);entry._id=ref.id;workoutLog.unshift(entry);
+  if(isBackdated)unlockAch('the_historian');
   let xp=50;if(allDone)xp+=50;
   if(isBackdated)xp=0;
   const hr=new Date(dateISO).getHours();
@@ -1206,6 +1329,12 @@ async function logWorkoutWithOptions(opts){
     if(wkStreak>=2)unlockAch('wk_streak_2');if(wkStreak>=4)unlockAch('wk_streak_4');if(wkStreak>=8)unlockAch('wk_streak_8');
     if(wkStreak>=12)unlockAch('wk_streak_12');if(wkStreak>=26)unlockAch('wk_streak_26');if(wkStreak>=52)unlockAch('wk_streak_52');
     const hr2=new Date().getHours();if(hr2>=0&&hr2<4)unlockAch('midnight');
+    if(hr2===3)unlockAch('here_dragons');
+    const nd=new Date();
+    if(nd.getMonth()===0&&nd.getDate()===1)unlockAch('new_year_log');
+    if(nd.getMonth()===1&&nd.getDate()===29)unlockAch('leap_of_faith');
+    if(nd.getDay()===5&&nd.getHours()>=20)unlockAch('friday_lights');
+    if(day.exercises.some(ex=>/calf|calves/i.test(ex.name||'')))unlockAch('achilles_heel');
     const fw=calcFullWeeks();if(fw>=1)unlockAch('full_week');if(fw>=5)unlockAch('full_week_5');if(fw>=10)unlockAch('full_week_10');if(fw>=20)unlockAch('full_week_20');
     const dow=new Date().getDay();if(dow===0||dow===6){const thisWeekLogs=workoutLog.filter(e=>{const d=new Date(e.date);const wk=getMonday(d).toISOString().slice(0,10);return wk===getMonday(new Date()).toISOString().slice(0,10)});const wDays=new Set(thisWeekLogs.map(e=>new Date(e.date).getDay()));if(wDays.has(0)&&wDays.has(6))unlockAch('weekend_warrior')}
     if(getLiftLogs().length>=2){const prevMax=Math.max(0,...getLiftLogs().slice(1).flatMap(e=>Array.isArray(e.exercises)?e.exercises.flatMap(ex=>Array.isArray(ex.sets)?ex.sets.map(s=>parseInt(s.weight)||0):[]):[]));if(maxW>prevMax&&prevMax>0)unlockAch('pr_breaker')}
@@ -1338,7 +1467,32 @@ function calcWeeklyStreak(){
 function calcFullWeeks(){const w={};getLiftLogs().forEach(e=>{const m=getMonday(new Date(e.date)).toISOString().slice(0,10);if(!w[m])w[m]=new Set();w[m].add(e.dayId)});return Object.values(w).filter(s=>s.size>=4).length}
 
 // ═══════════ ACHIEVEMENTS ═══════════
-async function unlockAch(id){if(userData.achievements.includes(id))return;userData.achievements.push(id);const a=ACHIEVEMENTS.find(x=>x.id===id);if(a&&a.xp>0)addXP(a.xp);await saveUser({achievements:userData.achievements,xp:userData.xp});await saveLeaderboard();updateTopBar()}
+// Celebration queue — achievement unlocks slide in one at a time instead of unlocking silently
+let achQueue=[],achShowing=false;
+function celebrateAch(a){
+  if(!a)return;
+  achQueue.push(a);
+  if(!achShowing)showNextAch();
+}
+function showNextAch(){
+  const a=achQueue.shift();
+  if(!a){achShowing=false;return}
+  achShowing=true;
+  let card=$('achCelebration');
+  if(!card){card=document.createElement('div');card.id='achCelebration';card.className='ach-celebration';document.body.appendChild(card)}
+  card.innerHTML=`<div class="ach-cel-icon">${a.icon}</div><div class="ach-cel-info"><div class="ach-cel-label">⚔️ ACHIEVEMENT UNLOCKED</div><div class="ach-cel-name">${esc(a.name)}</div>${a.xp>0?`<div class="ach-cel-xp">+${a.xp} XP</div>`:''}</div>`;
+  card.classList.add('show');
+  try{if(navigator.vibrate)navigator.vibrate([100,50,100])}catch(e){}
+  setTimeout(()=>{card.classList.remove('show');setTimeout(showNextAch,350)},3200);
+}
+async function unlockAch(id){
+  if(userData.achievements.includes(id))return;
+  userData.achievements.push(id);
+  const a=ACHIEVEMENTS.find(x=>x.id===id);
+  if(a&&a.xp>0)addXP(a.xp);
+  celebrateAch(a);
+  await saveUser({achievements:userData.achievements,xp:userData.xp});await saveLeaderboard();updateTopBar();
+}
 // Silent version — just mutates userData in memory, caller is responsible for saving later.
 // Used by checkPassiveAchievements to batch many unlocks into ONE Firestore write.
 function unlockAchSilent(id){if(userData.achievements.includes(id))return false;userData.achievements.push(id);const a=ACHIEVEMENTS.find(x=>x.id===id);if(a&&a.xp>0)addXP(a.xp);return true}
@@ -1413,7 +1567,7 @@ function renderProfile(){
   // Stats
   h+=`<div class="stats-grid"><div class="stat-card"><div class="sv">${st.height||'—'}</div><div class="sl">Height</div></div><div class="stat-card"><div class="sv">${st.weight?st.weight+' lbs':'—'}</div><div class="sl">Weight</div></div><div class="stat-card"><div class="sv">${st.age||'—'}</div><div class="sl">Age</div></div></div>`;
   h+=`<div class="stats-grid"><div class="stat-card"><div class="sv">${prs.bench||'—'}</div><div class="sl">Bench PR</div></div><div class="stat-card"><div class="sv">${prs.squat||'—'}</div><div class="sl">Squat PR</div></div><div class="stat-card"><div class="sv">${prs.deadlift||'—'}</div><div class="sl">Deadlift PR</div></div></div>`;
-  h+=`<div class="stats-grid"><div class="stat-card"><div class="sv">${getLiftLogs().length}</div><div class="sl">Workouts</div></div><div class="stat-card"><div class="sv">${calcWeeklyStreak()}w</div><div class="sl">Wk Streak</div></div><div class="stat-card"><div class="sv">${(userData.achievements||[]).length}</div><div class="sl">Achieve.</div></div></div>`;
+  h+=`<div class="stats-grid"><div class="stat-card"><div class="sv">${getLiftLogs().length}</div><div class="sl">Workouts</div></div><div class="stat-card"><div class="sv">${calcWeeklyStreak()}w</div><div class="sl">Wk Streak</div></div><div class="stat-card"><div class="sv">${(userData.achievements||[]).length}</div><div class="sl">Badges</div></div></div>`;
   const actCount=getActivityLogs().length;const restCount=getRestLogs().length;
   if(actCount||restCount)h+=`<div class="stats-grid"><div class="stat-card"><div class="sv">${actCount}</div><div class="sl">Activities</div></div><div class="stat-card"><div class="sv">${restCount}</div><div class="sl">Rest Days</div></div><div class="stat-card"><div class="sv">${(userData.weighIns||[]).length}</div><div class="sl">Weigh-ins</div></div></div>`;
   // Streak warning
@@ -1678,7 +1832,7 @@ async function loadFriendsList(){
     try{
       const d=await db.collection('users').doc(fid).get();
       if(!d.exists){h+=`<div class="friend-row" style="opacity:.4"><div class="lb-pic">👤</div><div class="lb-info"><div class="lb-name">Deleted user</div></div></div>`;continue}
-      const f=d.data();const r=getRank(f.xp||0);
+      const f=d.data();const r=(f.rank&&RANKS.find(x=>x.name===f.rank))||getRank(f.xp||0);
       let streak=myPokeStreaks[fid]||0;
       const lastMutualDay=myLastMutual[fid];
       // Display-side decay: if last mutual was 2+ days ago, show 0
@@ -1780,7 +1934,8 @@ async function sendPoke(fid,fusername){
     const myNewStreaks={...myStreaks,[fid]:newStreak};
     const myNewLastMutual={...myLastMutual};
     if(newLastMutualDay)myNewLastMutual[fid]=newLastMutualDay; else delete myNewLastMutual[fid];
-    await saveUser({pokedToday,pokeStreaks:myNewStreaks,pokeLastMutual:myNewLastMutual});
+    userData.pokesSent=(userData.pokesSent||0)+1;
+    await saveUser({pokedToday,pokeStreaks:myNewStreaks,pokeLastMutual:myNewLastMutual,pokesSent:userData.pokesSent});
 
     const gained=addXP(5);
     await saveUser({xp:userData.xp});
@@ -1825,7 +1980,7 @@ async function renderLeaderboard(){let list=[];if(lbMode==='friends'){const fids
   const myStreaks=userData.pokeStreaks||{};const myLastMutual=userData.pokeLastMutual||{};
   let h=`<div class="log-filters" style="margin-bottom:.7rem"><div class="log-filter ${lbMode==='all'?'active':''}" onclick="lbMode='all';renderLeaderboard()">All Hunters</div><div class="log-filter ${lbMode==='friends'?'active':''}" onclick="lbMode='friends';renderLeaderboard()">Friends</div></div>`;
   h+=list.length?list.map((u,i)=>{
-    const me=U&&u.uid===U.uid;const r=getRank(u.xp);const pc=i===0?'gold':i===1?'silver':i===2?'bronze':'';
+    const me=U&&u.uid===U.uid;const r=(u.rank&&RANKS.find(x=>x.name===u.rank))||getRank(u.xp);const pc=i===0?'gold':i===1?'silver':i===2?'bronze':'';
     // Poke button for friends only (not self, not in All mode)
     let pokeUI='';
     if(!me&&lbMode==='friends'&&(userData.friends||[]).includes(u.uid)){
@@ -1860,7 +2015,7 @@ async function openProfileCard(uid){
     const userDoc=await db.collection('users').doc(uid).get();
     if(userDoc.exists){const ud=userDoc.data();u={...u,...ud,uid}}
     if(!u){modal.classList.remove('open');toast('User not found');return}
-    const r=getRank(u.xp||0);
+    const r=(u.rank&&RANKS.find(x=>x.name===u.rank))||getRank(u.xp||0);
     const title=(r.title&&r.title[u.class])||r.name;
     const isFriend=(userData.friends||[]).includes(uid);
     let h=`<div class="pc-header">
@@ -2283,6 +2438,66 @@ async function checkPassiveAchievements(){
     if(userData.achievements.length>=50)U('secret_100pct');
     const nightLogs=workoutLog.filter(e=>{const h=new Date(e.date).getHours();return h>=0&&h<5}).length;
     if(nightLogs>=5)U('secret_night_shift');
+    // ── v1.15.0: Fable Set + content pack ──
+    const lifts=getLiftLogs();
+    // Phoenix: a log whose previous log was 14+ days earlier
+    const sortedDates=workoutLog.map(e=>new Date(e.date).getTime()).sort((a,b)=>a-b);
+    for(let i=1;i<sortedDates.length;i++){if(sortedDates[i]-sortedDates[i-1]>=14*86400000){U('phoenix');break}}
+    // Twelve Labors: 12 event missions
+    if(Object.keys(userData.eventsCompleted||{}).length>=12)U('twelve_labors');
+    // Volume Road + Atlas
+    let totalVol=0;lifts.forEach(e=>{(e.exercises||[]).forEach(ex=>{(ex.sets||[]).forEach(s=>{const w=parseFloat(s.weight)||0,r=parseFloat(s.reps)||0;totalVol+=w*r})})});
+    if(totalVol>=100000)U('vol_100k');if(totalVol>=500000)U('vol_500k');if(totalVol>=1000000)U('atlas_1m');
+    // Sisyphus: same dayId logged 25×
+    const dayCounts={};lifts.forEach(e=>{if(e.dayId)dayCounts[e.dayId]=(dayCounts[e.dayId]||0)+1});
+    if(Object.values(dayCounts).some(c=>c>=25))U('sisyphus');
+    // David & Goliath: any set ≥ 2× bodyweight
+    const bw=parseFloat((userData.stats||{}).weight)||0;
+    if(bw>0){const maxLift=Math.max(0,...lifts.flatMap(e=>(e.exercises||[]).flatMap(ex=>(ex.sets||[]).map(s=>parseFloat(s.weight)||0))));if(maxLift>=bw*2)U('david_goliath')}
+    // Odyssey + timed sessions + marathon + efficient killer
+    const timed=workoutLog.filter(e=>e.durationSec>0);
+    const totalMin=timed.reduce((a,e)=>a+e.durationSec/60,0);
+    if(totalMin>=10000)U('odyssey_10k');
+    if(timed.length>=10)U('timed_10');if(timed.length>=100)U('timed_100');
+    if(timed.some(e=>e.durationSec>=90*60))U('marathon_session');
+    if(timed.some(e=>{if(e.durationSec>=45*60||e.isRest||e.isActivity)return false;const sets=(e.exercises||[]).flatMap(ex=>ex.sets||[]);const filled=sets.filter(s=>s&&((s.weight&&String(s.weight).trim())||(s.reps&&String(s.reps).trim())));return filled.length>0&&filled.every(s=>s.done)}))U('efficient_killer');
+    // The Bard: 10 entries with notes
+    if(workoutLog.filter(e=>e.notes&&String(e.notes).trim()).length>=10)U('the_bard');
+    // Trials + levels
+    if((userData.trialsCompleted||[]).length>=3)U('trial_legends');
+    const lvl=getLevelInfo();
+    if(lvl.level>=10)U('level_10_any');
+    if(lvl.rank.name==='S-RANK'&&lvl.level>=50)U('s_rank_50');
+    if(lvl.rank.name==='S-RANK'&&lvl.level>=100)U('pantheon');
+    // Achilles: any calf exercise logged
+    if(lifts.some(e=>(e.exercises||[]).some(ex=>/calf|calves/i.test(ex.name||''))))U('achilles_heel');
+    // Here Be Dragons: 3-4 AM log
+    if(workoutLog.some(e=>new Date(e.date).getHours()===3))U('here_dragons');
+    // Explorer + Iron Lungs
+    const actTypes=new Set(getActivityLogs().map(e=>e.activityType).filter(Boolean));
+    if(actTypes.size>=5)U('explorer_acts');
+    const cardioMin=getActivityLogs().reduce((a,e)=>a+(parseFloat(e.duration)||0),0);
+    if(cardioMin>=1000)U('cardio_1000');
+    // Social: pokes sent counter + 5 friends in one day
+    if((userData.pokesSent||0)>=100)U('pokes_100');
+    const pokedToday=userData.pokedToday||{};
+    if(Object.values(pokedToday).filter(d=>d===getTodayStr()).length>=5)U('social_butterfly');
+    // Full Week Fed: 7 consecutive days with food logged
+    const fdDays=Object.keys(userData.foodLog||{}).filter(k=>{const d=userData.foodLog[k];return d&&d.meals&&Object.values(d.meals).some(m=>Array.isArray(m)&&m.length)}).sort();
+    let fdStreak=1,fdBest=fdDays.length?1:0;
+    for(let i=1;i<fdDays.length;i++){const gap=(new Date(fdDays[i])-new Date(fdDays[i-1]))/86400000;fdStreak=gap===1?fdStreak+1:1;if(fdStreak>fdBest)fdBest=fdStreak}
+    if(fdBest>=7)U('food_week_7');
+    // Label Reader + Historian
+    if((parseInt(userData.scanCount)||0)>=25)U('scan_25');
+    if(workoutLog.some(e=>e.backdated))U('the_historian');
+    // Date-based: New Year, Leap of Faith, Friday Night Lights
+    workoutLog.forEach(e=>{const d=new Date(e.date);if(e.backdated)return;
+      if(d.getMonth()===0&&d.getDate()===1)U('new_year_log');
+      if(d.getMonth()===1&&d.getDate()===29)U('leap_of_faith');
+      if(!e.isRest&&!e.isActivity&&d.getDay()===5&&d.getHours()>=20)U('friday_lights');
+    });
+    // Fable: the meta-capstone
+    if(userData.achievements.length>=100)U('fable_legend');
   }catch(e){console.warn('[checkPassiveAchievements] eval error:',e)}
   // ONE batched write at the end
   const gainedAch=userData.achievements.length-achBefore;
@@ -2292,6 +2507,7 @@ async function checkPassiveAchievements(){
       await saveUser({achievements:userData.achievements,xp:userData.xp});
       await saveLeaderboard();
       updateTopBar();
+      if(gainedAch>0)celebrateAch({icon:'🏆',name:gainedAch===1?'New achievement earned':gainedAch+' achievements earned',xp:gainedXp,desc:''});
       console.log('[checkPassiveAchievements] batched',gainedAch,'unlocks, +'+gainedXp,'XP');
     }catch(e){console.warn('[checkPassiveAchievements] batch save failed:',e)}
   }

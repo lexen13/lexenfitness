@@ -940,3 +940,36 @@ input[type=checkbox]:checked::after{content:'✓';position:absolute;color:#fff;f
 
 /* ── Friend Request Badge ── */
 .friend-badge{position:absolute;top:-6px;right:-8px;background:var(--red);color:#fff;font-size:.55rem;font-weight:800;font-family:var(--font-mono);min-width:16px;height:16px;border-radius:8px;display:flex;align-items:center;justify-content:center;padding:0 4px;line-height:1}
+
+/* ══ v1.15.0 ══ */
+/* Achievement celebration card */
+.ach-celebration{position:fixed;top:-120px;left:50%;transform:translateX(-50%);z-index:9999;display:flex;align-items:center;gap:12px;background:linear-gradient(135deg,#1a1530 0%,#241b3d 100%);border:1px solid var(--gold);border-radius:14px;padding:12px 18px;min-width:260px;max-width:90vw;box-shadow:0 8px 30px rgba(251,191,36,.25),0 0 60px rgba(123,92,255,.15);transition:top .4s cubic-bezier(.34,1.56,.64,1)}
+.ach-celebration.show{top:14px}
+.ach-cel-icon{font-size:2rem;line-height:1}
+.ach-cel-label{font-family:var(--font-mono);font-size:.56rem;font-weight:800;color:var(--gold);letter-spacing:2px}
+.ach-cel-name{font-family:var(--font-display);font-size:1.05rem;font-weight:800;color:var(--text);line-height:1.15}
+.ach-cel-xp{font-family:var(--font-mono);font-size:.68rem;font-weight:700;color:var(--green);margin-top:2px}
+/* Level-up burst */
+.level-burst{position:fixed;top:38%;left:50%;transform:translate(-50%,-50%) scale(.6);z-index:9998;text-align:center;opacity:0;pointer-events:none;transition:all .35s cubic-bezier(.34,1.56,.64,1)}
+.level-burst.show{opacity:1;transform:translate(-50%,-50%) scale(1)}
+.lb-arrow{font-size:2.2rem;color:var(--accent2);text-shadow:0 0 24px rgba(251,191,36,.8);animation:lbFloat 1.8s ease-out}
+.lb-text{font-family:var(--font-mono);font-size:.7rem;font-weight:800;letter-spacing:4px;color:var(--accent2)}
+.lb-num{font-family:var(--font-display);font-size:2.4rem;font-weight:900;color:var(--text);text-shadow:0 0 30px rgba(123,92,255,.6)}
+.lb-max{font-size:1.1rem;color:var(--muted);font-weight:600}
+@keyframes lbFloat{0%{transform:translateY(14px)}100%{transform:translateY(0)}}
+/* Compact trial-active banner (replaces the big red soft-cap alarm) */
+.trial-active-banner{padding:8px 12px;margin-bottom:.6rem;background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.35);border-radius:9px;font-family:var(--font-mono);font-size:.66rem;font-weight:700;color:var(--gold);letter-spacing:.5px;line-height:1.5}
+/* Weekly recap */
+.recap-hero{text-align:center;font-family:var(--font-display);font-size:1.5rem;font-weight:900;letter-spacing:1px;color:var(--text);padding:14px;background:var(--surface);border:1px solid var(--border);border-radius:12px;margin-bottom:.6rem}
+.recap-hero.perfect{color:var(--gold);border-color:rgba(251,191,36,.5);background:rgba(251,191,36,.07);text-shadow:0 0 20px rgba(251,191,36,.4)}
+.recap-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin:.5rem 0}
+.recap-stat{text-align:center;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:10px 4px}
+.recap-stat .rv{font-family:var(--font-display);font-size:1.2rem;font-weight:800;color:var(--accent2)}
+.recap-stat .rl{font-family:var(--font-mono);font-size:.54rem;color:var(--muted);letter-spacing:1px;text-transform:uppercase;margin-top:2px}
+.recap-xp{text-align:center;font-family:var(--font-mono);font-size:.78rem;font-weight:800;color:var(--green);margin-top:.4rem}
+.recap-delta{text-align:center;font-size:.7rem;margin-top:.3rem}
+/* Nutrition meal-button labels */
+.food-btn.sm{display:flex;flex-direction:column;align-items:center;gap:2px;padding:8px 4px}
+.fb-label{font-family:var(--font-mono);font-size:.52rem;color:var(--muted);letter-spacing:.5px;text-transform:uppercase}
+/* Active-session visual cue on the day content */
+#dayContent.in-session{border-left:2px solid var(--accent);padding-left:8px;border-radius:2px}

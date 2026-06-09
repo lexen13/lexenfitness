@@ -177,10 +177,10 @@ function renderNutritionPage(){
     }
     if(isToday){
       h+=`<div class="food-actions meal-add-btns">
-        <button class="food-btn sm" onclick="activeMeal=${m};openFoodSearch()">🔍</button>
-        <button class="food-btn sm" onclick="activeMeal=${m};openScanner()">📸</button>
-        <button class="food-btn sm" onclick="activeMeal=${m};openManualFood()">✏️</button>
-        <button class="food-btn sm" onclick="activeMeal=${m};openRecentFoods()">🕐</button>
+        <button class="food-btn sm" onclick="activeMeal=${m};openFoodSearch()">🔍<span class="fb-label">Search</span></button>
+        <button class="food-btn sm" onclick="activeMeal=${m};openScanner()">📸<span class="fb-label">Scan</span></button>
+        <button class="food-btn sm" onclick="activeMeal=${m};openManualFood()">✏️<span class="fb-label">Manual</span></button>
+        <button class="food-btn sm" onclick="activeMeal=${m};openRecentFoods()">🕐<span class="fb-label">Recent</span></button>
       </div>`;
     }else{
       h+=`<div class="food-actions meal-add-btns">
@@ -455,7 +455,7 @@ async function lookupBarcode(code){
     const p=data.product;const nut=p.nutriments||{};
     window._foodResults=[{name:String(p.product_name||'Unknown').slice(0,100),calPer100:Math.round(nut['energy-kcal_100g']||0),proteinPer100:Math.round(nut.proteins_100g||0),carbsPer100:Math.round(nut.carbohydrates_100g||0),fatPer100:Math.round(nut.fat_100g||0),servingSuggestion:p.serving_size||''}];
     unlockAch('scan_1');
-    const sc=(userData.scanCount||0)+1;await saveUser({scanCount:sc});if(sc>=5)unlockAch('scan_5');
+    const sc=(userData.scanCount||0)+1;await saveUser({scanCount:sc});if(sc>=5)unlockAch('scan_5');if(sc>=25)unlockAch('scan_25');
     openServingModal(0);
   }catch(e){toast('Lookup failed')}
 }

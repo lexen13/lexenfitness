@@ -1,9 +1,20 @@
 // ═══════════════════════════════════════════
 //  LEXENFITNESS — DATA v4 (Solo Leveling)
 // ═══════════════════════════════════════════
-const APP_VERSION='1.14.1';
+const APP_VERSION='1.15.0';
 const WELCOME_MESSAGE=`Welcome to Lexen Fitness! A Solo-Leveling inspired, gamified Fitness App to help friends and family stay motivated by giving fitness a game-like experience.\n\nThis app is developed by one person, and is very much still in the testing phase. Not everything will be perfect, but please bear with me. If you have any suggestions, feel free to pass them along as I continue to make this the best app that I can, before I actually have to start buying dev rights with Apple and Google.\n\nFeel free to share this with your own family and friends as we build a community that becomes healthier together!\n\n— Gavin (founder)`;
 const CHANGELOG=[
+  {version:'1.15.0',date:'Jun 2026',title:'The Fable Update — Content, Celebrations & Recaps',items:[
+    '✨ 30 NEW ACHIEVEMENTS including the legend-themed Fable Set: Phoenix, Atlas, Sisyphus, Odyssey, Pantheon, and 3 new secrets. 155 total to hunt',
+    '🎯 8 new daily missions, 2 new missions per class, and 8 new event missions',
+    '🏆 Achievements now CELEBRATE — animated unlock cards with haptics instead of silent unlocks',
+    '⬆️ Level-ups get a proper burst animation',
+    '📜 NEW: Weekly Recap — first open of each week shows your sessions, volume, minutes, and whether the week was perfect. Locked forever, just like your history',
+    '⏱️ Session Mode now SURVIVES closing the app — reopen and your timer + typed sets resume right where you left them',
+    '🛠️ Leaderboard now shows your true rank (trial-gated ranks displayed correctly everywhere)',
+    '🛠️ Profile XP bar now points at your real next step — the trial, not a far-away rank',
+    '🎨 UI: level merged into the XP pill, calmer trial banner with real mission XP values, labeled nutrition buttons, "Badges" stat card'
+  ]},
   {version:'1.14.1',date:'Jun 2026',title:'Tracker Alignment & Delete Fixes',items:[
     '🔧 Iron Gate perfect weeks now count cardio & active rest as sessions — same as the weekly streak (at least 3 days must still be lifts)',
     '🔓 One-time fix: past weeks wrongly scored as failed (because rest days didn\'t count) are upgraded to PERFECT. Earned weeks are never downgraded',
@@ -738,3 +749,83 @@ const EXERCISE_LIBRARY=[
   {name:'Sprint Intervals',group:'Conditioning',tags:['cardio'],reps:'30s on/60s off',cues:['6-8 rounds, full effort on sprints','Walk or light jog during rest','Warm up properly first'],yt:'sprint+interval+training'}
 ];
 const LIBRARY_GROUPS=[...new Set(EXERCISE_LIBRARY.map(e=>e.group))];
+
+// ═══════════ v1.15.0 CONTENT PACK ═══════════
+// The Fable Set — legend-themed achievements
+ACHIEVEMENTS.push(
+  {id:'phoenix',icon:'🔥',name:'Phoenix',desc:'Rise from the ashes — return and train after 14+ days away',xp:30},
+  {id:'twelve_labors',icon:'🏛️',name:'The Twelve Labors',desc:'Complete 12 event missions',xp:40},
+  {id:'atlas_1m',icon:'🌍',name:'Atlas',desc:'Carry the world — 1,000,000 lbs lifetime volume',xp:75},
+  {id:'sisyphus',icon:'⛰️',name:'Sisyphus',desc:'Log the same workout 25 times. The boulder awaits.',xp:30},
+  {id:'david_goliath',icon:'🗿',name:'David & Goliath',desc:'Lift 2× your bodyweight on any set',xp:50},
+  {id:'odyssey_10k',icon:'⛵',name:'Odyssey',desc:'10,000 total minutes in Session Mode',xp:60},
+  {id:'the_bard',icon:'📜',name:'The Bard',desc:'Tell your story — add notes to 10 logged entries',xp:15},
+  {id:'trial_legends',icon:'⚔️',name:'Trial of Legends',desc:'Conquer all three rank trials',xp:100},
+  {id:'pantheon',icon:'👑',name:'Pantheon',desc:'Reach Level 100 in S-Rank. Ascend.',xp:150},
+  {id:'achilles_heel',icon:'🦶',name:'Achilles',desc:'Train your one weakness — log a calf exercise',xp:20,secret:true},
+  {id:'here_dragons',icon:'🐉',name:'Here Be Dragons',desc:'Log a workout in uncharted hours (3–4 AM)',xp:20,secret:true},
+  {id:'fable_legend',icon:'✨',name:'Fable',desc:'Unlock 100 achievements. Your legend will be told.',xp:200,secret:true},
+  // Volume Road
+  {id:'vol_100k',icon:'🏋️',name:'Ton Up',desc:'100,000 lbs lifetime volume',xp:25},
+  {id:'vol_500k',icon:'💪',name:'Half a Million',desc:'500,000 lbs lifetime volume',xp:50},
+  // Session Mode
+  {id:'timed_10',icon:'⏱️',name:'Clocked In',desc:'Finish 10 timed sessions',xp:15},
+  {id:'timed_100',icon:'🕰️',name:'Century of Steel',desc:'Finish 100 timed sessions',xp:50},
+  {id:'marathon_session',icon:'🏃',name:'Marathon Session',desc:'A single session of 90+ minutes',xp:20},
+  {id:'efficient_killer',icon:'⚡',name:'Efficient Killer',desc:'Perfect day (all sets ✓) in under 45 minutes',xp:25},
+  // Levels
+  {id:'level_10_any',icon:'🪜',name:'Climbing',desc:'Reach Lv 10 in any rank',xp:10},
+  {id:'s_rank_50',icon:'🏔️',name:'Halfway Peak',desc:'Reach Lv 50 in S-Rank',xp:60},
+  // Cardio & Social
+  {id:'explorer_acts',icon:'🗺️',name:'Explorer',desc:'Log 5 different activity types',xp:15},
+  {id:'cardio_1000',icon:'🫁',name:'Iron Lungs',desc:'1,000 total cardio minutes',xp:30},
+  {id:'social_butterfly',icon:'🦋',name:'Social Butterfly',desc:'Poke 5 different friends in one day',xp:15},
+  {id:'pokes_100',icon:'📣',name:'Hype Squad',desc:'Send 100 total pokes',xp:30},
+  // Nutrition & Discovery
+  {id:'food_week_7',icon:'📒',name:'Full Week Fed',desc:'Log food 7 days in a row',xp:20},
+  {id:'scan_25',icon:'🔍',name:'Label Reader',desc:'Scan 25 barcodes',xp:20},
+  {id:'the_historian',icon:'📅',name:'The Historian',desc:'Backdate your first entry',xp:10},
+  // Fun / Secret
+  {id:'new_year_log',icon:'🎆',name:'New Year New Me',desc:'Log a workout on January 1st',xp:15},
+  {id:'leap_of_faith',icon:'🐸',name:'Leap of Faith',desc:'Log a workout on February 29th',xp:50,secret:true},
+  {id:'friday_lights',icon:'🌃',name:'Friday Night Lights',desc:'Log a lift on Friday after 8 PM',xp:15,secret:true}
+);
+// New universal daily missions
+UNIVERSAL_MISSIONS.push(
+  {id:'protein_breakfast',icon:'🍳',name:'Protein Breakfast',desc:'30g+ protein at your first meal',xp:10},
+  {id:'track_all',icon:'📋',name:'Track It All',desc:'Log every meal today',xp:15},
+  {id:'early_bed',icon:'🌙',name:'Early to Bed',desc:'In bed before 10:30 PM',xp:15},
+  {id:'tempo_set',icon:'🐢',name:'Tempo Set',desc:'One set with a slow 3-second negative',xp:10},
+  {id:'farmer_mode',icon:'🧱',name:'Farmer Mode',desc:'Carry something heavy today (farmer walk, groceries, all of it)',xp:10},
+  {id:'new_exercise',icon:'🆕',name:'Uncharted',desc:'Try an exercise you\'ve never done',xp:15},
+  {id:'water_first',icon:'🥤',name:'Water First',desc:'Drink water before your morning coffee',xp:10},
+  {id:'slow_meal',icon:'🍽️',name:'Mindful Meal',desc:'Eat one meal with zero screens',xp:10}
+);
+// New class missions (2 per class)
+CLASS_MISSIONS.Powerlifter.push(
+  {id:'pl_pause',icon:'⏸️',name:'Pause Reps',desc:'One paused set on squat or bench',xp:15},
+  {id:'pl_brace',icon:'🫁',name:'Brace Drill',desc:'5 min of breathing & bracing work',xp:10}
+);
+CLASS_MISSIONS.Bodybuilder.push(
+  {id:'bb_mindmuscle',icon:'🧠',name:'Mind-Muscle',desc:'One isolation set with a 2-sec squeeze every rep',xp:10},
+  {id:'bb_pump50',icon:'🎈',name:'Pump Finisher',desc:'End a muscle group with a 50-rep finisher',xp:15}
+);
+CLASS_MISSIONS.Strongman.push(
+  {id:'sm_grip',icon:'🤝',name:'Grip Work',desc:'Dedicated grip training today',xp:10},
+  {id:'sm_oddobject',icon:'🪨',name:'Odd Object',desc:'Carry or load something awkward',xp:15}
+);
+CLASS_MISSIONS.Athlete.push(
+  {id:'ath_sprints',icon:'💨',name:'Sprint Intervals',desc:'5+ sprint intervals',xp:15},
+  {id:'ath_reaction',icon:'🎯',name:'Reaction Drill',desc:'Agility or reaction work today',xp:10}
+);
+// New event missions
+EVENT_MISSION_POOL.push(
+  {id:'evt_dawn_raid',icon:'🌅',name:'DAWN RAID',desc:'Train before 7 AM',xp:45},
+  {id:'evt_iron_marathon',icon:'⏳',name:'IRON MARATHON',desc:'A 90+ minute session today',xp:35},
+  {id:'evt_collector',icon:'🧺',name:'THE COLLECTOR',desc:'Log a lift, a cardio session, and a meal — all today',xp:40},
+  {id:'evt_volume_day',icon:'📦',name:'VOLUME DAY',desc:'20+ working sets in one session',xp:40},
+  {id:'evt_pr_window',icon:'🎯',name:'PR WINDOW',desc:'Attempt a PR on any lift today',xp:35},
+  {id:'evt_double_dash',icon:'🌞',name:'DOUBLE DASH',desc:'Complete all 5 daily missions before noon',xp:40},
+  {id:'evt_buddy',icon:'👋',name:'BUDDY SYSTEM',desc:'Poke 3 friends today',xp:25},
+  {id:'evt_silent_grind',icon:'🤫',name:'SILENT GRIND',desc:'Full workout, zero phone breaks',xp:30}
+);

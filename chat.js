@@ -30,7 +30,7 @@ async function renderChatList(){
     try{
       const d=await db.collection('users').doc(fid).get();
       if(!d.exists)continue;
-      const f=d.data();const r=getRank(f.xp||0);
+      const f=d.data();const r=(f.rank&&RANKS.find(x=>x.name===f.rank))||getRank(f.xp||0);
       let preview='No messages yet',previewTime='',sortTime=0,isUnread=false,senderName='';
       try{
         const chatId=getChatId(U.uid,fid);
