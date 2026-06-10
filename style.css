@@ -988,3 +988,26 @@ input[type=checkbox]:checked::after{content:'✓';position:absolute;color:#fff;f
 .th-actions{display:flex;gap:8px}
 .th-btn{flex:1;padding:11px 8px;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:10px;font-family:var(--font-mono);font-size:.7rem;font-weight:800;letter-spacing:.5px;cursor:pointer}
 .th-btn.primary{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#0a0a14;border:none;box-shadow:0 3px 12px rgba(123,92,255,.3)}
+
+/* ══ v1.17.0 ══ */
+/* Overload hints */
+.ex-hint{font-family:var(--font-mono);font-size:.6rem;color:var(--muted);padding:4px 8px;margin:2px 0 6px;background:rgba(123,92,255,.06);border-left:2px solid var(--border);border-radius:4px;letter-spacing:.3px}
+.ex-hint.up{color:var(--green);border-left-color:var(--green);background:rgba(52,211,153,.06)}
+.ex-hint strong{color:var(--accent2)}
+/* Progress strip */
+.progress-strip{margin:.6rem 0 .2rem}
+.ps-header{font-family:var(--font-mono);font-size:.6rem;font-weight:800;color:var(--muted);letter-spacing:2px;margin-bottom:6px}
+.ps-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.ps-tile{text-align:center;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:10px 4px}
+.ps-tile.tap{cursor:pointer}
+.ps-tile.tap:active{border-color:var(--accent)}
+.ps-v{font-family:var(--font-display);font-size:1.15rem;font-weight:800;color:var(--text)}
+.ps-l{font-family:var(--font-mono);font-size:.52rem;color:var(--muted);letter-spacing:.5px;text-transform:uppercase;margin-top:2px}
+.ps-t{font-family:var(--font-mono);font-size:.6rem;margin-top:3px;min-height:12px}
+.ps-up{color:var(--green);font-weight:700}
+.ps-flat{color:var(--dim)}
+/* Updates tab: blurb + collapsible details */
+.update-blurb{font-size:.8rem;color:var(--text);line-height:1.5;padding:4px 0 6px}
+.update-toggle{font-family:var(--font-mono);font-size:.62rem;color:var(--accent);cursor:pointer;padding:4px 0;letter-spacing:.5px}
+.update-items.collapsible{display:none}
+.update-items.collapsible.open{display:block}

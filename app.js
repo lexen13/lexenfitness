@@ -492,7 +492,7 @@ function addXP(amount){
   return boosted;
 }
 function switchPage(p){currentPage=p;document.querySelectorAll('.nav-item').forEach(n=>n.classList.toggle('active',n.dataset.page===p));document.querySelectorAll('.page').forEach(pg=>pg.classList.remove('active'));$('page-'+p).classList.add('active');
-  if(p==='train')buildWorkout();if(p==='profile'){updateTrainerTab();renderProfile();renderFriendsPage()}if(p==='missions'){renderMissions();renderAchievements()}
+  if(p==='train')buildWorkout();if(p==='profile'){updateTrainerTab();renderProfile();renderFriendsPage()}if(p==='missions')renderMissions();
   if(p==='nutrition')renderNutritionPage();if(p==='ranks')renderLeaderboard();if(p==='chat')renderChatPage()}
 function switchSubTab(page,tab){
   const container=$('page-'+page);if(!container)return;
@@ -504,13 +504,61 @@ function switchSubTab(page,tab){
   if(tab==='log')renderLog();if(tab==='rankinfo')$('rankInfoContent').innerHTML=renderRankInfo();if(tab==='leaderboard')renderLeaderboard();
   if(tab==='aicoach')renderAICoach();if(tab==='friendchat')renderChatList();
   if(tab==='friends'){renderFriendsPage();pendingFriendReqs=0;updateFriendBadge()};if(tab==='mystats')renderProfile();
-  if(tab==='updates')renderUpdatesTab();if(tab==='library')renderLibrary();
+  if(tab==='updates')renderUpdatesTab();if(tab==='library')renderLibrary();if(tab==='badges')renderAchievements();
   if(tab==='trainer')renderTrainerDashboard();
 }
 function updateTrainerTab(){
   const tab=$('trainerTab');if(tab)tab.style.display=userData.role==='trainer'?'':'none';
 }
 
+// Progress strip — trend-framed, never punitive. BMI deliberately excluded
+// (it mislabels muscular users and would read as discouragement on a daily screen).
+function renderProgressStrip(){
+  // 1. Volume: this week vs last week
+  const curMon=getMonday(new Date()).getTime();
+  const lastMon=curMon-7*86400000;
+  let volThis=0,volLast=0;
+  getLiftLogs().forEach(e=>{const t=new Date(e.date).getTime();
+    let v=0;(e.exercises||[]).forEach(ex=>(ex.sets||[]).forEach(s=>{v+=(parseFloat(s.weight)||0)*(parseFloat(s.reps)||0)}));
+    if(t>=curMon)volThis+=v;else if(t>=lastMon)volLast+=v;
+  });
+  const fmtV=v=>v>=1000?(v/1000).toFixed(1)+'k':Math.round(v);
+  const volDelta=volLast>0?Math.round((volThis-volLast)/volLast*100):null;
+  const volTrend=volDelta===null?'':volDelta>0?`<span class="ps-up">▲ ${volDelta}%</span>`:volDelta<0?`<span class="ps-flat">▼ ${Math.abs(volDelta)}%</span>`:`<span class="ps-flat">—</span>`;
+  // 2. Bodyweight trend — colored toward the user's goal, never red
+  const wi=userData.weighIns||[];
+  let weightTile;
+  if(wi.length>=1){
+    const latest=parseFloat(wi[wi.length-1].weight)||0;
+    let trend='';
+    if(wi.length>=2){
+      const prev=parseFloat(wi[wi.length-2].weight)||0;
+      const d=Math.round((latest-prev)*10)/10;
+      if(d!==0){
+        const goal=(userData.goal||'').toLowerCase();
+        const towardGoal=(d<0&&(goal.includes('fat')||goal.includes('recomp')))||(d>0&&(goal.includes('muscle')||goal.includes('strength')));
+        trend=`<span class="${towardGoal?'ps-up':'ps-flat'}">${d>0?'▲':'▼'} ${Math.abs(d)} lb</span>`;
+      }else trend=`<span class="ps-flat">—</span>`;
+    }
+    weightTile=`<div class="ps-tile"><div class="ps-v">${latest}</div><div class="ps-l">Bodyweight</div><div class="ps-t">${trend}</div></div>`;
+  }else{
+    weightTile=`<div class="ps-tile tap" onclick="openWeighIn()"><div class="ps-v">📏</div><div class="ps-l">Log a weigh-in</div><div class="ps-t"><span class="ps-flat">start tracking</span></div></div>`;
+  }
+  // 3. Sessions: last 30 days vs the 30 before
+  const now=Date.now();
+  let s30=0,sPrev=0;
+  workoutLog.forEach(e=>{if(e.isRest&&e.restType!=='active')return;const t=new Date(e.date).getTime();
+    if(now-t<=30*86400000)s30++;else if(now-t<=60*86400000)sPrev++;});
+  const sTrend=sPrev>0?(s30>sPrev?`<span class="ps-up">▲ ${s30-sPrev}</span>`:s30<sPrev?`<span class="ps-flat">▼ ${sPrev-s30}</span>`:`<span class="ps-flat">—</span>`):'';
+  return `<div class="progress-strip">
+    <div class="ps-header">PROGRESS</div>
+    <div class="ps-grid">
+      <div class="ps-tile"><div class="ps-v">${fmtV(volThis)}</div><div class="ps-l">lbs this week</div><div class="ps-t">${volTrend}</div></div>
+      ${weightTile}
+      <div class="ps-tile"><div class="ps-v">${s30}</div><div class="ps-l">Sessions / 30d</div><div class="ps-t">${sTrend}</div></div>
+    </div>
+  </div>`;
+}
 // ═══════════ DAILY MISSIONS ═══════════
 // Today hero — the "home" header: greeting, streak, week progress, quick actions
 function renderTodayHero(missionsDone,missionsTotal){
@@ -551,6 +599,7 @@ function renderMissions(){
   const cap=getXpCap();const softCapped=cap.softCap<1;
   const {mult,label:multLabel}=getXpMultiplier();
   let h=renderTodayHero(completed.length,missions.length);
+  h+=renderProgressStrip();
   h+=`<div class="page-title" style="font-size:1.1rem;margin-top:1rem">DAILY MISSIONS</div><div class="page-sub">${completed.length}/${missions.length} complete · Streak: ${userData.missionStreak} days</div>`;
   if(multLabel)h+=`<div class="xp-mult-badge">${multLabel}</div>`;
   if(softCapped){const trial=getAvailableTrial();h+=`<div class="trial-active-banner">⚔️ TRIAL ACTIVE · XP at 25% — break through ${trial?trial.trial.name:'the trial'} below for full XP + bonus</div>`}
@@ -1164,7 +1213,7 @@ async function editDayNotes(){
   renderDay();toast(notes?'Notes saved!':'Notes cleared.');
 }
 function switchDay(id){currentDay=id;document.querySelectorAll('.dtab').forEach(t=>t.classList.toggle('active',t.dataset.d===id));renderDay();updateLogBtn()}
-function renderDay(){const prog=userData.program||[],day=prog.find(d=>d.id===currentDay);if(!day)return;const di=prog.indexOf(day);let h='';
+function renderDay(){const prog=userData.program||[],day=prog.find(d=>d.id===currentDay);if(!day)return;const di=prog.indexOf(day);const lastMap=buildLastSetMap();let h='';
   if(day.subtitle)h+=`<div class="day-subtitle">${esc(day.subtitle)}</div>`;
   // Start Session button (prominent, at top) — hidden during active session
   if(!sessionActive)h+=`<button class="start-session-btn" onclick="startSession()">▶ START SESSION · ${esc(day.title)}</button>`;
@@ -1172,6 +1221,7 @@ function renderDay(){const prog=userData.program||[],day=prog.find(d=>d.id===cur
   if(day.notes)h+=`<div class="day-notes day-notes-top"><strong>📝 NOTES</strong><br>${esc(day.notes)}</div>`;
   day.exercises.forEach((ex,ei)=>{h+=`<div class="exercise"><div class="ex-header"><span class="ex-num">${ei+1}</span><span class="ex-name">${ex.name}</span><button class="ex-edit" onclick="openEdit(${di},${ei})">✏️</button></div>`;
     if(ex.notes)h+=`<div class="ex-notes">${esc(ex.notes)}</div>`;
+    h+=overloadHint(ex,lastMap);
     h+=`<div class="sets-grid">`;
     for(let s=0;s<ex.sets;s++){const wK=day.id+'_e'+ei+'_s'+s+'_w',rK=day.id+'_e'+ei+'_s'+s+'_r',cK=day.id+'_e'+ei+'_s'+s+'_c';
       if(ex.isTime)h+=`<div class="set-row"><label>S${s+1}</label><input type="number" id="${rK}" placeholder="sec" value="${savedInputs[rK]||''}"><span class="sep">sec</span><input type="checkbox" id="${cK}" ${savedInputs[cK]?'checked':''}><span class="target">${ex.reps}</span></div>`;
@@ -1180,6 +1230,38 @@ function renderDay(){const prog=userData.program||[],day=prog.find(d=>d.id===cur
   h+=`<button class="add-ex" onclick="openAdd(${di})">+ Add Exercise</button>`;
   $('dayContent').innerHTML=h}
 
+// ═══════════ PROGRESSIVE OVERLOAD HINTS ═══════════
+// Map of exercise name → most recent logged best set, built once per render
+function buildLastSetMap(){
+  const map={};
+  for(const e of getLiftLogs()){ // newest-first, so first hit per exercise wins
+    if(!Array.isArray(e.exercises))continue;
+    for(const ex of e.exercises){
+      const key=(ex.name||'').toLowerCase().trim();
+      if(!key||map[key])continue;
+      let best=null;
+      (ex.sets||[]).forEach(s=>{
+        const w=parseFloat(s.weight)||0,r=parseFloat(s.reps)||0;
+        if(w>0&&r>0&&(!best||w>best.w||(w===best.w&&r>best.r)))best={w,r};
+      });
+      if(best)map[key]={...best,date:e.date};
+    }
+  }
+  return map;
+}
+function overloadHint(ex,lastMap){
+  if(ex.isTime)return '';
+  const last=lastMap[(ex.name||'').toLowerCase().trim()];
+  if(!last)return '';
+  const m=String(ex.reps||'').match(/(\d+)\s*-\s*(\d+)/);
+  const upper=m?parseInt(m[2]):parseInt(ex.reps)||0;
+  const ago=Math.round((Date.now()-new Date(last.date).getTime())/86400000);
+  const agoTxt=ago<=0?'today':ago===1?'yesterday':ago+'d ago';
+  if(upper&&last.r>=upper){
+    return `<div class="ex-hint up">📈 Last: ${last.w}×${last.r} (${agoTxt}) — rep range topped, try <strong>${last.w+5} lbs</strong></div>`;
+  }
+  return `<div class="ex-hint">🎯 Last: ${last.w}×${last.r} (${agoTxt}) — match the weight, beat the reps</div>`;
+}
 // ═══════════ SESSION MODE ═══════════
 // Session overlays the regular workout day view rather than rendering a separate page.
 // Same input IDs, same captureInputs flow, no DOM duplication.

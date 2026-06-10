@@ -416,13 +416,16 @@ function renderUpdatesTab(){
   h+=`<div class="founder-card"><div class="founder-header"><span class="founder-icon">⚔️</span><span class="founder-name">Message from the Founder</span></div><div class="founder-body">${WELCOME_MESSAGE.replace(/\n/g,'<br>')}</div></div>`;
   CHANGELOG.forEach((entry,i)=>{
     const isCurrent=entry.version===APP_VERSION;
+    const blurb=entry.blurb||'';
     h+=`<div class="update-card${isCurrent?' current':''}">
       <div class="update-header">
         <div class="update-version">${entry.version}</div>
         <div class="update-title">${entry.title}</div>
         <div class="update-date">${entry.date}</div>
       </div>
-      <ul class="update-items">${entry.items.map(item=>`<li>${item}</li>`).join('')}</ul>
+      ${blurb?`<div class="update-blurb">${blurb}</div>`:''}
+      <div class="update-toggle" onclick="this.nextElementSibling.classList.toggle('open');this.textContent=this.nextElementSibling.classList.contains('open')?'Hide details ▲':'What changed ▼'">What changed ▼</div>
+      <ul class="update-items collapsible">${entry.items.map(item=>`<li>${item}</li>`).join('')}</ul>
       ${isCurrent?'<div class="update-current-badge">CURRENT</div>':''}
     </div>`;
   });

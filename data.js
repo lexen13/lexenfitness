@@ -1,17 +1,23 @@
 // ═══════════════════════════════════════════
 //  LEXENFITNESS — DATA v4 (Solo Leveling)
 // ═══════════════════════════════════════════
-const APP_VERSION='1.16.0';
+const APP_VERSION='1.17.0';
 const WELCOME_MESSAGE=`Welcome to Lexen Fitness! A Solo-Leveling inspired, gamified Fitness App to help friends and family stay motivated by giving fitness a game-like experience.\n\nThis app is developed by one person, and is very much still in the testing phase. Not everything will be perfect, but please bear with me. If you have any suggestions, feel free to pass them along as I continue to make this the best app that I can, before I actually have to start buying dev rights with Apple and Google.\n\nFeel free to share this with your own family and friends as we build a community that becomes healthier together!\n\n— Gavin (founder)`;
 const CHANGELOG=[
-  {version:'1.16.0',date:'Jun 2026',title:'Home Screen, Sign-in Fix & Honest Tips',items:[
+  {version:'1.17.0',date:'Jun 2026',title:'Smarter Home & Training Hints',blurb:'Your Home screen now tracks your progress over time, your workouts suggest what weight to try next, and achievements got their own page under Ranks → Badges.',items:[
+    '📊 Progress tracker on Home — weekly volume, bodyweight trend, and monthly sessions, always framed around your goal',
+    '📈 Progressive overload hints — every exercise shows your last numbers and what to aim for today',
+    '🏅 Achievements moved to Ranks → Badges (Home stays focused on today)',
+    '📰 This Updates page is now a quick summary — tap "What changed" for details'
+  ]},
+  {version:'1.16.0',date:'Jun 2026',title:'Home Screen, Sign-in Fix & Honest Tips',blurb:'The app now opens to a new Home screen built around your day, Google sign-in got fixed up, and the AI Coach was renamed to Tips.',items:[
     '🏠 NEW: Home — the app now opens to a Today screen: greeting, weekly streak, sessions vs goal, missions, calories, and quick-start buttons, with your daily missions right below',
     '🧭 Nav reordered: Home is the first tab (your missions live there now)',
     '🔑 Google sign-in overhauled — clear error messages instead of "something went wrong", plus automatic redirect fallback for installed apps',
     '📖 "AI Coach" is now "Tips" — same quick answers on training, nutrition & recovery, honest new name. A real AI coach is on the roadmap',
     '⚔️ All v1.15.0 content (Fable achievements, recaps, celebrations) continues rolling out'
   ]},
-  {version:'1.15.0',date:'Jun 2026',title:'The Fable Update — Content, Celebrations & Recaps',items:[
+  {version:'1.15.0',date:'Jun 2026',title:'The Fable Update — Content, Celebrations & Recaps',blurb:'30 new achievements, new missions and events, unlock celebrations, a weekly recap every Monday, and workout sessions that survive closing the app.',items:[
     '✨ 30 NEW ACHIEVEMENTS including the legend-themed Fable Set: Phoenix, Atlas, Sisyphus, Odyssey, Pantheon, and 3 new secrets. 155 total to hunt',
     '🎯 8 new daily missions, 2 new missions per class, and 8 new event missions',
     '🏆 Achievements now CELEBRATE — animated unlock cards with haptics instead of silent unlocks',
