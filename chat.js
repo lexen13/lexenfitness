@@ -8,7 +8,7 @@ let chatListener=null;
 function renderChatPage(){
   let h=`<div class="sub-tabs" id="chatTabs">
     <div class="stab active" data-st="friendchat" onclick="switchSubTab('chat','friendchat')">Friends</div>
-    <div class="stab" data-st="aicoach" onclick="switchSubTab('chat','aicoach')">AI Coach</div>
+    <div class="stab" data-st="aicoach" onclick="switchSubTab('chat','aicoach')">Tips</div>
     <div class="stab" data-st="updates" onclick="switchSubTab('chat','updates')">Updates</div>
   </div>`;
   h+=`<div class="sub-page active" id="sp-friendchat"><div id="chatListContent"></div></div>`;
@@ -188,8 +188,8 @@ function renderAICoach(){
   }
 
   let h=`<div class="coach-header">
-    <div class="coach-avatar">🤖</div>
-    <div><div class="coach-name">SYSTEM COACH</div><div class="coach-sub">Ask me anything about training, nutrition, or progress</div></div>
+    <div class="coach-avatar">📖</div>
+    <div><div class="coach-name">SYSTEM TIPS</div><div class="coach-sub">Quick answers on training, nutrition & recovery — tap a topic or type a keyword</div></div>
   </div>`;
 
   // Chat messages

@@ -98,10 +98,26 @@ async function resetPassword(){
 }
 async function doGoogleLogin(){
   const provider=new firebase.auth.GoogleAuthProvider();
-  try{await auth.signInWithPopup(provider)}catch(err){$('loginError').textContent=friendlyErr(err.code)}
+  try{
+    await auth.signInWithPopup(provider);
+  }catch(err){
+    console.error('[google login]',err.code,err.message);
+    // Popups fail in installed PWAs and some mobile browsers — fall back to full redirect
+    if(err.code==='auth/popup-blocked'||err.code==='auth/operation-not-supported-in-this-environment'||err.code==='auth/cancelled-popup-request'){
+      try{await auth.signInWithRedirect(provider);return}catch(e2){err=e2}
+    }
+    $('loginError').textContent=friendlyErr(err.code)+(friendlyErr(err.code)==='Something went wrong'?' ('+(err.code||err.message)+')':'');
+  }
 }
+// Complete a redirect-based Google sign-in when the page reloads
+auth.getRedirectResult().catch(err=>{
+  if(err&&err.code&&err.code!=='auth/no-auth-event'){
+    console.error('[google redirect]',err.code,err.message);
+    const el=$('loginError');if(el)el.textContent=friendlyErr(err.code)+' ('+(err.code||'')+')';
+  }
+});
 const doLogout=()=>auth.signOut();
-function friendlyErr(c){return{'auth/invalid-email':'Invalid email','auth/user-not-found':'No account','auth/wrong-password':'Wrong password','auth/email-already-in-use':'Email taken','auth/weak-password':'Password 6+ chars','auth/invalid-credential':'Invalid email or password','auth/too-many-requests':'Too many attempts','auth/requires-recent-login':'Sign out and back in first','auth/popup-closed-by-user':'Sign-in cancelled','auth/cancelled-popup-request':'Sign-in cancelled'}[c]||'Something went wrong'}
+function friendlyErr(c){return{'auth/invalid-email':'Invalid email','auth/user-not-found':'No account','auth/wrong-password':'Wrong password','auth/email-already-in-use':'Email taken','auth/weak-password':'Password 6+ chars','auth/invalid-credential':'Invalid email or password','auth/too-many-requests':'Too many attempts','auth/requires-recent-login':'Sign out and back in first','auth/popup-closed-by-user':'Sign-in cancelled','auth/cancelled-popup-request':'Sign-in cancelled','auth/unauthorized-domain':'This domain isn\'t authorized for Google sign-in (admin: add it in Firebase Console)','auth/operation-not-allowed':'Google sign-in isn\'t enabled yet (admin: enable it in Firebase Console)','auth/popup-blocked':'Popup blocked — trying redirect...'}[c]||'Something went wrong'}
 
 // Safety: if loading screen is still showing after 8 seconds, force show auth
 setTimeout(()=>{if($('loadingScreen').style.display!=='none'){$('loadingScreen').style.display='none';showScreen('authScreen')}},8000);
@@ -310,7 +326,7 @@ function initApp(){
   let resumed=false;
   try{resumed=restoreSession()}catch(e){console.warn(e)}
   if(resumed){switchPage('train');return}
-  switchPage(startPage&&['train','missions','nutrition','chat','ranks','profile'].includes(startPage)?startPage:'profile');
+  switchPage(startPage&&['train','missions','nutrition','chat','ranks','profile'].includes(startPage)?startPage:'missions');
 }
 // One-time Iron Gate pass for the founder account (skip, not pass — no bonus XP)
 async function grantFounderPass(){
@@ -496,13 +512,46 @@ function updateTrainerTab(){
 }
 
 // ═══════════ DAILY MISSIONS ═══════════
+// Today hero — the "home" header: greeting, streak, week progress, quick actions
+function renderTodayHero(missionsDone,missionsTotal){
+  const hr=new Date().getHours();
+  const greet=hr<5?'Still grinding':hr<12?'Good morning':hr<18?'Good afternoon':'Good evening';
+  const name=userData.username?'@'+userData.username:'hunter';
+  const wkStreak=calcWeeklyStreak();
+  const goal=getWeeklyGoal();
+  const currentMon=getMonday(new Date()).toISOString().slice(0,10);
+  const wk=evaluateWeek(currentMon,goal);
+  // Today's calories (from food log)
+  let kcal=0;
+  try{const d=(userData.foodLog||{})[getTodayStr()];if(d&&d.meals)Object.values(d.meals).forEach(m=>(m||[]).forEach(f=>kcal+=f.cal||0))}catch(e){}
+  // Did they train today?
+  const todayStr=new Date().toDateString();
+  const trainedToday=workoutLog.some(e=>!e.isRest&&new Date(e.date).toDateString()===todayStr);
+  const dateLabel=new Date().toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'});
+  let h=`<div class="today-hero">
+    <div class="th-date">${dateLabel}</div>
+    <div class="th-greet">${greet}, <span class="th-name">${esc(name)}</span></div>
+    <div class="th-stats">
+      <div class="th-stat"><div class="th-v">${wkStreak>0?'🔥'+wkStreak+'w':'—'}</div><div class="th-l">Streak</div></div>
+      <div class="th-stat ${wk.perfect?'th-perfect':''}"><div class="th-v">${wk.sessions}/${wk.target}</div><div class="th-l">This week</div></div>
+      <div class="th-stat"><div class="th-v">${missionsDone}/${missionsTotal}</div><div class="th-l">Missions</div></div>
+      <div class="th-stat"><div class="th-v">${kcal>0?kcal:'—'}</div><div class="th-l">Cal today</div></div>
+    </div>
+    <div class="th-actions">
+      <button class="th-btn primary" onclick="switchPage('train')">${trainedToday?'✓ Trained · Go again':'▶ Start Training'}</button>
+      <button class="th-btn" onclick="switchPage('nutrition')">🍽️ Log Food</button>
+    </div>
+  </div>`;
+  return h;
+}
 function renderMissions(){
   const today=getTodayStr();const missions=getDailyMissions(today,userData.class);
   const completed=userData.missionsCompleted[today]||[];
   const allDone=missions.every(m=>completed.includes(m.id));
   const cap=getXpCap();const softCapped=cap.softCap<1;
   const {mult,label:multLabel}=getXpMultiplier();
-  let h=`<div class="page-title">DAILY MISSIONS</div><div class="page-sub">${completed.length}/${missions.length} complete · Streak: ${userData.missionStreak} days</div>`;
+  let h=renderTodayHero(completed.length,missions.length);
+  h+=`<div class="page-title" style="font-size:1.1rem;margin-top:1rem">DAILY MISSIONS</div><div class="page-sub">${completed.length}/${missions.length} complete · Streak: ${userData.missionStreak} days</div>`;
   if(multLabel)h+=`<div class="xp-mult-badge">${multLabel}</div>`;
   if(softCapped){const trial=getAvailableTrial();h+=`<div class="trial-active-banner">⚔️ TRIAL ACTIVE · XP at 25% — break through ${trial?trial.trial.name:'the trial'} below for full XP + bonus</div>`}
   const trialInfo=getAvailableTrial();
