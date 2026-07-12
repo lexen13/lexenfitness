@@ -1,9 +1,21 @@
 // ═══════════════════════════════════════════
 //  LEXENFITNESS — DATA v4 (Solo Leveling)
 // ═══════════════════════════════════════════
-const APP_VERSION='1.17.0';
+const APP_VERSION='1.19.0';
 const WELCOME_MESSAGE=`Welcome to Lexen Fitness! A Solo-Leveling inspired, gamified Fitness App to help friends and family stay motivated by giving fitness a game-like experience.\n\nThis app is developed by one person, and is very much still in the testing phase. Not everything will be perfect, but please bear with me. If you have any suggestions, feel free to pass them along as I continue to make this the best app that I can, before I actually have to start buying dev rights with Apple and Google.\n\nFeel free to share this with your own family and friends as we build a community that becomes healthier together!\n\n— Gavin (founder)`;
 const CHANGELOG=[
+  {version:'1.19.0',date:'Jun 2026',title:'Store-Readiness & Hardening',blurb:'Under-the-hood release preparing for the App Store and Google Play: you can now permanently delete your account and data from Settings, and several small reliability fixes landed.',items:[
+    '🗑 Delete Account — Settings → Danger Zone permanently erases your account, logs, and leaderboard entry (App Store requirement)',
+    '🔒 Fixed a text-escaping issue that could break note fields containing quotes',
+    '🧹 Final pre-store audit pass across the codebase'
+  ]},
+  {version:'1.18.0',date:'Jun 2026',title:'Smart Notes',blurb:'You can now jot a quick note on any exercise while you train ("knee felt off on set 2") and the app will bring it back the next time that exercise comes up — injury notes come back highlighted so you ease in instead of guessing. You can also add notes to past workouts and leave a summary note when finishing a session.',items:[
+    '📝 Tap the note icon on any exercise to jot how it went — it resurfaces next session right under your last numbers',
+    '⚠️ Notes mentioning pain or tweaks come back highlighted with a reminder to warm up and ease in',
+    '🗒️ Optional session note when you finish a Session Mode workout',
+    '📔 Add or edit notes on already-logged workouts from the Logs tab (📝 button)',
+    '🏆 All notes now count toward The Bard achievement'
+  ]},
   {version:'1.17.0',date:'Jun 2026',title:'Smarter Home & Training Hints',blurb:'Your Home screen now tracks your progress over time, your workouts suggest what weight to try next, and achievements got their own page under Ranks → Badges.',items:[
     '📊 Progress tracker on Home — weekly volume, bodyweight trend, and monthly sessions, always framed around your goal',
     '📈 Progressive overload hints — every exercise shows your last numbers and what to aim for today',

@@ -20,7 +20,7 @@ let workoutView='menu';
 const $=id=>document.getElementById(id);
 
 // XSS protection: escape HTML in user/API-sourced strings
-function esc(s){if(!s)return'';const d=document.createElement('div');d.textContent=String(s);return d.innerHTML}
+function esc(s){if(!s)return'';const d=document.createElement('div');d.textContent=String(s);return d.innerHTML.replace(/"/g,'&quot;').replace(/'/g,'&#39;')}
 
 // Cleanup: cap unbounded data to prevent Firestore bloat
 async function cleanupOldData(){
@@ -117,6 +117,51 @@ auth.getRedirectResult().catch(err=>{
   }
 });
 const doLogout=()=>auth.signOut();
+// ═══════════ ACCOUNT DELETION (App Store requirement) ═══════════
+async function deleteAccount(){
+  if(!confirm('⚠️ DELETE YOUR ACCOUNT?\n\nThis permanently erases your account, all workout history, nutrition logs, achievements, and leaderboard entry.\n\nThis CANNOT be undone.'))return;
+  const typed=prompt('Type DELETE to confirm:');
+  if(typed!=='DELETE'){toast('Deletion cancelled');return}
+  const user=auth.currentUser;
+  if(!user){toast('Not signed in');return}
+  try{
+    // Recent-login requirement: re-authenticate first
+    const isGoogle=user.providerData.some(p=>p.providerId==='google.com');
+    if(isGoogle){
+      await user.reauthenticateWithPopup(new firebase.auth.GoogleAuthProvider());
+    }else{
+      const pw=prompt('Enter your password to confirm:');
+      if(!pw){toast('Deletion cancelled');return}
+      const cred=firebase.auth.EmailAuthProvider.credential(user.email,pw);
+      await user.reauthenticateWithCredential(cred);
+    }
+    toast('Deleting your data…');
+    // Delete client-reachable data: log + meta subcollections, user doc, leaderboard doc
+    const uid=user.uid;
+    for(const sub of ['log','meta']){
+      const snap=await db.collection('users').doc(uid).collection(sub).get();
+      // Firestore batches cap at 500 ops
+      const docs=snap.docs;
+      for(let i=0;i<docs.length;i+=400){
+        const batch=db.batch();
+        docs.slice(i,i+400).forEach(d=>batch.delete(d.ref));
+        await batch.commit();
+      }
+    }
+    await db.collection('leaderboard').doc(uid).delete().catch(()=>{});
+    if(userData&&userData.username)await db.collection('usernames').doc(userData.username).delete().catch(()=>{});
+    await db.collection('users').doc(uid).delete();
+    await user.delete();
+    try{localStorage.clear()}catch(e){}
+    alert('Your account and data have been deleted. Take care, hunter. ⚔️');
+    location.reload();
+  }catch(e){
+    console.error('[deleteAccount]',e);
+    if(e.code==='auth/wrong-password'||e.code==='auth/invalid-credential')toast('Wrong password — account NOT deleted');
+    else if(e.code==='auth/popup-closed-by-user')toast('Re-authentication cancelled — account NOT deleted');
+    else toast('Deletion failed: '+(e.code||e.message));
+  }
+}
 function friendlyErr(c){return{'auth/invalid-email':'Invalid email','auth/user-not-found':'No account','auth/wrong-password':'Wrong password','auth/email-already-in-use':'Email taken','auth/weak-password':'Password 6+ chars','auth/invalid-credential':'Invalid email or password','auth/too-many-requests':'Too many attempts','auth/requires-recent-login':'Sign out and back in first','auth/popup-closed-by-user':'Sign-in cancelled','auth/cancelled-popup-request':'Sign-in cancelled','auth/unauthorized-domain':'This domain isn\'t authorized for Google sign-in (admin: add it in Firebase Console)','auth/operation-not-allowed':'Google sign-in isn\'t enabled yet (admin: enable it in Firebase Console)','auth/popup-blocked':'Popup blocked — trying redirect...'}[c]||'Something went wrong'}
 
 // Safety: if loading screen is still showing after 8 seconds, force show auth
@@ -1219,9 +1264,12 @@ function renderDay(){const prog=userData.program||[],day=prog.find(d=>d.id===cur
   if(!sessionActive)h+=`<button class="start-session-btn" onclick="startSession()">▶ START SESSION · ${esc(day.title)}</button>`;
   // Day notes display at top (if set)
   if(day.notes)h+=`<div class="day-notes day-notes-top"><strong>📝 NOTES</strong><br>${esc(day.notes)}</div>`;
-  day.exercises.forEach((ex,ei)=>{h+=`<div class="exercise"><div class="ex-header"><span class="ex-num">${ei+1}</span><span class="ex-name">${ex.name}</span><button class="ex-edit" onclick="openEdit(${di},${ei})">✏️</button></div>`;
+  day.exercises.forEach((ex,ei)=>{h+=`<div class="exercise"><div class="ex-header"><span class="ex-num">${ei+1}</span><span class="ex-name">${ex.name}</span><button class="ex-edit" onclick="toggleExNote('${day.id}_e${ei}_note')" title="Session note">📝</button><button class="ex-edit" onclick="openEdit(${di},${ei})">✏️</button></div>`;
     if(ex.notes)h+=`<div class="ex-notes">${esc(ex.notes)}</div>`;
     h+=overloadHint(ex,lastMap);
+    const noteId=day.id+'_e'+ei+'_note';
+    const noteDraft=savedInputs[noteId]||'';
+    h+=`<div class="ex-note-row${noteDraft?' open':''}" id="row_${noteId}"><input type="text" class="ex-note-input" id="${noteId}" placeholder="Note for this session (e.g. knee felt off on set 2)" value="${esc(noteDraft)}" maxlength="200"></div>`;
     h+=`<div class="sets-grid">`;
     for(let s=0;s<ex.sets;s++){const wK=day.id+'_e'+ei+'_s'+s+'_w',rK=day.id+'_e'+ei+'_s'+s+'_r',cK=day.id+'_e'+ei+'_s'+s+'_c';
       if(ex.isTime)h+=`<div class="set-row"><label>S${s+1}</label><input type="number" id="${rK}" placeholder="sec" value="${savedInputs[rK]||''}"><span class="sep">sec</span><input type="checkbox" id="${cK}" ${savedInputs[cK]?'checked':''}><span class="target">${ex.reps}</span></div>`;
@@ -1230,37 +1278,82 @@ function renderDay(){const prog=userData.program||[],day=prog.find(d=>d.id===cur
   h+=`<button class="add-ex" onclick="openAdd(${di})">+ Add Exercise</button>`;
   $('dayContent').innerHTML=h}
 
+// ═══════════ SMART NOTES ═══════════
+const INJURY_RX=/(pain|hurt|injur|buckl|tweak|pinch|click|pop|strain|sharp|numb|swell)/i;
+function toggleExNote(noteId){
+  const row=$('row_'+noteId);if(!row)return;
+  row.classList.toggle('open');
+  if(row.classList.contains('open')){const inp=$(noteId);if(inp)setTimeout(()=>inp.focus(),50)}
+}
+// Add or edit a note on an already-logged entry (from the Logs tab)
+async function editLogNote(id){
+  const entry=workoutLog.find(e=>e._id===id);
+  if(!entry){toast('Entry not found — refresh and try again');return}
+  const note=prompt('Note for this entry:',entry.notes||'');
+  if(note===null)return; // cancelled
+  entry.notes=note.trim();
+  try{
+    await db.collection('users').doc(U.uid).collection('log').doc(id).update({notes:entry.notes});
+    if(INJURY_RX.test(entry.notes))toast('⚠️ Noted. The System will flag this on that exercise\'s next session.');
+    else toast(entry.notes?'📝 Note saved':'Note removed');
+    renderLog();
+  }catch(e){console.error(e);toast('Save failed: '+e.message)}
+}
 // ═══════════ PROGRESSIVE OVERLOAD HINTS ═══════════
 // Map of exercise name → most recent logged best set, built once per render
 function buildLastSetMap(){
   const map={};
-  for(const e of getLiftLogs()){ // newest-first, so first hit per exercise wins
+  for(const e of getLiftLogs()){ // newest-first
     if(!Array.isArray(e.exercises))continue;
     for(const ex of e.exercises){
       const key=(ex.name||'').toLowerCase().trim();
-      if(!key||map[key])continue;
-      let best=null;
-      (ex.sets||[]).forEach(s=>{
-        const w=parseFloat(s.weight)||0,r=parseFloat(s.reps)||0;
-        if(w>0&&r>0&&(!best||w>best.w||(w===best.w&&r>best.r)))best={w,r};
-      });
-      if(best)map[key]={...best,date:e.date};
+      if(!key)continue;
+      if(!map[key])map[key]={};
+      // Most recent best set (first found wins)
+      if(!map[key].best){
+        let best=null;
+        (ex.sets||[]).forEach(s=>{
+          const w=parseFloat(s.weight)||0,r=parseFloat(s.reps)||0;
+          if(w>0&&r>0&&(!best||w>best.w||(w===best.w&&r>best.r)))best={w,r};
+        });
+        if(best)map[key].best={...best,date:e.date};
+      }
+      // Most recent note for this exercise (may live on a different entry than the best set)
+      if(!map[key].note&&ex.note&&String(ex.note).trim()){
+        map[key].note=String(ex.note).trim();map[key].noteDate=e.date;
+      }
     }
   }
   return map;
 }
 function overloadHint(ex,lastMap){
   if(ex.isTime)return '';
-  const last=lastMap[(ex.name||'').toLowerCase().trim()];
-  if(!last)return '';
-  const m=String(ex.reps||'').match(/(\d+)\s*-\s*(\d+)/);
-  const upper=m?parseInt(m[2]):parseInt(ex.reps)||0;
-  const ago=Math.round((Date.now()-new Date(last.date).getTime())/86400000);
-  const agoTxt=ago<=0?'today':ago===1?'yesterday':ago+'d ago';
-  if(upper&&last.r>=upper){
-    return `<div class="ex-hint up">📈 Last: ${last.w}×${last.r} (${agoTxt}) — rep range topped, try <strong>${last.w+5} lbs</strong></div>`;
+  const rec=lastMap[(ex.name||'').toLowerCase().trim()];
+  if(!rec)return '';
+  let h='';
+  const last=rec.best;
+  if(last){
+    const m=String(ex.reps||'').match(/(\d+)\s*-\s*(\d+)/);
+    const upper=m?parseInt(m[2]):parseInt(ex.reps)||0;
+    const ago=Math.round((Date.now()-new Date(last.date).getTime())/86400000);
+    const agoTxt=ago<=0?'today':ago===1?'yesterday':ago+'d ago';
+    if(upper&&last.r>=upper){
+      h+=`<div class="ex-hint up">📈 Last: ${last.w}×${last.r} (${agoTxt}) — rep range topped, try <strong>${last.w+5} lbs</strong></div>`;
+    }else{
+      h+=`<div class="ex-hint">🎯 Last: ${last.w}×${last.r} (${agoTxt}) — match the weight, beat the reps</div>`;
+    }
   }
-  return `<div class="ex-hint">🎯 Last: ${last.w}×${last.r} (${agoTxt}) — match the weight, beat the reps</div>`;
+  // Resurface the most recent note — injury notes come back LOUD
+  if(rec.note){
+    const nAgo=Math.round((Date.now()-new Date(rec.noteDate).getTime())/86400000);
+    const nAgoTxt=nAgo<=0?'today':nAgo===1?'yesterday':nAgo+'d ago';
+    if(INJURY_RX.test(rec.note)){
+      h+=`<div class="ex-hint warn">⚠️ Last time (${nAgoTxt}): "${esc(rec.note)}" — ease in, longer warm-up today</div>`;
+    }else{
+      h+=`<div class="ex-hint note">📝 Last time (${nAgoTxt}): "${esc(rec.note)}"</div>`;
+    }
+  }
+  return h;
 }
 // ═══════════ SESSION MODE ═══════════
 // Session overlays the regular workout day view rather than rendering a separate page.
@@ -1387,12 +1480,13 @@ function exitSessionUI(){
 async function finishSession(){
   if(!sessionActive)return;
   if(!confirm('Finish this session? Your workout will be logged.'))return;
+  const sessionNote=prompt('Session note? (optional — how did it go?)','')||'';
   let elapsed=Date.now()-sessionStartMs-sessionPausedMs;
   if(sessionPauseStartMs)elapsed-=(Date.now()-sessionPauseStartMs);
   const durationSec=Math.max(0,Math.floor(elapsed/1000));
   clearInterval(sessionTimerHandle);sessionTimerHandle=null;
   // Save the session log — reads from the SAME #dayContent inputs
-  await logWorkoutWithSession(sessionDayId,durationSec);
+  await logWorkoutWithSession(sessionDayId,durationSec,sessionNote);
   sessionActive=false;clearPersistedSession();sessionStartMs=null;sessionPausedMs=0;sessionPauseStartMs=null;sessionDayId=null;restEndMs=null;
   exitSessionUI();
   buildWorkout();
@@ -1413,7 +1507,7 @@ async function deleteEx(){if(!editTarget||!confirm('Remove?'))return;captureInpu
 function openAdd(di){addDayIdx=di;$('addName').value='';$('addSets').value=3;$('addReps').value='';$('addNotes').value='';$('addModal').classList.add('open')}
 function closeAdd(){$('addModal').classList.remove('open')}
 async function saveAdd(){if(addDayIdx===null)return;const name=$('addName').value.trim();if(!name){toast('Enter a name');return}captureInputs();userData.program[addDayIdx].exercises.push({name,sets:parseInt($('addSets').value)||3,reps:$('addReps').value.trim()||'8-12',notes:$('addNotes').value.trim(),isTime:/sec|s$/i.test($('addReps').value)});await saveUser({program:userData.program});closeAdd();renderDay();toast('Added!')}
-function captureInputs(){document.querySelectorAll('#dayContent input[type=number]').forEach(el=>{if(el.id)savedInputs[el.id]=el.value});document.querySelectorAll('#dayContent input[type=checkbox]').forEach(el=>{if(el.id)savedInputs[el.id]=el.checked})}
+function captureInputs(){document.querySelectorAll('#dayContent input[type=number]').forEach(el=>{if(el.id)savedInputs[el.id]=el.value});document.querySelectorAll('#dayContent input[type=checkbox]').forEach(el=>{if(el.id)savedInputs[el.id]=el.checked});document.querySelectorAll('#dayContent input.ex-note-input').forEach(el=>{if(el.id)savedInputs[el.id]=el.value})}
 async function saveInputs(){captureInputs();await db.collection('users').doc(U.uid).collection('meta').doc('inputs').set({data:savedInputs});toast('Saved!')}
 function clearInputs(){if(!confirm('Clear inputs?'))return;document.querySelectorAll('#dayContent input[type=number]').forEach(el=>el.value='');document.querySelectorAll('#dayContent input[type=checkbox]').forEach(el=>el.checked=false);toast('Cleared.')}
 
@@ -1422,8 +1516,8 @@ let logLock=false;
 async function logWorkout(){
   return logWorkoutWithOptions({});
 }
-async function logWorkoutWithSession(dayId,durationSec){
-  return logWorkoutWithOptions({sessionDayId:dayId,durationSec});
+async function logWorkoutWithSession(dayId,durationSec,sessionNote){
+  return logWorkoutWithOptions({sessionDayId:dayId,durationSec,sessionNote});
 }
 async function logWorkoutWithOptions(opts){
   if(logLock)return;logLock=true;
@@ -1440,9 +1534,14 @@ async function logWorkoutWithOptions(opts){
   if(opts.durationSec)entry.durationSec=opts.durationSec;
   if(isBackdated)entry.backdated=true;
   let hasData=false,allDone=true,maxW=0;
-  day.exercises.forEach((ex,ei)=>{const sets=[];for(let s=0;s<ex.sets;s++){const wEl=$(day.id+'_e'+ei+'_s'+s+'_w'),rEl=$(day.id+'_e'+ei+'_s'+s+'_r'),cEl=$(day.id+'_e'+ei+'_s'+s+'_c');const w=wEl?wEl.value:'',r=rEl?rEl.value:'',d=cEl?cEl.checked:false;if(w||r)hasData=true;if(!d)allDone=false;if(parseInt(w)>maxW)maxW=parseInt(w);sets.push({weight:w,reps:r,done:d,isTime:!!ex.isTime})}entry.exercises.push({name:ex.name,sets})});
+  day.exercises.forEach((ex,ei)=>{const sets=[];for(let s=0;s<ex.sets;s++){const wEl=$(day.id+'_e'+ei+'_s'+s+'_w'),rEl=$(day.id+'_e'+ei+'_s'+s+'_r'),cEl=$(day.id+'_e'+ei+'_s'+s+'_c');const w=wEl?wEl.value:'',r=rEl?rEl.value:'',d=cEl?cEl.checked:false;if(w||r)hasData=true;if(!d)allDone=false;if(parseInt(w)>maxW)maxW=parseInt(w);sets.push({weight:w,reps:r,done:d,isTime:!!ex.isTime})}const exObj={name:ex.name,sets};const nEl=$(day.id+'_e'+ei+'_note');if(nEl&&nEl.value.trim())exObj.note=nEl.value.trim();entry.exercises.push(exObj)});
+  if(opts.sessionNote&&String(opts.sessionNote).trim())entry.notes=String(opts.sessionNote).trim();
   if(!hasData){toast('Fill in sets!');logLock=false;return}
   const ref=await db.collection('users').doc(U.uid).collection('log').add(entry);entry._id=ref.id;workoutLog.unshift(entry);
+  // Notes are per-session: clear drafts for this day after logging
+  day.exercises.forEach((ex,ei)=>{const nid=day.id+'_e'+ei+'_note';delete savedInputs[nid];const nEl=$(nid);if(nEl)nEl.value=''});
+  const anyInjury=entry.exercises.some(ex=>ex.note&&INJURY_RX.test(ex.note))||(entry.notes&&INJURY_RX.test(entry.notes));
+  if(anyInjury)toast('⚠️ Injury note saved — The System will flag it next session.');
   if(isBackdated)unlockAch('the_historian');
   let xp=50;if(allDone)xp+=50;
   if(isBackdated)xp=0;
@@ -1550,7 +1649,8 @@ async function logAllDays(){
     if(!hasData)continue;
     // Build entry from savedInputs
     const entry={dayId:day.id,dayTitle:day.title,date:new Date().toISOString(),exercises:[]};let allDone=true,maxW=0;
-    day.exercises.forEach((ex,ei)=>{const sets=[];for(let s=0;s<ex.sets;s++){const w=savedInputs[day.id+'_e'+ei+'_s'+s+'_w']||'',r=savedInputs[day.id+'_e'+ei+'_s'+s+'_r']||'',d=!!savedInputs[day.id+'_e'+ei+'_s'+s+'_c'];if(!d)allDone=false;if(parseInt(w)>maxW)maxW=parseInt(w);sets.push({weight:w,reps:r,done:d,isTime:!!ex.isTime})}entry.exercises.push({name:ex.name,sets})});
+    day.exercises.forEach((ex,ei)=>{const sets=[];for(let s=0;s<ex.sets;s++){const w=savedInputs[day.id+'_e'+ei+'_s'+s+'_w']||'',r=savedInputs[day.id+'_e'+ei+'_s'+s+'_r']||'',d=!!savedInputs[day.id+'_e'+ei+'_s'+s+'_c'];if(!d)allDone=false;if(parseInt(w)>maxW)maxW=parseInt(w);sets.push({weight:w,reps:r,done:d,isTime:!!ex.isTime})}const exObj={name:ex.name,sets};const nEl=$(day.id+'_e'+ei+'_note');if(nEl&&nEl.value.trim())exObj.note=nEl.value.trim();entry.exercises.push(exObj)});
+  if(opts.sessionNote&&String(opts.sessionNote).trim())entry.notes=String(opts.sessionNote).trim();
     const ref=await db.collection('users').doc(U.uid).collection('log').add(entry);entry._id=ref.id;workoutLog.unshift(entry);
     let xp=50;if(allDone)xp+=50;totalXp+=xp;logged++;
     // Clear savedInputs for this day after logging
@@ -2228,11 +2328,11 @@ function renderLog(){const c=$('logContent');if(!workoutLog.length){c.innerHTML=
         const maxS=Math.max(...exs.map(x=>x.sets.length));
         const bd=entry.backdated?' <span style="color:var(--gold);font-size:.6rem;font-weight:700;margin-left:4px">📅 BACKDATED</span>':'';
         const dur=entry.durationSec?' <span style="color:var(--accent);font-size:.62rem;font-weight:700;margin-left:4px">⏱ '+Math.floor(entry.durationSec/60)+'m</span>':'';
-        h+='<div class="day-log"><div class="day-log-head"><span class="day-log-title">'+esc(entry.dayTitle||'Workout')+bd+dur+'</span><span><span class="day-log-date">'+ds+'</span> <button class="btn-del" onclick="delLog(\''+entry._id+'\')">✕</button></span></div><div class="log-table-wrap"><table class="log-table"><thead><tr><th>Exercise</th>';
+        h+='<div class="day-log"><div class="day-log-head"><span class="day-log-title">'+esc(entry.dayTitle||'Workout')+bd+dur+'</span><span><span class="day-log-date">'+ds+'</span> <button class="btn-del" style="margin-right:2px" onclick="editLogNote(\''+entry._id+'\')">📝</button><button class="btn-del" onclick="delLog(\''+entry._id+'\')">✕</button></span></div>'+(entry.notes?'<div class="log-note'+(INJURY_RX.test(entry.notes)?' warn':'')+'">'+(INJURY_RX.test(entry.notes)?'⚠️ ':'📝 ')+esc(entry.notes)+'</div>':'')+'<div class="log-table-wrap"><table class="log-table"><thead><tr><th>Exercise</th>';
         for(let i=0;i<maxS;i++)h+='<th>S'+(i+1)+'</th>';h+='</tr></thead><tbody>';
         exs.forEach(ex=>{
           if(!ex.sets.some(s=>s&&(s.reps||s.weight)))return;
-          h+='<tr><td style="font-weight:600;font-size:.74rem;max-width:120px;overflow:hidden;text-overflow:ellipsis">'+esc(ex.name)+'</td>';
+          h+='<tr><td style="font-weight:600;font-size:.74rem;max-width:120px;overflow:hidden;text-overflow:ellipsis">'+esc(ex.name)+(ex.note?'<div class="log-ex-note'+(INJURY_RX.test(ex.note)?' warn':'')+'">'+(INJURY_RX.test(ex.note)?'⚠️ ':'📝 ')+esc(ex.note)+'</div>':'')+'</td>';
           for(let i=0;i<maxS;i++){const s=ex.sets[i];if(!s||(!s.reps&&!s.weight)){h+='<td class="c-empty">—</td>';continue}const cls=s.done?'c-done':'c-miss';h+=s.isTime?'<td class="'+cls+'">'+(s.reps||0)+'s'+(s.done?' ✓':'')+'</td>':'<td class="'+cls+'">'+(s.weight||0)+'×'+(s.reps||0)+(s.done?' ✓':'')+'</td>'}
           h+='</tr>';
         });
@@ -2593,7 +2693,7 @@ async function checkPassiveAchievements(){
     if(timed.some(e=>e.durationSec>=90*60))U('marathon_session');
     if(timed.some(e=>{if(e.durationSec>=45*60||e.isRest||e.isActivity)return false;const sets=(e.exercises||[]).flatMap(ex=>ex.sets||[]);const filled=sets.filter(s=>s&&((s.weight&&String(s.weight).trim())||(s.reps&&String(s.reps).trim())));return filled.length>0&&filled.every(s=>s.done)}))U('efficient_killer');
     // The Bard: 10 entries with notes
-    if(workoutLog.filter(e=>e.notes&&String(e.notes).trim()).length>=10)U('the_bard');
+    if(workoutLog.filter(e=>(e.notes&&String(e.notes).trim())||(e.exercises||[]).some(ex=>ex.note&&String(ex.note).trim())).length>=10)U('the_bard');
     // Trials + levels
     if((userData.trialsCompleted||[]).length>=3)U('trial_legends');
     const lvl=getLevelInfo();
