@@ -1011,3 +1011,16 @@ input[type=checkbox]:checked::after{content:'✓';position:absolute;color:#fff;f
 .update-toggle{font-family:var(--font-mono);font-size:.62rem;color:var(--accent);cursor:pointer;padding:4px 0;letter-spacing:.5px}
 .update-items.collapsible{display:none}
 .update-items.collapsible.open{display:block}
+
+/* ══ v1.18.0 — Smart Notes ══ */
+.ex-note-row{display:none;margin:2px 0 8px}
+.ex-note-row.open{display:block}
+.ex-note-input{width:100%;padding:8px 10px;background:var(--surface);border:1px solid rgba(251,191,36,.3);border-radius:8px;color:var(--text);font-size:.74rem;font-family:var(--font-body)}
+.ex-note-input::placeholder{color:var(--dim)}
+.ex-note-input:focus{outline:none;border-color:var(--gold)}
+.ex-hint.warn{color:var(--gold);border-left-color:var(--gold);background:rgba(251,191,36,.08);font-weight:600}
+.ex-hint.note{color:var(--muted);border-left-color:rgba(251,191,36,.4)}
+.log-note{padding:6px 10px;font-size:.7rem;color:var(--muted);font-style:italic;border-bottom:1px dashed var(--border)}
+.log-note.warn{color:var(--gold)}
+.log-ex-note{font-weight:400;font-size:.62rem;color:var(--dim);font-style:italic;margin-top:2px;white-space:normal}
+.log-ex-note.warn{color:var(--gold)}

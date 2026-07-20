@@ -376,11 +376,15 @@ function initApp(){
 // One-time Iron Gate pass for the founder account (skip, not pass — no bonus XP)
 async function grantFounderPass(){
   if(userData.username!=='gyabinlee11')return;
-  if((userData.trialsCompleted||[]).includes('iron_gate'))return;
-  userData.trialsCompleted.push('iron_gate');
-  await saveUser({trialsCompleted:userData.trialsCompleted});
+  if(userData.founderARankGranted)return; // one-time guard
+  const tc=userData.trialsCompleted||[];
+  if(!tc.includes('iron_gate'))tc.push('iron_gate');
+  if(!tc.includes('gauntlet'))tc.push('gauntlet');
+  userData.trialsCompleted=tc;
+  userData.xp=(userData.xp||0)+3000;
+  userData.founderARankGranted=true;
+  await saveUser({trialsCompleted:tc,xp:userData.xp,founderARankGranted:true});
   await saveLeaderboard();updateTopBar();checkRankUp();
-  toast('⚔️ The System has granted you passage through the Iron Gate.');
 }
 // ═══════════ WEEKLY RECAP ═══════════
 // Shown once per week, on first open of a new week — summarizes LAST week.

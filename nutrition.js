@@ -622,9 +622,10 @@ function openMacroModal(){
     <option value="10000"${(userData.dailySteps||'')==='10000'?' selected':''}>~10,000 (very active)</option>
     <option value="12000"${(userData.dailySteps||'')==='12000'?' selected':''}>~12,000+</option>
   </select></div>`;
-  h+=`<div class="m-field"><label>Goal</label><select id="macroGoal">${goalOpts.map(g=>`<option value="${g.v}"${curGoal===g.v?' selected':''}>${g.l}</option>`).join('')}</select></div>`;
+  h+=`<div class="m-field"><label>Goal</label><select id="macroGoal" onchange="onGoalChange()">${goalOpts.map(g=>`<option value="${g.v}"${curGoal===g.v?' selected':''}>${g.l}</option>`).join('')}</select></div>`;
   h+=`<div class="settings-section">CUSTOM OVERRIDES</div>`;
   h+=`<label class="toggle-row" style="margin:.3rem 0"><input type="checkbox" class="toggle-cb" id="macroCustomToggle" onchange="toggleMacroFields()" ${cm&&cm.enabled?'checked':''}><span>Override auto-calculated macros</span></label>`;
+  h+=`<div class="macro-custom-field"><button type="button" class="tdee-adjust-btn" style="width:100%;margin-bottom:.4rem;font-size:.66rem" onclick="onGoalChange()">↻ Reset calories & macros from my goal</button></div>`;
   h+=`<div class="macro-custom-field"><div class="m-field"><label>Target Calories</label><input type="number" id="macroCalories" value="${cm.calories||(t?t.target:2000)}" oninput="recalcMacros('cal')"></div></div>`;
   h+=`<div class="settings-row-fields macro-custom-field">
     <div class="m-field" style="flex:1"><label>Protein (g) <span class="macro-auto-tag" id="macroAutoP"></span></label><input type="number" id="macroProtein" value="${cm.protein||(t?t.proteinG:150)}" oninput="recalcMacros('protein')"></div>
@@ -648,6 +649,41 @@ function toggleMacroFields(){
   if(c)recalcMacros('init');
 }
 let lastMacroEdit='carbs'; // tracks which field auto-adjusts
+// Goal dropdown changed → recompute the target calories from the new deficit and
+// push it into the calorie field, so switching plans (e.g. Aggressive Cut) actually
+// re-targets even when custom override is on. This was the "keeps maintenance" bug.
+function onGoalChange(){
+  const goal=$('macroGoal').value||'';
+  // Recompute a fresh TDEE target for the chosen goal, independent of current custom cal
+  const st=userData.stats||{};
+  const w=parseFloat(st.weight),a=parseFloat(st.age),hRaw=st.height||'';
+  if(!w||!a||!hRaw)return;
+  let hCm=0;
+  const hNorm=String(hRaw).replace(/[\u2018\u2019\u0060\u00B4]/g,"'").replace(/[\u201C\u201D]/g,'"').trim();
+  if(hNorm.includes("'")){const p=hNorm.replace(/"/g,'').split("'");hCm=((parseInt(p[0])||0)*12+(parseInt(p[1])||0))*2.54}
+  else if(hNorm.toLowerCase().includes('cm'))hCm=parseFloat(hNorm);
+  else{const n=parseFloat(hNorm);hCm=n>100?n:n>10?n*2.54:(n*12)*2.54}
+  if(!hCm)return;
+  const wKg=w*0.453592,sex=(st.sex||'male');
+  const bmr=sex==='female'?(10*wKg+6.25*hCm-5*a-161):(10*wKg+6.25*hCm-5*a+5);
+  const al=ACTIVITY_LEVELS.find(x=>x.id===($('macroActivity').value||'moderate'))||ACTIVITY_LEVELS[2];
+  const stepBonus=stepsToCalories(parseInt($('macroSteps').value)||0);
+  const tdee=Math.round(bmr*al.mult)+stepBonus;
+  let target=tdee;
+  if(goal.includes('Aggressive'))      target=tdee-750;
+  else if(goal.includes('Moderate'))   target=tdee-500;
+  else if(goal.includes('Fat Loss'))   target=tdee-400;
+  else if(goal.includes('Mild'))       target=tdee-250;
+  else if(goal.includes('Lean Bulk'))  target=tdee+250;
+  else if(goal.includes('Bulk'))       target=tdee+500;
+  else if(goal.includes('Recomp'))     target=tdee-100;
+  else if(goal.includes('Muscle Gain'))target=tdee+300;
+  const calEl=$('macroCalories');
+  if(calEl){calEl.value=target;recalcMacros('cal')}
+  // Live breakdown line update
+  const bd=document.querySelector('.macro-breakdown');
+  if(bd)bd.innerHTML=`BMR: ${Math.round(bmr)} · Maintenance: <strong>${tdee}</strong>${stepBonus?' (+'+stepBonus+' steps)':''} · Target: <strong>${target}</strong>${target!==tdee?' ('+(target-tdee>0?'+':'')+(target-tdee)+')':''}`;
+}
 function recalcMacros(source){
   const calEl=$('macroCalories'),pEl=$('macroProtein'),fEl=$('macroFat'),cEl=$('macroCarbs'),preview=$('macroPreview');
   if(!calEl||!pEl||!fEl||!cEl)return;
