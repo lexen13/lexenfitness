@@ -1,9 +1,15 @@
 // ═══════════════════════════════════════════
 //  LEXENFITNESS — DATA v4 (Solo Leveling)
 // ═══════════════════════════════════════════
-const APP_VERSION='1.19.2';
+const APP_VERSION='1.20.0';
 const WELCOME_MESSAGE=`Welcome to Lexen Fitness! A Solo-Leveling inspired, gamified Fitness App to help friends and family stay motivated by giving fitness a game-like experience.\n\nThis app is developed by one person, and is very much still in the testing phase. Not everything will be perfect, but please bear with me. If you have any suggestions, feel free to pass them along as I continue to make this the best app that I can, before I actually have to start buying dev rights with Apple and Google.\n\nFeel free to share this with your own family and friends as we build a community that becomes healthier together!\n\n— Gavin (founder)`;
 const CHANGELOG=[
+  {version:'1.20.0',date:'Jul 2026',title:'Clearer Targets & Deficit Safety',blurb:'Your nutrition card now shows the actual calorie target you\'re eating to, not just maintenance and a deficit you had to subtract yourself. Aggressive cuts also come with a plain-English heads-up and a "Learn more" guide on deficits and their risks.',items:[
+    '🎯 Target calories now shown directly on the nutrition card',
+    '⚖️ Deficits of 20%+ (or very low daily calories) surface a short, non-judgy heads-up — this fires on custom overrides too, not just presets',
+    '📖 New "Deficits & Risks" guide covering sustainable vs aggressive vs severe cuts, why protein matters, and diet breaks',
+    '🛟 Setting a custom target under 1,200 cal now asks you to confirm first'
+  ]},
   {version:'1.19.1',date:'Jun 2026',title:'HOTFIX: Nutrition Goal Not Recalculating',blurb:'Fixed a bug where switching your nutrition plan (e.g. to Aggressive Cut) kept your old maintenance calories instead of applying the new deficit. Changing your goal now instantly updates your calorie and macro targets, and there\'s a new "Reset from my goal" button if your numbers ever look stuck.',items:[
     '🔧 Changing the Goal dropdown now recalculates target calories and macros live — even with custom overrides on',
     '↻ New "Reset calories & macros from my goal" button in Adjust Targets → Custom Overrides',

@@ -1024,3 +1024,13 @@ input[type=checkbox]:checked::after{content:'✓';position:absolute;color:#fff;f
 .log-note.warn{color:var(--gold)}
 .log-ex-note{font-weight:400;font-size:.62rem;color:var(--dim);font-style:italic;margin-top:2px;white-space:normal}
 .log-ex-note.warn{color:var(--gold)}
+
+/* ══ v1.20.0 — Deficit safety ══ */
+.deficit-warn{margin-top:.5rem;padding:10px 12px;background:rgba(96,165,250,.06);border:1px solid rgba(96,165,250,.28);border-radius:10px}
+.deficit-warn.severe{background:rgba(251,191,36,.07);border-color:rgba(251,191,36,.35)}
+.dw-msg{font-size:.7rem;line-height:1.5;color:var(--muted)}
+.deficit-warn.severe .dw-msg{color:var(--gold)}
+.dw-learn{margin-top:6px;background:none;border:none;color:var(--accent);font-family:var(--font-mono);font-size:.64rem;font-weight:700;cursor:pointer;padding:2px 0;letter-spacing:.3px}
+.di-block{margin-bottom:.7rem;padding:9px 11px;background:var(--surface);border:1px solid var(--border);border-radius:9px}
+.di-h{font-family:var(--font-display);font-size:.82rem;font-weight:800;margin-bottom:3px}
+.di-t{font-size:.72rem;line-height:1.5;color:var(--muted)}

@@ -90,6 +90,31 @@ let foodLogDate=null;
 let activeMeal=1; // which meal we're adding food to
 
 // ═══════════ MAIN RENDER ═══════════
+// Deficit safety check — evaluates the ACTUAL target vs maintenance, so it fires
+// whether the number came from a preset OR a custom override. Informs, never scolds.
+function deficitWarning(t){
+  if(!t||!t.maintenance||!t.target)return '';
+  const deficit=t.target-t.maintenance; // negative = cut
+  if(deficit>=0)return '';
+  const pctBelow=Math.abs(deficit)/t.maintenance*100;
+  const bigPct=pctBelow>=20;
+  const lowFloor=t.target<1500;
+  if(!bigPct&&!lowFloor)return '';
+  let msg='',severe=false;
+  if(t.target<1200){
+    severe=true;
+    msg=`${t.target} cal/day is very low. Sustained intake this low risks muscle loss, hormonal disruption, and rebound weight gain. Strongly consider a smaller deficit.`;
+  }else if(pctBelow>=25){
+    severe=true;
+    msg=`That's a ${Math.round(pctBelow)}% deficit — steeper than most people can hold. Expect training, sleep, and muscle retention to suffer. Worth easing off unless this is a short, deliberate push.`;
+  }else if(lowFloor){
+    msg=`${t.target} cal/day is on the low side — workable short-term, but hard to sustain and hard to hit your ${t.proteinG}g protein goal. Keep an eye on energy and recovery.`;
+  }else{
+    msg=`Heads up: that's a ${Math.round(pctBelow)}% deficit — an aggressive cut. Good for faster loss, but keep protein high and expect training to feel harder. Best run in shorter blocks than months on end.`;
+  }
+  return `<div class="deficit-warn${severe?' severe':''}"><div class="dw-msg">${severe?'⚠️':'ℹ️'} ${msg}</div><button type="button" class="dw-learn" onclick="openDeficitInfo()">Learn more about deficits &amp; risks →</button></div>`;
+}
+function openDeficitInfo(){const m=$('deficitInfoModal');if(m)m.classList.add('open')}
 function renderNutritionPage(){
   const today=getTodayStr();
   const viewDate=foodLogDate||today;
@@ -143,7 +168,8 @@ function renderNutritionPage(){
   h+=`<div class="tdee-card">
     <div class="tdee-header">${t.custom?'CUSTOM':'AUTO'} · ${t.goal.toUpperCase()} · ${t.actName}${t.steps?' · ~'+t.steps+' steps':''}</div>
     <div class="tdee-main"><div class="tdee-cal${calOver?' over':''}">${totals.cal} <span style="font-size:1.2rem;opacity:.5">/ ${t.target}</span></div><div class="tdee-cal-label">CALORIES${calOver?' ⚠️ OVER':''}${!calOver&&calPct>=90?' ✅ ON TRACK':''}</div></div>
-    ${t.deficit?`<div class="tdee-maintenance">Maintenance: ${t.maintenance} cal · ${t.deficit>0?'+':''}<span style="color:${t.deficit<0?'var(--green)':'var(--gold)'}"> ${t.deficit>0?'+':''}${t.deficit}</span> cal ${t.deficit<0?'deficit':'surplus'}</div>`:''}
+    ${t.deficit?`<div class="tdee-maintenance">Maintenance: ${t.maintenance} · <span style="color:${t.deficit<0?'var(--green)':'var(--gold)'}">${t.deficit>0?'+':''}${t.deficit}</span> ${t.deficit<0?'deficit':'surplus'} → <strong style="color:var(--text)">Target: ${t.target} cal</strong></div>`:`<div class="tdee-maintenance">Maintenance / Target: <strong style="color:var(--text)">${t.target} cal</strong></div>`}
+    ${deficitWarning(t)}
     <div class="macro-bars">
       <div class="macro-bar-row"><span class="macro-label" style="color:var(--red)">P ${totals.p}/${t.proteinG}g</span><div class="macro-bar"><div class="macro-bar-fill" style="width:${pPct}%;background:var(--red)"></div></div></div>
       <div class="macro-bar-row"><span class="macro-label" style="color:var(--gold)">C ${totals.c}/${t.carbG}g</span><div class="macro-bar"><div class="macro-bar-fill" style="width:${cPct}%;background:var(--gold)"></div></div></div>
@@ -749,6 +775,10 @@ async function saveMacroSettings(){
     sex:$('macroSex').value
   };
   const cm=$('macroCustomToggle').checked?{enabled:true,calories:parseInt($('macroCalories').value)||0,protein:parseInt($('macroProtein').value)||0,carbs:parseInt($('macroCarbs').value)||0,fat:parseInt($('macroFat').value)||0}:{enabled:false};
+  // Safety net: custom overrides bypass the preset deficits, so check the raw number too
+  if(cm.enabled&&cm.calories>0&&cm.calories<1200){
+    if(!confirm(`⚠️ ${cm.calories} cal/day is very low.\n\nSustained intake this low risks muscle loss, hormonal disruption, and rebound weight gain.\n\nSave anyway?`))return;
+  }
   await saveUser({stats,activityLevel:$('macroActivity').value,dailySteps:$('macroSteps').value,nutritionGoal:$('macroGoal').value,customMacros:cm});
   closeMacroModal();renderNutritionPage();toast('Nutrition settings saved!');
 }
