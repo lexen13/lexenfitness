@@ -1,9 +1,31 @@
 // ═══════════════════════════════════════════
 //  LEXENFITNESS — DATA v4 (Solo Leveling)
 // ═══════════════════════════════════════════
-const APP_VERSION='1.20.0';
+const APP_VERSION='1.23.0';
 const WELCOME_MESSAGE=`Welcome to Lexen Fitness! A Solo-Leveling inspired, gamified Fitness App to help friends and family stay motivated by giving fitness a game-like experience.\n\nThis app is developed by one person, and is very much still in the testing phase. Not everything will be perfect, but please bear with me. If you have any suggestions, feel free to pass them along as I continue to make this the best app that I can, before I actually have to start buying dev rights with Apple and Google.\n\nFeel free to share this with your own family and friends as we build a community that becomes healthier together!\n\n— Gavin (founder)`;
 const CHANGELOG=[
+  {version:'1.23.0',date:'Jul 2026',title:'Supersets, The New Awakening & Ascension',blurb:'Supersets are now a real feature — paired movements show as a linked block and the rest timer knows to wait until you finish both. The S-Rank trial has been rebuilt into two phases so a single bad day can never undo months of work, and reaching S-Rank now triggers a full ascension sequence. Exercise history also survives renaming, and the log is easier to scan.',items:[
+    '⇄ Native superset support — pair any two exercises (2A/2B) in the editor; rest timer holds until the pair is done. Gym packed? Straight through still works',
+    '👁️ THE AWAKENING rebuilt: Phase I is cumulative (100 sessions · 12 perfect weeks · 20 all-mission days) and can never be lost. Phase II is a retryable 14-day final exam',
+    '🔒 Weeks bought with shards do NOT count toward S-Rank. The pinnacle can not be purchased',
+    '✨ Reaching S-RANK now triggers a full-screen ascension sequence',
+    '🔎 Exercise history now survives renaming — "DB Bench Press" and "Dumbbell Bench Press" share numbers, while Seated and Standing variations stay correctly separate',
+    '📖 Logs are easier to scan — day-of-week chips on every entry and session counts on each week',
+    '📋 New plans assigned to a few hunters'
+  ]},
+  {version:'1.22.0',date:'Jul 2026',title:'Welcome Shards & Assigned Plans',blurb:'Everyone starts with 150 shards on the house. The Perfect Week Buyback now explains exactly what qualifies and tells you week-by-week why anything was turned down. The System can also hand out training plans directly.',items:[
+    '💠 One-time +150 shard welcome grant for all existing users',
+    '🗓️ Buyback now shows the full rulebook and a per-week reason when nothing qualifies',
+    '⚔️ The System can now assign a training plan — delivered as a notice you must accept, so it can never be missed by tapping away',
+    '📋 Assigned plans replace your workout days but never touch your logged history'
+  ]},
+  {version:'1.21.0',date:'Jul 2026',title:'System Shards',blurb:'A new earned currency. Bank shards from achievements, all-mission days, perfect weeks, and trials — then spend them to revive a broken streak, claim back a week you missed by exactly one session, or trigger a 24-hour XP surge. Find it under Ranks → Shop.',items:[
+    '💠 Shards earned: +5 per achievement, +5 per all-missions day, +25 per perfect week, +100 per trial',
+    '🔥 Streak Restore (50) — revive your weekly streak, once every 30 days',
+    '🗓️ Perfect Week Buyback (150) — only for weeks missed by exactly ONE session with every logged set checked. Two or more missed days stay on the record',
+    '⚡ XP Surge (75) — 1.5× XP for 24 hours',
+    '🛒 New Shop tab under Ranks'
+  ]},
   {version:'1.20.0',date:'Jul 2026',title:'Clearer Targets & Deficit Safety',blurb:'Your nutrition card now shows the actual calorie target you\'re eating to, not just maintenance and a deficit you had to subtract yourself. Aggressive cuts also come with a plain-English heads-up and a "Learn more" guide on deficits and their risks.',items:[
     '🎯 Target calories now shown directly on the nutrition card',
     '⚖️ Deficits of 20%+ (or very low daily calories) surface a short, non-judgy heads-up — this fires on custom overrides too, not just presets',
@@ -263,8 +285,13 @@ const RANK_TRIALS={
     tasks:[{id:'perfect_weeks_3',desc:'3 perfect weeks — hit your weekly goal (lifts, cardio & active rest count, min 3 lifts), every filled set checked ✓',target:3}]},
   gauntlet:{name:'THE GAUNTLET',rank:'A-RANK',desc:'The System demands proof of relentless will.',icon:'⚔️',
     tasks:[{id:'streak_14',desc:'14-day consecutive logging streak',target:14},{id:'log_pr',desc:'Log a 225+ lb compound lift',target:225}]},
-  awakening:{name:'THE AWAKENING',rank:'S-RANK',desc:'Final trial. Transcend your limits.',icon:'👁️',
-    tasks:[{id:'streak_30',desc:'30-day logging streak',target:30},{id:'missions_7',desc:'All daily missions completed 7 days straight',target:7},{id:'workouts_50',desc:'50+ total workouts logged',target:50}]}
+  awakening:{name:'THE AWAKENING',rank:'S-RANK',desc:'Two phases. The long road, then the final exam.',icon:'👁️',twoPhase:true,
+    tasks:[
+      {id:'sessions_100',desc:'PHASE I · 100 training sessions logged',target:100},
+      {id:'perfect_weeks_12',desc:'PHASE I · 12 perfect weeks (bought weeks don\'t count)',target:12},
+      {id:'mission_days_20',desc:'PHASE I · 20 all-mission days (cumulative, not in a row)',target:20},
+      {id:'awaken_final',desc:'PHASE II · The Awakening — a 14-day final exam, retryable',target:1}
+    ]}
 };
 const CLASSES=[
   {id:'Powerlifter',icon:'🏋️',desc:'Squat, bench, deadlift — chase numbers',bonus:'+2x XP on PRs',color:'#f87171'},
@@ -690,9 +717,16 @@ function getEventMission(dateStr){
 // ═══════════ XP MULTIPLIERS ═══════════
 function getXpMultiplier(){
   const now=new Date(),dow=now.getDay(),dom=now.getDate();
-  if(dom===1)return{mult:2,label:'🎉 FIRST OF THE MONTH — 2x XP'};
-  if(dow===0||dow===6)return{mult:1.5,label:'🔥 WEEKEND — 1.5x XP'};
-  return{mult:1,label:null};
+  const surgeActive=(typeof userData!=='undefined'&&userData&&(userData.xpSurgeUntil||0)>Date.now());
+  let base={mult:1,label:null};
+  if(dom===1)base={mult:2,label:'🎉 FIRST OF THE MONTH — 2x XP'};
+  else if(dow===0||dow===6)base={mult:1.5,label:'🔥 WEEKEND — 1.5x XP'};
+  if(surgeActive){
+    // Surge doesn't stack multiplicatively — take the better of the two, label both
+    if(base.mult>=1.5)return{mult:base.mult,label:base.label+' · ⚡ SURGE'};
+    return{mult:1.5,label:'⚡ XP SURGE — 1.5x XP'};
+  }
+  return base;
 }
 
 const GOALS=['Fat Loss','Muscle Gain','Build Strength','General Fitness','Athletic Performance','Body Recomp'];
@@ -865,3 +899,124 @@ EVENT_MISSION_POOL.push(
   {id:'evt_buddy',icon:'👋',name:'BUDDY SYSTEM',desc:'Poke 3 friends today',xp:25},
   {id:'evt_silent_grind',icon:'🤫',name:'SILENT GRIND',desc:'Full workout, zero phone breaks',xp:30}
 );
+
+// ═══════════ SYSTEM SHARDS ECONOMY (v1.21.0) ═══════════
+const SHARD_REWARDS={
+  achievement:5,        // per achievement unlocked
+  allMissionsDay:5,     // completing every daily mission in a day
+  perfectWeek:25,       // per perfect week locked in
+  trial:100             // per rank trial passed
+};
+const SHOP_ITEMS=[
+  {id:'streak_restore',icon:'🔥',name:'Streak Restore',cost:50,
+   desc:'Revive your weekly training streak after a miss. Life happens.',
+   detail:'Restores your weekly streak to what it was before the break. Once every 30 days.'},
+  {id:'week_buyback',icon:'🗓️',name:'Perfect Week Buyback',cost:150,
+   desc:'Claim a week you missed by exactly ONE session.',
+   detail:'Only works if the week was one session short AND every set you logged was checked off. Missed two or more days? That one stays on the record.'},
+  {id:'xp_boost',icon:'⚡',name:'XP Surge (24h)',cost:75,
+   desc:'1.5× XP on everything for the next 24 hours.',
+   detail:'Stacks after the soft cap. Best spent on a heavy training day.'}
+];
+
+// ═══════════ SYSTEM PLAN ASSIGNMENTS (v1.22.0) ═══════════
+// Assigned plans are pushed to specific users and must be explicitly accepted.
+// Bump the plan `id` to re-issue a plan to the same user later.
+const ASSIGNED_PLANS={
+  gyabinlee11:'hypertrophy_abc_v1',
+  yulri:'hypertrophy_abc_v1',
+  bhengbheng93:'upper_lower_v1'
+};
+const PLAN_LIBRARY={
+  upper_lower_v1:{
+    name:'Upper / Lower Split',
+    desc:'Four days: two lower, two upper. Paired movements (marked 2A/2B) are supersets — do them back to back if the equipment is free, or straight through if the gym is packed. Either way works.',
+    days:[
+      {id:'ul_lowa',title:'LOWER A',subtitle:'Quads + sweat',notes:'Swap: no squat bar → goblet or machine squat. Knees hate depth → shorter-range leg press and stay pain-free.',exercises:[
+        {name:'Goblet / Back / Hack Squat',sets:3,reps:'10-15'},
+        {name:'Leg Press (both feet)',sets:3,reps:'12-18',group:'2A'},
+        {name:'Leg Curl',sets:3,reps:'12-18',group:'2B'},
+        {name:'Leg Extension',sets:3,reps:'15-20'},
+        {name:'Standing or Seated Calf Raise',sets:3,reps:'12-20'},
+        {name:'Finisher: Bike or Incline Walk',sets:1,reps:'8-10 min',isTime:true,notes:'Hard-steady pace.'}
+      ]},
+      {id:'ul_uppa',title:'UPPER A',subtitle:'Press focus',notes:'Push and pull in the same hour so chest and back both get trained twice without a fifth gym day.',exercises:[
+        {name:'Flat Dumbbell or Machine Chest Press',sets:3,reps:'10-15'},
+        {name:'Incline Press',sets:3,reps:'10-15',group:'2A'},
+        {name:'Chest-Supported or Cable Row',sets:3,reps:'10-15',group:'2B'},
+        {name:'Cable Fly or Pec Deck',sets:3,reps:'12-20',group:'3A'},
+        {name:'Triceps Pushdown',sets:3,reps:'12-20',group:'3B'},
+        {name:'Lateral Raise',sets:3,reps:'15-20',group:'4A'},
+        {name:'Face Pull',sets:3,reps:'15-20',group:'4B'},
+        {name:'Finisher: Bike or Rower',sets:1,reps:'8-10 min',isTime:true}
+      ]},
+      {id:'ul_lowb',title:'LOWER B',subtitle:'Hinges and glutes',notes:'RDL cue: soft knees, hips back, weight close to the legs. Stop when the hamstrings load — not when the low back rounds.',exercises:[
+        {name:'Romanian Deadlift',sets:3,reps:'10-14',notes:'Soft knees, hips back, bar close. Stop when hamstrings load, not when the back rounds.'},
+        {name:'Hip Thrust or Glute-Bridge Machine',sets:3,reps:'10-15'},
+        {name:'Leg Press',sets:3,reps:'12-18',group:'3A'},
+        {name:'Seated Leg Curl',sets:3,reps:'12-18',group:'3B'},
+        {name:'Back Extension or Cable Pull-Through',sets:3,reps:'12-20'},
+        {name:'Seated Calf Raise',sets:3,reps:'12-20'},
+        {name:'Finisher: Incline Walk',sets:1,reps:'8-10 min',isTime:true}
+      ]},
+      {id:'ul_uppb',title:'UPPER B',subtitle:'Pull focus',notes:'Arms still get plenty of work. They just do not steal an entire training day.',exercises:[
+        {name:'Chest-Supported or Seated Cable Row',sets:3,reps:'10-15'},
+        {name:'Lat Pulldown or Assisted Pull-Up',sets:3,reps:'10-15',group:'2A'},
+        {name:'Shoulder Press',sets:3,reps:'10-15',group:'2B'},
+        {name:'Straight-Arm Pulldown',sets:3,reps:'12-18',group:'3A'},
+        {name:'EZ-Bar or Dumbbell Curl',sets:3,reps:'12-18',group:'3B'},
+        {name:'Hammer Curl',sets:3,reps:'12-18',group:'4A'},
+        {name:'Overhead or Rope Triceps',sets:3,reps:'12-18',group:'4B'},
+        {name:'Finisher: Bike or Rower',sets:1,reps:'8-10 min',isTime:true}
+      ]}
+    ]
+  },
+  hypertrophy_abc_v1:{
+    name:'A / B / C Hypertrophy',
+    desc:'Three rotating full-body-ish days plus a short option for rushed days. Heavy compounds first, 6-8 reps on the primaries.',
+    days:[
+      {id:'wa',title:'WORKOUT A',subtitle:'Squat + push emphasis',exercises:[
+        {name:'Hack Squat',sets:4,reps:'6-8'},
+        {name:'Dumbbell Bench Press',sets:3,reps:'6-8'},
+        {name:'Seated Cable Row',sets:3,reps:'6-8'},
+        {name:'Romanian Deadlift',sets:3,reps:'6-10'},
+        {name:'Triceps Extension',sets:3,reps:'8-12'}
+      ]},
+      {id:'wb',title:'WORKOUT B',subtitle:'Hinge + pull emphasis',exercises:[
+        {name:'Romanian Deadlift',sets:4,reps:'6-8'},
+        {name:'Lat Pulldown',sets:3,reps:'6-8'},
+        {name:'Chest Press',sets:3,reps:'6-8'},
+        {name:'Rear Delt Fly',sets:3,reps:'10-12'},
+        {name:'Lying Leg Curl',sets:3,reps:'8-12'},
+        {name:'Calf Raise',sets:2,reps:'10-15'}
+      ]},
+      {id:'wc',title:'WORKOUT C',subtitle:'Mixed volume day',exercises:[
+        {name:'Hack Squat',sets:4,reps:'6-8'},
+        {name:'Seated Cable Row',sets:3,reps:'6-8'},
+        {name:'Chest Press',sets:3,reps:'6-8'},
+        {name:'Lat Pulldown',sets:3,reps:'8-12'},
+        {name:'Lying Leg Curl',sets:3,reps:'8-12'},
+        {name:'Rear Delt Fly',sets:2,reps:'12'}
+      ]},
+      {id:'wshort',title:'SHORT',subtitle:'When in a rush',notes:'Use this when time is tight. Four movements, in and out.',exercises:[
+        {name:'Chest Press',sets:4,reps:'6-8'},
+        {name:'Seated Cable Row',sets:3,reps:'6-8'},
+        {name:'Hack Squat',sets:3,reps:'6-8'},
+        {name:'Lat Pulldown',sets:3,reps:'8-12'}
+      ]}
+    ]
+  }
+};
+const STARTING_SHARDS=150; // one-time founder grant to existing users
+
+// ═══════════ v1.23.0 — PHASE II FINAL EXAM ═══════════
+// Unlocks only after all Phase I requirements are met. Retryable — failing costs
+// an attempt, never your Phase I progress.
+const AWAKENING_EXAM={
+  days:14,
+  requirements:[
+    {id:'exam_weeks',label:'Hit your weekly training goal both weeks'},
+    {id:'exam_food',label:'Log food every single day'},
+    {id:'exam_pr',label:'Beat a previously logged number on any lift'}
+  ]
+};

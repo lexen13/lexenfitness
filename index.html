@@ -177,7 +177,9 @@
     <div class="stab active" data-st="leaderboard" onclick="switchSubTab('ranks','leaderboard')">Leaderboard</div>
     <div class="stab" data-st="rankinfo" onclick="switchSubTab('ranks','rankinfo')">Rank Info</div>
     <div class="stab" data-st="badges" onclick="switchSubTab('ranks','badges')">Badges</div>
+    <div class="stab" data-st="shop" onclick="switchSubTab('ranks','shop')">Shop</div>
   </div>
+  <div class="sub-page" id="sp-shop"><div id="shopContent"></div></div>
   <div class="sub-page" id="sp-badges">
     <div class="page-title">ACHIEVEMENTS</div><div class="page-sub" id="achSub">0 / 0</div>
     <div class="ach-filters" id="achFilters"></div>
@@ -227,6 +229,7 @@
 <div class="m-field"><label>Sets</label><input type="number" id="editSets" min="1" max="10"></div>
 <div class="m-field"><label>Target Reps</label><input type="text" id="editReps"></div>
 <div class="m-field"><label>Notes <span style="color:var(--dim);font-size:.6rem">(optional — coaching cues, tips)</span></label><input type="text" id="editNotes" placeholder="e.g. Focus on form, 2-sec pause at bottom"></div>
+<div class="m-field"><label>Superset group <span style="color:var(--dim);font-size:.6rem">(optional — e.g. 2A and 2B pair up)</span></label><input type="text" id="editGroup" placeholder="Leave blank for a normal exercise" maxlength="3"></div>
 <div class="m-actions"><button class="m-cancel" onclick="closeEdit()">Cancel</button><button class="m-delete" onclick="deleteEx()">🗑</button><button class="m-save-btn" onclick="saveEdit()">Save</button></div>
 </div></div>
 
@@ -470,6 +473,12 @@
 
 <!-- WEEKLY RECAP MODAL -->
 <div class="modal-bg" id="weeklyRecapModal"><div class="modal"></div></div>
+
+<!-- PLAN OFFER MODAL (force-accept, no dismiss) -->
+<div class="modal-bg" id="planOfferModal"><div class="modal" style="max-height:85vh;overflow-y:auto"></div></div>
+
+<!-- BUYBACK INFO MODAL -->
+<div class="modal-bg" id="buybackInfoModal"><div class="modal" style="max-height:82vh;overflow-y:auto"></div></div>
 
 <!-- DEFICIT INFO MODAL -->
 <div class="modal-bg" id="deficitInfoModal"><div class="modal" style="max-height:82vh;overflow-y:auto">

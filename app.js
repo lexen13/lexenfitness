@@ -272,7 +272,42 @@ function showLevelUpBurst(lvl){
   try{if(navigator.vibrate)navigator.vibrate(80)}catch(e){}
   setTimeout(()=>b.classList.remove('show'),2200);
 }
+// ═══════════ S-RANK ASCENSION ═══════════
+// The pinnacle. Full-screen takeover, sustained, dismissed by tap — an event, not a toast.
+function showSRankAscension(rank){
+  const title=(rank.title&&rank.title[userData.class])||'MONARCH';
+  let ov=$('sRankAscension');
+  if(!ov){ov=document.createElement('div');ov.id='sRankAscension';ov.className='srank-ascension';document.body.appendChild(ov)}
+  let stars='';
+  for(let i=0;i<60;i++){
+    const x=Math.random()*100,y=Math.random()*100,d=Math.random()*2.5,sz=1+Math.random()*2.5;
+    stars+=`<div class="sr-star" style="left:${x}%;top:${y}%;width:${sz}px;height:${sz}px;animation-delay:${d}s"></div>`;
+  }
+  let shards='';
+  for(let i=0;i<24;i++){
+    const angle=(i/24)*360,dist=120+Math.random()*160,dur=1.6+Math.random()*1.6;
+    const x=Math.cos(angle*Math.PI/180)*dist,y=Math.sin(angle*Math.PI/180)*dist;
+    shards+=`<div class="sr-shard" style="--tx:${x}px;--ty:${y}px;animation-duration:${dur}s;animation-delay:${Math.random()*0.8}s"></div>`;
+  }
+  ov.innerHTML=`<div class="sr-stars">${stars}</div>
+    <div class="sr-core">
+      <div class="sr-rays"></div>
+      <div class="sr-shards">${shards}</div>
+      <div class="sr-eye">👁️</div>
+      <div class="sr-pre">THE SYSTEM ACKNOWLEDGES YOU</div>
+      <div class="sr-rank">S-RANK</div>
+      <div class="sr-title">${esc(title)}</div>
+      <div class="sr-rule"></div>
+      <div class="sr-flavor">You have walked the long road and passed the final trial.<br>There is no rank above this one.</div>
+      <div class="sr-dismiss">tap to continue</div>
+    </div>`;
+  ov.onclick=()=>{ov.classList.remove('show');setTimeout(()=>{if(ov)ov.innerHTML=''},700)};
+  requestAnimationFrame(()=>ov.classList.add('show'));
+  try{if(navigator.vibrate)navigator.vibrate([120,60,120,60,300])}catch(e){}
+}
 function showRankUpSplash(rank){
+  // S-RANK is the pinnacle — it gets its own monumental treatment
+  if(rank.name==='S-RANK')return showSRankAscension(rank);
   const title=(rank.title&&rank.title[userData.class])||rank.name;
   const overlay=$('rankUpSplash');
   $('splashRankName').textContent=rank.name;
@@ -353,6 +388,9 @@ function initApp(){
     try{checkFriendRequests()}catch(e){console.warn(e)}
     try{updateTrainerTab()}catch(e){console.warn(e)}
     try{checkIncomingPokes()}catch(e){console.warn(e)}
+    try{trackStreakHighWater()}catch(e){console.warn(e)}
+    grantStartingShards().catch(e=>console.warn(e));
+    setTimeout(()=>{try{checkAssignedPlan()}catch(e){console.warn(e)}},2200);
     migratePerfectWeekLocks().then(()=>lockLastWeekIfNeeded()).catch(e=>console.warn(e));
     try{grantFounderPass()}catch(e){console.warn(e)}
     try{checkWeeklyRecap()}catch(e){console.warn(e)}
@@ -376,15 +414,30 @@ function initApp(){
 // One-time Iron Gate pass for the founder account (skip, not pass — no bonus XP)
 async function grantFounderPass(){
   if(userData.username!=='gyabinlee11')return;
-  if(userData.founderARankGranted)return; // one-time guard
+  if(userData.founderSRankGranted)return; // one-time guard
   const tc=userData.trialsCompleted||[];
-  if(!tc.includes('iron_gate'))tc.push('iron_gate');
-  if(!tc.includes('gauntlet'))tc.push('gauntlet');
+  ['iron_gate','gauntlet','awakening'].forEach(t=>{if(!tc.includes(t))tc.push(t)});
   userData.trialsCompleted=tc;
-  userData.xp=(userData.xp||0)+3000;
-  userData.founderARankGranted=true;
-  await saveUser({trialsCompleted:tc,xp:userData.xp,founderARankGranted:true});
-  await saveLeaderboard();updateTopBar();checkRankUp();
+  userData.xp=(userData.xp||0)+5000;
+  // Restore the streak that wasn't being counted
+  userData.streakRestoreTo=28;
+  userData.lastStreakRestore=Date.now();
+  userData.prevWeeklyStreak=28;
+  // Credit 7 consecutive all-mission days so the record reflects what he actually did
+  const mc=userData.missionsCompleted||{};
+  for(let i=1;i<=7;i++){
+    const d=new Date();d.setDate(d.getDate()-i);
+    const key=d.toISOString().slice(0,10);
+    const ms=getDailyMissions(key,userData.class)||[];
+    if(ms.length)mc[key]=ms.map(m=>m.id);
+  }
+  userData.missionsCompleted=mc;
+  userData.missionStreak=calcMissionStreak();
+  userData.founderSRankGranted=true;
+  await saveUser({trialsCompleted:tc,xp:userData.xp,streakRestoreTo:28,lastStreakRestore:userData.lastStreakRestore,
+    prevWeeklyStreak:28,missionsCompleted:mc,missionStreak:userData.missionStreak,founderSRankGranted:true});
+  await saveLeaderboard();updateTopBar();
+  setTimeout(()=>{try{checkRankUp()}catch(e){console.warn(e)}},600);
 }
 // ═══════════ WEEKLY RECAP ═══════════
 // Shown once per week, on first open of a new week — summarizes LAST week.
@@ -553,7 +606,7 @@ function switchSubTab(page,tab){
   if(tab==='log')renderLog();if(tab==='rankinfo')$('rankInfoContent').innerHTML=renderRankInfo();if(tab==='leaderboard')renderLeaderboard();
   if(tab==='aicoach')renderAICoach();if(tab==='friendchat')renderChatList();
   if(tab==='friends'){renderFriendsPage();pendingFriendReqs=0;updateFriendBadge()};if(tab==='mystats')renderProfile();
-  if(tab==='updates')renderUpdatesTab();if(tab==='library')renderLibrary();if(tab==='badges')renderAchievements();
+  if(tab==='updates')renderUpdatesTab();if(tab==='library')renderLibrary();if(tab==='badges')renderAchievements();if(tab==='shop')renderShop();
   if(tab==='trainer')renderTrainerDashboard();
 }
 function updateTrainerTab(){
@@ -683,7 +736,8 @@ async function completeMission(mid){
   if(missions.every(x=>completed.includes(x.id))){
     const bonusGained=addXP(50);
     gained+=bonusGained;
-    bonusMsg=` (+${bonusGained} ALL-MISSIONS BONUS)`;
+    bonusMsg=` (+${bonusGained} ALL-MISSIONS BONUS · 💠${SHARD_REWARDS.allMissionsDay})`;
+    userData.shards=(userData.shards||0)+SHARD_REWARDS.allMissionsDay;
     unlockAch('missions_all');
   }
   if(completed.length>=3)unlockAch('missions_3');
@@ -691,12 +745,190 @@ async function completeMission(mid){
   userData.missionStreak=calcMissionStreak();
   if(userData.missionStreak>=7)unlockAch('mission_streak_7');
   if(userData.missionStreak>=14)unlockAch('missions_streak_14');
-  await saveUser({missionsCompleted:userData.missionsCompleted,missionStreak:userData.missionStreak,xp:userData.xp});
+  await saveUser({missionsCompleted:userData.missionsCompleted,missionStreak:userData.missionStreak,xp:userData.xp,shards:userData.shards||0});
   await saveLeaderboard();updateTopBar();checkRankUp();renderMissions();
   toast(`${m.icon} ${m.name} +${gained} XP${bonusMsg}`);
 }
 function calcMissionStreak(){let streak=0;const d=new Date();for(let i=0;i<365;i++){const ds=new Date(d);ds.setDate(ds.getDate()-i);const key=ds.toISOString().slice(0,10);const missions=getDailyMissions(key,userData.class);const comp=userData.missionsCompleted[key]||[];if(missions.every(m=>comp.includes(m.id)))streak++;else break}return streak}
 
+// ═══════════ SYSTEM SHARDS ═══════════
+// Earned currency. Spendable on recovery items — NEVER on trial completion directly.
+function getShards(){return userData.shards||0}
+async function awardShards(n,reason){
+  if(!n||n<=0)return 0;
+  userData.shards=(userData.shards||0)+n;
+  try{await saveUser({shards:userData.shards})}catch(e){console.warn('shard save:',e)}
+  console.log('[shards] +'+n+' ('+reason+') → '+userData.shards);
+  return n;
+}
+async function spendShards(n){
+  if(getShards()<n)return false;
+  userData.shards=getShards()-n;
+  await saveUser({shards:userData.shards});
+  return true;
+}
+function renderShop(){
+  const el=$('shopContent');if(!el)return;
+  const bal=getShards();
+  let h=`<div class="page-title">SYSTEM SHOP</div><div class="page-sub">Shards are earned, not bought.</div>
+  <div class="shard-balance"><span class="sb-icon">💠</span><span class="sb-num">${bal}</span><span class="sb-label">SHARDS</span></div>
+  <div class="shard-earn">Earn shards: <strong>+${SHARD_REWARDS.achievement}</strong> per achievement · <strong>+${SHARD_REWARDS.allMissionsDay}</strong> per all-missions day · <strong>+${SHARD_REWARDS.perfectWeek}</strong> per perfect week · <strong>+${SHARD_REWARDS.trial}</strong> per trial passed</div>`;
+  // Active XP surge indicator
+  const surge=userData.xpSurgeUntil||0;
+  if(surge>Date.now()){
+    const hrsLeft=Math.ceil((surge-Date.now())/3600000);
+    h+=`<div class="surge-active">⚡ XP SURGE ACTIVE — 1.5× for ${hrsLeft} more hour${hrsLeft!==1?'s':''}</div>`;
+  }
+  SHOP_ITEMS.forEach(item=>{
+    const afford=bal>=item.cost;
+    let lockNote='';
+    if(item.id==='streak_restore'){
+      const last=userData.lastStreakRestore||0;
+      const daysSince=(Date.now()-last)/86400000;
+      if(last&&daysSince<30)lockNote=`Available again in ${Math.ceil(30-daysSince)} days`;
+    }
+    if(item.id==='xp_boost'&&surge>Date.now())lockNote='Surge already active';
+    h+=`<div class="shop-item${afford&&!lockNote?'':' dim'}">
+      <div class="si-top"><span class="si-icon">${item.icon}</span><span class="si-name">${item.name}</span><span class="si-cost">💠 ${item.cost}</span></div>
+      <div class="si-desc">${item.desc}</div>
+      <div class="si-detail">${item.detail}</div>
+      ${item.id==='week_buyback'?`<div class="si-rules">Requires ALL of: short by exactly 1 session · every logged set checked off · 3+ lift sessions · no blank sessions</div>`:''}
+      ${lockNote?`<div class="si-lock">🔒 ${lockNote}</div>`:`<button class="si-buy" ${afford?'':'disabled'} onclick="buyShopItem('${item.id}')">${afford?'Redeem':'Need '+(item.cost-bal)+' more'}</button>`}
+    </div>`;
+  });
+  h+=`<div class="shop-note">More coming: profile frames, name colors, rank badge variants.</div>`;
+  el.innerHTML=h;
+}
+async function buyShopItem(id){
+  const item=SHOP_ITEMS.find(i=>i.id===id);if(!item)return;
+  if(getShards()<item.cost){toast('Not enough shards');return}
+  if(id==='streak_restore')return buyStreakRestore(item);
+  if(id==='week_buyback')return buyWeekBuyback(item);
+  if(id==='xp_boost')return buyXpSurge(item);
+}
+async function buyStreakRestore(item){
+  const last=userData.lastStreakRestore||0;
+  if(last&&(Date.now()-last)/86400000<30){toast('Streak restore is on cooldown');return}
+  const prev=userData.prevWeeklyStreak||0;
+  const cur=calcWeeklyStreak();
+  if(prev<=cur){toast('Nothing to restore — your streak is intact');return}
+  if(!confirm(`Restore your weekly streak from ${cur} to ${prev} for 💠${item.cost}?`))return;
+  if(!await spendShards(item.cost))return;
+  userData.streakRestoreTo=prev;
+  userData.lastStreakRestore=Date.now();
+  await saveUser({streakRestoreTo:prev,lastStreakRestore:userData.lastStreakRestore,shards:userData.shards});
+  toast(`🔥 Streak restored to ${prev} weeks`);
+  renderShop();updateTopBar();
+}
+async function buyWeekBuyback(item){
+  const goal=getWeeklyGoal();
+  const locked=userData.perfectWeeksLocked||{};
+  const candidates=[],denied=[];
+  Object.keys(locked).forEach(wk=>{
+    if(locked[wk])return; // already perfect
+    const label=new Date(wk+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'});
+    if((userData.boughtWeeks||[]).includes(wk)){denied.push({label,why:'already bought back'});return}
+    const r=evaluateWeek(wk,goal);
+    const shortBy=r.target-r.sessions;
+    // Eligibility: short by EXACTLY one session, and everything else clean
+    if(shortBy!==1){
+      denied.push({label,why:shortBy>1?`missed ${shortBy} sessions — only 1 can be bought back`:'not short on sessions'});
+      return;
+    }
+    if(r.failedSets>0){denied.push({label,why:`${r.failedSets} set${r.failedSets!==1?'s':''} logged but never checked off`});return}
+    if(r.lifts<Math.min(3,r.target)){denied.push({label,why:`only ${r.lifts} lift session${r.lifts!==1?'s':''} — 3 required`});return}
+    if(r.sessionsWithDone<r.lifts){denied.push({label,why:'a logged session had no completed sets'});return}
+    candidates.push({wk,r,label});
+  });
+  if(!candidates.length){
+    const m=$('buybackInfoModal');
+    let h=`<h2>🗓️ No Eligible Weeks</h2>
+      <p style="color:var(--muted);font-size:.78rem;line-height:1.55;margin-bottom:.7rem">A week can only be bought back if <strong style="color:var(--text)">all</strong> of these are true:</p>
+      <div class="bb-rule">✅ You were short by <strong>exactly one session</strong></div>
+      <div class="bb-rule">✅ Every set you logged was <strong>checked off</strong></div>
+      <div class="bb-rule">✅ You still hit <strong>3+ lift sessions</strong></div>
+      <div class="bb-rule">✅ No logged session was left blank</div>
+      <p style="color:var(--gold);font-size:.7rem;line-height:1.5;margin:.7rem 0">Missing two or more days can't be bought back. One missed day is life — two is a choice.</p>`;
+    if(denied.length){
+      h+=`<div style="font-family:var(--font-mono);font-size:.62rem;color:var(--muted);letter-spacing:1px;margin:.6rem 0 .3rem">YOUR RECENT WEEKS</div>`;
+      denied.sort((a,b)=>b.label.localeCompare(a.label)).slice(0,8).forEach(d=>{
+        h+=`<div class="bb-denied"><span>Week of ${d.label}</span><span class="bb-why">${d.why}</span></div>`;
+      });
+    }
+    h+=`<div class="m-actions" style="margin-top:.8rem"><button class="m-save-btn" style="width:100%" onclick="$('buybackInfoModal').classList.remove('open')">Got it</button></div>`;
+    m.querySelector('.modal').innerHTML=h;
+    m.classList.add('open');
+    return;
+  }
+  candidates.sort((a,b)=>b.wk.localeCompare(a.wk));
+  const c=candidates[0];
+  if(!confirm(`Buy back the week of ${c.label}?\n\nYou logged ${c.r.sessions}/${c.r.target} sessions — exactly one short, and every set you logged was checked off.\n\nThis permanently marks it a PERFECT WEEK.\n\nCost: 💠${item.cost}`))return;
+  if(!await spendShards(item.cost))return;
+  locked[c.wk]=true;
+  userData.perfectWeeksLocked=locked;
+  userData.boughtWeeks=[...(userData.boughtWeeks||[]),c.wk];
+  await saveUser({perfectWeeksLocked:locked,boughtWeeks:userData.boughtWeeks,shards:userData.shards});
+  toast(`🗓️ Week of ${c.label} claimed as PERFECT`);
+  renderShop();updateTopBar();checkRankUp();
+}
+async function buyXpSurge(item){
+  if((userData.xpSurgeUntil||0)>Date.now()){toast('Surge already active');return}
+  if(!confirm(`Activate 1.5× XP for 24 hours for 💠${item.cost}?`))return;
+  if(!await spendShards(item.cost))return;
+  userData.xpSurgeUntil=Date.now()+24*3600000;
+  await saveUser({xpSurgeUntil:userData.xpSurgeUntil,shards:userData.shards});
+  toast('⚡ XP SURGE ACTIVE — 1.5× for 24 hours');
+  renderShop();updateTopBar();
+}
+// ═══════════ ASSIGNED PLANS (force-accept) ═══════════
+// A pushed plan cannot be dismissed — the only way out of the modal is Accept.
+// This prevents someone tapping away and silently never receiving it.
+function checkAssignedPlan(){
+  const uname=userData.username;
+  if(!uname)return;
+  const planId=ASSIGNED_PLANS[uname];
+  if(!planId)return;
+  if((userData.acceptedPlans||[]).includes(planId))return;
+  const plan=PLAN_LIBRARY[planId];
+  if(!plan)return;
+  showPlanOffer(planId,plan);
+}
+function showPlanOffer(planId,plan){
+  const modal=$('planOfferModal');if(!modal)return;
+  let h=`<div class="po-sigil">⚔️</div>
+    <h2 style="text-align:center;margin-bottom:.2rem">THE SYSTEM HAS A NEW PLAN FOR YOU</h2>
+    <p style="text-align:center;color:var(--accent2);font-family:var(--font-mono);font-size:.72rem;letter-spacing:1px;margin-bottom:.7rem">${esc(plan.name)}</p>
+    <p style="color:var(--muted);font-size:.76rem;line-height:1.5;margin-bottom:.8rem">${esc(plan.desc)}</p>`;
+  plan.days.forEach(d=>{
+    h+=`<div class="po-day"><div class="po-day-title">${esc(d.title)}${d.subtitle?` <span class="po-day-sub">${esc(d.subtitle)}</span>`:''}</div>`;
+    d.exercises.forEach(ex=>{h+=`<div class="po-ex">${esc(ex.name)} <span class="po-ex-sr">${ex.sets}×${esc(ex.reps)}</span></div>`});
+    h+=`</div>`;
+  });
+  h+=`<p style="color:var(--gold);font-size:.68rem;line-height:1.45;margin:.7rem 0 .5rem">⚠️ This will replace your current workout days. Your logged history is kept — nothing you've already recorded is deleted.</p>
+    <button class="m-save-btn" style="width:100%" onclick="acceptAssignedPlan('${planId}')">⚔️ ACCEPT THE PLAN</button>`;
+  modal.querySelector('.modal').innerHTML=h;
+  modal.classList.add('open');
+  modal.dataset.locked='1'; // no backdrop dismiss
+}
+async function acceptAssignedPlan(planId){
+  const plan=PLAN_LIBRARY[planId];if(!plan)return;
+  userData.program=JSON.parse(JSON.stringify(plan.days));
+  userData.acceptedPlans=[...(userData.acceptedPlans||[]),planId];
+  await saveUser({program:userData.program,acceptedPlans:userData.acceptedPlans});
+  const modal=$('planOfferModal');
+  if(modal){modal.classList.remove('open');modal.dataset.locked=''}
+  toast('⚔️ Plan accepted. Your new days are in Train.');
+  currentDay=null;workoutView='menu';
+  try{buildWorkout()}catch(e){console.warn(e)}
+}
+// One-time starting shard grant for users who existed before the economy launched
+async function grantStartingShards(){
+  if(userData.startingShardsGranted)return;
+  userData.shards=(userData.shards||0)+STARTING_SHARDS;
+  userData.startingShardsGranted=true;
+  await saveUser({shards:userData.shards,startingShardsGranted:true});
+  setTimeout(()=>toast(`💠 +${STARTING_SHARDS} SHARDS — welcome gift from The System`),1800);
+}
 // ═══════════ RANK TRIALS ═══════════
 function getAvailableTrial(){for(let i=RANKS.length-1;i>=0;i--){if(userData.xp>=RANKS[i].min&&!RANKS[i].auto&&RANKS[i].trial&&!userData.trialsCompleted.includes(RANKS[i].trial)){return{rank:RANKS[i],trial:RANK_TRIALS[RANKS[i].trial]}}}return null}
 function renderTrialBanner(info){
@@ -763,7 +995,34 @@ function renderPerfectWeeksBreakdown(){
 function getTrialProgress(trial){return trial.tasks.map(task=>{switch(task.id){
   case 'perfect_weeks_3':return calcPerfectWeeks();case 'streak_14':case 'streak_30':return calcDayStreak();
   case 'log_pr':return Math.max(0,...getLiftLogs().flatMap(e=>Array.isArray(e.exercises)?e.exercises.flatMap(ex=>Array.isArray(ex.sets)?ex.sets.map(s=>parseInt(s.weight)||0):[]):[]));
-  case 'missions_7':return userData.missionStreak;case 'workouts_50':return getLiftLogs().length;default:return 0}})}
+  case 'missions_7':return userData.missionStreak;case 'workouts_50':return getLiftLogs().length;
+  // ── v1.23.0 two-phase Awakening ──
+  case 'sessions_100':return getTrainingLogs().length;
+  case 'perfect_weeks_12':return calcEarnedPerfectWeeks();
+  case 'mission_days_20':return calcAllMissionDays();
+  case 'awaken_final':return (userData.trialsCompleted||[]).includes('awakening')?1:(userData.awakeningExamPassed?1:0);
+  default:return 0}})}
+// Perfect weeks EXCLUDING any that were bought with shards — S-Rank can't be purchased
+function calcEarnedPerfectWeeks(){
+  const locked=userData.perfectWeeksLocked||{};
+  const bought=userData.boughtWeeks||[];
+  const currentMon=getMonday(new Date()).toISOString().slice(0,10);
+  let count=0;
+  Object.keys(locked).forEach(k=>{if(k!==currentMon&&locked[k]&&!bought.includes(k))count++});
+  if(evaluateWeek(currentMon,getWeeklyGoal()).perfect)count++;
+  return count;
+}
+// Cumulative count of days where every daily mission was completed
+function calcAllMissionDays(){
+  const mc=userData.missionsCompleted||{};
+  let n=0;
+  Object.keys(mc).forEach(key=>{
+    const ms=getDailyMissions(key,userData.class)||[];
+    const comp=mc[key]||[];
+    if(ms.length&&ms.every(m=>comp.includes(m.id)))n++;
+  });
+  return n;
+}
 // ═══════════ PERFECT WEEKS ═══════════
 // "Perfect" = at least max(weeklyTrainingGoal, 3) sessions in the week,
 //   each session has at least one filled+done set, and every filled set is checked.
@@ -852,7 +1111,9 @@ async function lockLastWeekIfNeeded(){
   if(r.sessions===0)return; // no activity, don't bother locking
   locked[lastMon]=r.perfect;
   userData.perfectWeeksLocked=locked;
-  try{await saveUser({perfectWeeksLocked:locked})}catch(e){console.warn('lockLastWeek failed:',e)}
+  if(r.perfect)userData.shards=(userData.shards||0)+SHARD_REWARDS.perfectWeek;
+  try{await saveUser({perfectWeeksLocked:locked,shards:userData.shards||0})}catch(e){console.warn('lockLastWeek failed:',e)}
+  if(r.perfect)toast(`💠 +${SHARD_REWARDS.perfectWeek} shards — perfect week banked`);
 }
 // One-time migration (v1.14.1): weeks locked before the active-rest fix were scored
 // without counting cardio/active-rest sessions. Re-check and upgrade false→true only.
@@ -1268,17 +1529,34 @@ function renderDay(){const prog=userData.program||[],day=prog.find(d=>d.id===cur
   if(!sessionActive)h+=`<button class="start-session-btn" onclick="startSession()">▶ START SESSION · ${esc(day.title)}</button>`;
   // Day notes display at top (if set)
   if(day.notes)h+=`<div class="day-notes day-notes-top"><strong>📝 NOTES</strong><br>${esc(day.notes)}</div>`;
-  day.exercises.forEach((ex,ei)=>{h+=`<div class="exercise"><div class="ex-header"><span class="ex-num">${ei+1}</span><span class="ex-name">${ex.name}</span><button class="ex-edit" onclick="toggleExNote('${day.id}_e${ei}_note')" title="Session note">📝</button><button class="ex-edit" onclick="openEdit(${di},${ei})">✏️</button></div>`;
+  day.exercises.forEach((ex,ei)=>{
+    // ── Superset grouping ──
+    const grp=ex.group||'';
+    const grpNum=grp?String(grp).replace(/[A-Za-z]/g,''):'';
+    const prevGrp=ei>0?(day.exercises[ei-1].group||''):'';
+    const prevNum=prevGrp?String(prevGrp).replace(/[A-Za-z]/g,''):'';
+    const nextGrp=ei<day.exercises.length-1?(day.exercises[ei+1].group||''):'';
+    const nextNum=nextGrp?String(nextGrp).replace(/[A-Za-z]/g,''):'';
+    const opensGroup=grpNum&&grpNum!==prevNum;
+    const closesGroup=grpNum&&grpNum!==nextNum;
+    if(opensGroup){
+      const members=day.exercises.filter(x=>x.group&&String(x.group).replace(/[A-Za-z]/g,'')===grpNum).map(x=>x.group);
+      h+=`<div class="superset-block"><div class="ss-header"><span class="ss-tag">⇄ SUPERSET ${members.join(' / ')}</span><span class="ss-hint">back to back · rest after the pair</span></div>`;
+    }
+    h+=`<div class="exercise${grpNum?' in-superset':''}"><div class="ex-header"><span class="ex-num">${grp?esc(grp):ei+1}</span><span class="ex-name">${ex.name}</span><button class="ex-edit" onclick="toggleExNote('${day.id}_e${ei}_note')" title="Session note">📝</button><button class="ex-edit" onclick="openEdit(${di},${ei})">✏️</button></div>`;
     if(ex.notes)h+=`<div class="ex-notes">${esc(ex.notes)}</div>`;
     h+=overloadHint(ex,lastMap);
     const noteId=day.id+'_e'+ei+'_note';
     const noteDraft=savedInputs[noteId]||'';
     h+=`<div class="ex-note-row${noteDraft?' open':''}" id="row_${noteId}"><input type="text" class="ex-note-input" id="${noteId}" placeholder="Note for this session (e.g. knee felt off on set 2)" value="${esc(noteDraft)}" maxlength="200"></div>`;
+
     h+=`<div class="sets-grid">`;
     for(let s=0;s<ex.sets;s++){const wK=day.id+'_e'+ei+'_s'+s+'_w',rK=day.id+'_e'+ei+'_s'+s+'_r',cK=day.id+'_e'+ei+'_s'+s+'_c';
       if(ex.isTime)h+=`<div class="set-row"><label>S${s+1}</label><input type="number" id="${rK}" placeholder="sec" value="${savedInputs[rK]||''}"><span class="sep">sec</span><input type="checkbox" id="${cK}" ${savedInputs[cK]?'checked':''}><span class="target">${ex.reps}</span></div>`;
       else h+=`<div class="set-row"><label>S${s+1}</label><input type="number" id="${wK}" placeholder="lbs" value="${savedInputs[wK]||''}"><span class="sep">×</span><input type="number" id="${rK}" placeholder="reps" value="${savedInputs[rK]||''}"><input type="checkbox" id="${cK}" ${savedInputs[cK]?'checked':''}><span class="target">${ex.reps}</span></div>`}
-    h+='</div></div>'});
+    h+='</div></div>';
+    if(closesGroup)h+=`<div class="ss-footer">Gym packed? Doing these straight through is fine — you'll still get the work in.</div></div>`;
+  });
   h+=`<button class="add-ex" onclick="openAdd(${di})">+ Add Exercise</button>`;
   $('dayContent').innerHTML=h}
 
@@ -1303,6 +1581,41 @@ async function editLogNote(id){
     renderLog();
   }catch(e){console.error(e);toast('Save failed: '+e.message)}
 }
+// ═══════════ EXERCISE NAME MATCHING ═══════════
+// Swapping or renaming an exercise shouldn't orphan its history. We normalize
+// abbreviations and match loosely — but ONLY when the significant modifiers agree,
+// so "Seated Leg Curl" never inherits "Standing Leg Curl"'s numbers.
+const EX_ABBREV={'db':'dumbbell','bb':'barbell','ohp':'overhead press','rdl':'romanian deadlift','sldl':'stiff leg deadlift','bw':'bodyweight','ez':'ezbar','lat':'latpulldown','pull up':'pullup','pull-up':'pullup','chin up':'chinup','sq':'squat','dl':'deadlift','bp':'bench press'};
+// Words that CHANGE the exercise — if these differ, it's a different movement
+const EX_MODIFIERS=['seated','standing','incline','decline','flat','close','wide','narrow','single','one','reverse','front','back','overhead','lying','bent','preacher','hack','goblet','sumo','conventional','romanian','bulgarian','assisted','machine','cable','smith'];
+function normalizeExName(name){
+  let s=String(name||'').toLowerCase().replace(/[^a-z0-9\s]/g,' ').replace(/\s+/g,' ').trim();
+  Object.keys(EX_ABBREV).forEach(k=>{s=s.replace(new RegExp('\\b'+k+'\\b','g'),EX_ABBREV[k])});
+  return s;
+}
+function exModifierSet(norm){return EX_MODIFIERS.filter(m=>new RegExp('\\b'+m+'\\b').test(norm)).sort().join('|')}
+function exTokens(norm){return norm.split(' ').filter(w=>w.length>2)}
+// Returns the best fuzzy match key from a map, or null
+function fuzzyMatchExercise(name,map){
+  const norm=normalizeExName(name);
+  if(map[norm])return {key:norm,exact:true};
+  const mods=exModifierSet(norm);
+  const toks=exTokens(norm);
+  if(!toks.length)return null;
+  let best=null,bestScore=0;
+  Object.keys(map).forEach(k=>{
+    // GUARDRAIL: modifiers must match exactly, or it's a different exercise
+    if(exModifierSet(k)!==mods)return;
+    const kt=exTokens(k);
+    if(!kt.length)return;
+    const shared=toks.filter(t=>kt.includes(t)).length;
+    const score=shared/Math.max(toks.length,kt.length);
+    if(score>bestScore){bestScore=score;best=k}
+  });
+  // Require strong overlap to avoid nonsense matches
+  if(best&&bestScore>=0.6)return {key:best,exact:false,matchedName:map[best].displayName||best};
+  return null;
+}
 // ═══════════ PROGRESSIVE OVERLOAD HINTS ═══════════
 // Map of exercise name → most recent logged best set, built once per render
 function buildLastSetMap(){
@@ -1310,9 +1623,9 @@ function buildLastSetMap(){
   for(const e of getLiftLogs()){ // newest-first
     if(!Array.isArray(e.exercises))continue;
     for(const ex of e.exercises){
-      const key=(ex.name||'').toLowerCase().trim();
+      const key=normalizeExName(ex.name);
       if(!key)continue;
-      if(!map[key])map[key]={};
+      if(!map[key])map[key]={displayName:ex.name};
       // Most recent best set (first found wins)
       if(!map[key].best){
         let best=null;
@@ -1332,8 +1645,11 @@ function buildLastSetMap(){
 }
 function overloadHint(ex,lastMap){
   if(ex.isTime)return '';
-  const rec=lastMap[(ex.name||'').toLowerCase().trim()];
+  const match=fuzzyMatchExercise(ex.name,lastMap);
+  if(!match)return '';
+  const rec=lastMap[match.key];
   if(!rec)return '';
+  const via=match.exact?'':` <span class="hint-via">(matched “${esc(rec.displayName||match.key)}”)</span>`;
   let h='';
   const last=rec.best;
   if(last){
@@ -1342,9 +1658,9 @@ function overloadHint(ex,lastMap){
     const ago=Math.round((Date.now()-new Date(last.date).getTime())/86400000);
     const agoTxt=ago<=0?'today':ago===1?'yesterday':ago+'d ago';
     if(upper&&last.r>=upper){
-      h+=`<div class="ex-hint up">📈 Last: ${last.w}×${last.r} (${agoTxt}) — rep range topped, try <strong>${last.w+5} lbs</strong></div>`;
+      h+=`<div class="ex-hint up">📈 Last: ${last.w}×${last.r} (${agoTxt}) — rep range topped, try <strong>${last.w+5} lbs</strong>${via}</div>`;
     }else{
-      h+=`<div class="ex-hint">🎯 Last: ${last.w}×${last.r} (${agoTxt}) — match the weight, beat the reps</div>`;
+      h+=`<div class="ex-hint">🎯 Last: ${last.w}×${last.r} (${agoTxt}) — match the weight, beat the reps${via}</div>`;
     }
   }
   // Resurface the most recent note — injury notes come back LOUD
@@ -1431,7 +1747,21 @@ function attachSessionCheckboxHandlers(){
 function onSessionSetCheck(e){
   if(!sessionActive)return;
   const el=e.target;
-  if(el.checked&&restDefaultSec>0)startRestTimer(restDefaultSec);
+  if(!el.checked||restDefaultSec<=0)return;
+  // Superset rule: no rest between A and B — rest only after the last of the pair
+  const m=(el.id||'').match(/_e(\d+)_s\d+_c$/);
+  if(m){
+    const day=(userData.program||[]).find(d=>d.id===currentDay);
+    if(day&&day.exercises){
+      const ei=parseInt(m[1]);
+      const cur=day.exercises[ei];
+      const next=day.exercises[ei+1];
+      const curNum=cur&&cur.group?String(cur.group).replace(/[A-Za-z]/g,''):'';
+      const nextNum=next&&next.group?String(next.group).replace(/[A-Za-z]/g,''):'';
+      if(curNum&&curNum===nextNum){toast('⇄ Straight into the next movement — no rest');return}
+    }
+  }
+  startRestTimer(restDefaultSec);
 }
 function pauseSession(){
   if(!sessionActive)return;
@@ -1504,9 +1834,9 @@ function cancelSession(){
   toast('Session cancelled');
 }
 
-function openEdit(di,ei){editTarget={di,ei};const ex=userData.program[di].exercises[ei];$('editName').value=ex.name;$('editSets').value=ex.sets;$('editReps').value=ex.reps;$('editNotes').value=ex.notes||'';$('editModal').classList.add('open')}
+function openEdit(di,ei){editTarget={di,ei};const ex=userData.program[di].exercises[ei];$('editName').value=ex.name;$('editSets').value=ex.sets;$('editReps').value=ex.reps;$('editNotes').value=ex.notes||'';const g=$('editGroup');if(g)g.value=ex.group||'';$('editModal').classList.add('open')}
 function closeEdit(){$('editModal').classList.remove('open')}
-async function saveEdit(){if(!editTarget)return;captureInputs();const ex=userData.program[editTarget.di].exercises[editTarget.ei];ex.name=$('editName').value.trim()||ex.name;ex.sets=parseInt($('editSets').value)||ex.sets;ex.reps=$('editReps').value.trim()||ex.reps;ex.notes=$('editNotes').value.trim();ex.isTime=/sec|s$/i.test(ex.reps);await saveUser({program:userData.program});closeEdit();renderDay();unlockAch('customize');toast('Updated!')}
+async function saveEdit(){if(!editTarget)return;captureInputs();const ex=userData.program[editTarget.di].exercises[editTarget.ei];ex.name=$('editName').value.trim()||ex.name;ex.sets=parseInt($('editSets').value)||ex.sets;ex.reps=$('editReps').value.trim()||ex.reps;ex.notes=$('editNotes').value.trim();const gEl=$('editGroup');if(gEl){const gv=gEl.value.trim().toUpperCase();if(gv)ex.group=gv;else delete ex.group}ex.isTime=/sec|s$/i.test(ex.reps);await saveUser({program:userData.program});closeEdit();renderDay();unlockAch('customize');toast('Updated!')}
 async function deleteEx(){if(!editTarget||!confirm('Remove?'))return;captureInputs();userData.program[editTarget.di].exercises.splice(editTarget.ei,1);await saveUser({program:userData.program});closeEdit();renderDay();toast('Removed.')}
 function openAdd(di){addDayIdx=di;$('addName').value='';$('addSets').value=3;$('addReps').value='';$('addNotes').value='';$('addModal').classList.add('open')}
 function closeAdd(){$('addModal').classList.remove('open')}
@@ -1697,7 +2027,20 @@ function calcWeeklyStreak(){
     if(key===thisMonday){if((weeks[key]||0)>0)streak++;continue}
     if((weeks[key]||0)>=3)streak++;else break;
   }
+  // A purchased Streak Restore acts as a floor, and keeps growing from there
+  const restore=userData.streakRestoreTo||0;
+  if(restore>0){
+    const restoredAt=userData.lastStreakRestore||0;
+    const weeksSince=Math.floor((Date.now()-restoredAt)/(7*86400000));
+    return Math.max(streak,restore+weeksSince);
+  }
   return streak;
+}
+// Remember the high-water mark so a break has something to restore back to
+function trackStreakHighWater(){
+  const cur=calcWeeklyStreak();
+  const prev=userData.prevWeeklyStreak||0;
+  if(cur>prev){userData.prevWeeklyStreak=cur;saveUser({prevWeeklyStreak:cur}).catch(()=>{})}
 }
 function calcFullWeeks(){const w={};getLiftLogs().forEach(e=>{const m=getMonday(new Date(e.date)).toISOString().slice(0,10);if(!w[m])w[m]=new Set();w[m].add(e.dayId)});return Object.values(w).filter(s=>s.size>=4).length}
 
@@ -1726,7 +2069,8 @@ async function unlockAch(id){
   const a=ACHIEVEMENTS.find(x=>x.id===id);
   if(a&&a.xp>0)addXP(a.xp);
   celebrateAch(a);
-  await saveUser({achievements:userData.achievements,xp:userData.xp});await saveLeaderboard();updateTopBar();
+  userData.shards=(userData.shards||0)+SHARD_REWARDS.achievement;
+  await saveUser({achievements:userData.achievements,xp:userData.xp,shards:userData.shards});await saveLeaderboard();updateTopBar();
 }
 // Silent version — just mutates userData in memory, caller is responsible for saving later.
 // Used by checkPassiveAchievements to batch many unlocks into ONE Firestore write.
@@ -2301,16 +2645,18 @@ function renderLog(){const c=$('logContent');if(!workoutLog.length){c.innerHTML=
   let h='<div class="log-filters"><div class="log-filter'+(logFilter==='all'?' active':'')+'" onclick="setFilter(\'all\')">All</div>';
   prog.forEach(d=>h+='<div class="log-filter'+(logFilter===d.id?' active':'')+'" onclick="setFilter(\''+d.id+'\')">'+d.title+'</div>');h+='</div>';
   sorted.forEach(week=>{const sun=new Date(week.monday);sun.setDate(sun.getDate()+6);const fmt=d=>d.toLocaleDateString('en-US',{month:'short',day:'numeric'});const wn=getWeekNum(week.monday);
-    h+='<div class="week-group"><div class="week-header" onclick="toggleWk(this)"><span>WEEK '+wn+' <span class="wk-dates">'+fmt(week.monday)+' – '+fmt(sun)+'</span></span><span style="color:var(--muted);font-size:.72rem">▼</span></div><div class="week-body">';
+    const wkSessions=week.entries.filter(e=>!e.isRest||e.restType==='active').length;
+    h+='<div class="week-group"><div class="week-header" onclick="toggleWk(this)"><span>WEEK '+wn+' <span class="wk-dates">'+fmt(week.monday)+' – '+fmt(sun)+'</span></span><span class="wk-count">'+wkSessions+' session'+(wkSessions!==1?'s':'')+' ▼</span></div><div class="week-body">';
     week.entries.sort((a,b)=>new Date(a.date)-new Date(b.date));
     week.entries.forEach(entry=>{
       try{
         const d=new Date(entry.date),ds=d.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
+        const dayChip='<span class="log-daychip">'+d.toLocaleDateString('en-US',{weekday:'short'}).toUpperCase()+'<span class="lc-num">'+d.getDate()+'</span></span>';
         // Handle rest days
         if(entry.isRest){
           const icon=entry.restType==='active'?'🚶':'🛏️';
           const label=entry.restType==='active'?'Active Rest':'Full Rest';
-          h+='<div class="day-log"><div class="day-log-head"><span class="day-log-title">'+icon+' '+esc(label)+'</span><span><span class="day-log-date">'+ds+'</span> <button class="btn-del" onclick="delLog(\''+entry._id+'\')">✕</button></span></div>'+(entry.notes?'<div style="padding:6px 10px;font-size:.72rem;color:var(--muted);font-style:italic">'+esc(entry.notes)+'</div>':'')+'</div>';
+          h+='<div class="day-log"><div class="day-log-head"><span class="day-log-title">'+dayChip+icon+' '+esc(label)+'</span><span><span class="day-log-date">'+ds+'</span> <button class="btn-del" onclick="delLog(\''+entry._id+'\')">✕</button></span></div>'+(entry.notes?'<div style="padding:6px 10px;font-size:.72rem;color:var(--muted);font-style:italic">'+esc(entry.notes)+'</div>':'')+'</div>';
           return;
         }
         // Handle activity/cardio entries
@@ -2320,7 +2666,7 @@ function renderLog(){const c=$('logContent');if(!workoutLog.length){c.innerHTML=
           if(entry.duration)detailParts.push(entry.duration+' min');
           if(entry.calBurned)detailParts.push(entry.calBurned+' cal');
           if(entry.steps)detailParts.push(entry.steps.toLocaleString()+' steps');
-          h+='<div class="day-log"><div class="day-log-head"><span class="day-log-title">'+icon+' '+esc(entry.dayTitle||'Activity')+'</span><span><span class="day-log-date">'+ds+'</span> <button class="btn-del" onclick="delLog(\''+entry._id+'\')">✕</button></span></div>'+(detailParts.length?'<div style="padding:6px 10px;font-size:.72rem;color:var(--muted)">'+detailParts.join(' · ')+'</div>':'')+(entry.notes?'<div style="padding:0 10px 8px;font-size:.7rem;color:var(--dim);font-style:italic">'+esc(entry.notes)+'</div>':'')+'</div>';
+          h+='<div class="day-log"><div class="day-log-head"><span class="day-log-title">'+dayChip+icon+' '+esc(entry.dayTitle||'Activity')+'</span><span><span class="day-log-date">'+ds+'</span> <button class="btn-del" onclick="delLog(\''+entry._id+'\')">✕</button></span></div>'+(detailParts.length?'<div style="padding:6px 10px;font-size:.72rem;color:var(--muted)">'+detailParts.join(' · ')+'</div>':'')+(entry.notes?'<div style="padding:0 10px 8px;font-size:.7rem;color:var(--dim);font-style:italic">'+esc(entry.notes)+'</div>':'')+'</div>';
           return;
         }
         // Regular lift entry — guard against missing/empty exercises
@@ -2332,7 +2678,7 @@ function renderLog(){const c=$('logContent');if(!workoutLog.length){c.innerHTML=
         const maxS=Math.max(...exs.map(x=>x.sets.length));
         const bd=entry.backdated?' <span style="color:var(--gold);font-size:.6rem;font-weight:700;margin-left:4px">📅 BACKDATED</span>':'';
         const dur=entry.durationSec?' <span style="color:var(--accent);font-size:.62rem;font-weight:700;margin-left:4px">⏱ '+Math.floor(entry.durationSec/60)+'m</span>':'';
-        h+='<div class="day-log"><div class="day-log-head"><span class="day-log-title">'+esc(entry.dayTitle||'Workout')+bd+dur+'</span><span><span class="day-log-date">'+ds+'</span> <button class="btn-del" style="margin-right:2px" onclick="editLogNote(\''+entry._id+'\')">📝</button><button class="btn-del" onclick="delLog(\''+entry._id+'\')">✕</button></span></div>'+(entry.notes?'<div class="log-note'+(INJURY_RX.test(entry.notes)?' warn':'')+'">'+(INJURY_RX.test(entry.notes)?'⚠️ ':'📝 ')+esc(entry.notes)+'</div>':'')+'<div class="log-table-wrap"><table class="log-table"><thead><tr><th>Exercise</th>';
+        h+='<div class="day-log"><div class="day-log-head"><span class="day-log-title">'+dayChip+esc(entry.dayTitle||'Workout')+bd+dur+'</span><span><span class="day-log-date">'+ds+'</span> <button class="btn-del" style="margin-right:2px" onclick="editLogNote(\''+entry._id+'\')">📝</button><button class="btn-del" onclick="delLog(\''+entry._id+'\')">✕</button></span></div>'+(entry.notes?'<div class="log-note'+(INJURY_RX.test(entry.notes)?' warn':'')+'">'+(INJURY_RX.test(entry.notes)?'⚠️ ':'📝 ')+esc(entry.notes)+'</div>':'')+'<div class="log-table-wrap"><table class="log-table"><thead><tr><th>Exercise</th>';
         for(let i=0;i<maxS;i++)h+='<th>S'+(i+1)+'</th>';h+='</tr></thead><tbody>';
         exs.forEach(ex=>{
           if(!ex.sets.some(s=>s&&(s.reps||s.weight)))return;
@@ -2742,7 +3088,7 @@ async function checkPassiveAchievements(){
       await saveUser({achievements:userData.achievements,xp:userData.xp});
       await saveLeaderboard();
       updateTopBar();
-      if(gainedAch>0)celebrateAch({icon:'🏆',name:gainedAch===1?'New achievement earned':gainedAch+' achievements earned',xp:gainedXp,desc:''});
+      if(gainedAch>0){userData.shards=(userData.shards||0)+gainedAch*SHARD_REWARDS.achievement;await saveUser({shards:userData.shards});celebrateAch({icon:'🏆',name:gainedAch===1?'New achievement earned':gainedAch+' achievements earned',xp:gainedXp,desc:''})}
       console.log('[checkPassiveAchievements] batched',gainedAch,'unlocks, +'+gainedXp,'XP');
     }catch(e){console.warn('[checkPassiveAchievements] batch save failed:',e)}
   }

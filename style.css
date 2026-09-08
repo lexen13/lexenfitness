@@ -1034,3 +1034,72 @@ input[type=checkbox]:checked::after{content:'✓';position:absolute;color:#fff;f
 .di-block{margin-bottom:.7rem;padding:9px 11px;background:var(--surface);border:1px solid var(--border);border-radius:9px}
 .di-h{font-family:var(--font-display);font-size:.82rem;font-weight:800;margin-bottom:3px}
 .di-t{font-size:.72rem;line-height:1.5;color:var(--muted)}
+
+/* ══ v1.21.0 — System Shards ══ */
+.shard-balance{display:flex;align-items:center;justify-content:center;gap:8px;padding:16px;margin:.5rem 0;background:linear-gradient(140deg,#16122a,#241b3d);border:1px solid rgba(123,92,255,.35);border-radius:14px}
+.sb-icon{font-size:1.6rem}
+.sb-num{font-family:var(--font-display);font-size:2rem;font-weight:900;color:var(--accent2)}
+.sb-label{font-family:var(--font-mono);font-size:.6rem;color:var(--muted);letter-spacing:2px}
+.shard-earn{font-size:.64rem;color:var(--muted);line-height:1.6;padding:8px 10px;background:var(--surface);border-radius:9px;margin-bottom:.7rem}
+.shard-earn strong{color:var(--accent2)}
+.surge-active{padding:9px 12px;margin-bottom:.6rem;background:rgba(251,191,36,.1);border:1px solid var(--gold);border-radius:10px;font-family:var(--font-mono);font-size:.68rem;font-weight:800;color:var(--gold);text-align:center;letter-spacing:.5px}
+.shop-item{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:12px;margin-bottom:.6rem}
+.shop-item.dim{opacity:.55}
+.si-top{display:flex;align-items:center;gap:8px;margin-bottom:5px}
+.si-icon{font-size:1.2rem}
+.si-name{font-family:var(--font-display);font-size:.95rem;font-weight:800;color:var(--text);flex:1}
+.si-cost{font-family:var(--font-mono);font-size:.72rem;font-weight:800;color:var(--accent2)}
+.si-desc{font-size:.74rem;color:var(--text);line-height:1.45;margin-bottom:4px}
+.si-detail{font-size:.64rem;color:var(--muted);line-height:1.45;margin-bottom:8px}
+.si-buy{width:100%;padding:9px;background:linear-gradient(135deg,var(--accent),var(--accent2));color:#0a0a14;border:none;border-radius:9px;font-family:var(--font-mono);font-size:.7rem;font-weight:800;cursor:pointer;letter-spacing:.5px}
+.si-buy:disabled{background:var(--surface2);color:var(--dim);cursor:not-allowed}
+.si-lock{font-family:var(--font-mono);font-size:.64rem;color:var(--dim);text-align:center;padding:8px}
+.shop-note{font-size:.64rem;color:var(--dim);text-align:center;font-style:italic;margin-top:.8rem}
+
+/* ══ v1.22.0 — Assigned plans + buyback rules ══ */
+.po-sigil{text-align:center;font-size:2.4rem;line-height:1;margin-bottom:.3rem;filter:drop-shadow(0 0 18px rgba(123,92,255,.6))}
+.po-day{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:9px 11px;margin-bottom:6px}
+.po-day-title{font-family:var(--font-display);font-size:.82rem;font-weight:800;color:var(--accent2);margin-bottom:4px}
+.po-day-sub{font-family:var(--font-body);font-size:.64rem;color:var(--muted);font-weight:400;font-style:italic}
+.po-ex{display:flex;justify-content:space-between;font-size:.7rem;color:var(--text);padding:2px 0}
+.po-ex-sr{font-family:var(--font-mono);font-size:.64rem;color:var(--muted)}
+.si-rules{font-family:var(--font-mono);font-size:.58rem;color:var(--gold);line-height:1.5;padding:6px 8px;background:rgba(251,191,36,.06);border-radius:7px;margin-bottom:8px}
+.bb-rule{font-size:.72rem;color:var(--text);line-height:1.5;padding:3px 0}
+.bb-denied{display:flex;justify-content:space-between;gap:8px;font-size:.68rem;padding:5px 0;border-bottom:1px dashed var(--border)}
+.bb-why{color:var(--gold);font-size:.62rem;text-align:right;flex-shrink:0;max-width:55%}
+
+/* ══ v1.23.0 — Supersets ══ */
+.superset-block{border:1px solid rgba(123,92,255,.35);border-radius:14px;padding:8px;margin-bottom:.7rem;background:rgba(123,92,255,.04)}
+.ss-header{display:flex;justify-content:space-between;align-items:center;gap:6px;padding:2px 4px 6px;flex-wrap:wrap}
+.ss-tag{font-family:var(--font-mono);font-size:.6rem;font-weight:800;color:var(--accent);letter-spacing:1.5px}
+.ss-hint{font-family:var(--font-mono);font-size:.54rem;color:var(--muted);letter-spacing:.3px}
+.superset-block .exercise{margin-bottom:6px}
+.superset-block .exercise:last-of-type{margin-bottom:2px}
+.ss-footer{font-size:.58rem;color:var(--dim);font-style:italic;padding:4px 6px 2px;line-height:1.4}
+.hint-via{color:var(--dim);font-style:italic}
+/* Log readability */
+.log-daychip{display:inline-flex;flex-direction:column;align-items:center;justify-content:center;min-width:32px;padding:3px 5px;margin-right:7px;background:var(--surface2);border:1px solid var(--border);border-radius:7px;font-family:var(--font-mono);font-size:.5rem;font-weight:800;color:var(--muted);letter-spacing:.5px;line-height:1.1;vertical-align:middle}
+.log-daychip .lc-num{font-family:var(--font-display);font-size:.85rem;color:var(--text);font-weight:800}
+.wk-count{color:var(--muted);font-size:.66rem;font-family:var(--font-mono);white-space:nowrap}
+/* ══ S-RANK ASCENSION ══ */
+.srank-ascension{position:fixed;inset:0;z-index:10000;display:flex;align-items:center;justify-content:center;background:radial-gradient(ellipse at center,#1a1408 0%,#0a0a0f 55%,#000 100%);opacity:0;pointer-events:none;transition:opacity .7s ease;overflow:hidden}
+.srank-ascension.show{opacity:1;pointer-events:auto}
+.sr-stars{position:absolute;inset:0}
+.sr-star{position:absolute;background:#fff;border-radius:50%;opacity:.5;animation:srTwinkle 3s ease-in-out infinite}
+@keyframes srTwinkle{0%,100%{opacity:.15}50%{opacity:.9}}
+.sr-core{position:relative;text-align:center;padding:20px;transform:scale(.85);opacity:0;animation:srRise 1.4s cubic-bezier(.2,.9,.3,1) .25s forwards}
+@keyframes srRise{to{transform:scale(1);opacity:1}}
+.sr-rays{position:absolute;left:50%;top:38%;width:520px;height:520px;transform:translate(-50%,-50%);background:conic-gradient(from 0deg,transparent 0deg,rgba(251,191,36,.16) 12deg,transparent 24deg,transparent 36deg,rgba(251,191,36,.16) 48deg,transparent 60deg);border-radius:50%;animation:srSpin 22s linear infinite;pointer-events:none}
+@keyframes srSpin{to{transform:translate(-50%,-50%) rotate(360deg)}}
+.sr-shards{position:absolute;left:50%;top:38%;width:0;height:0}
+.sr-shard{position:absolute;width:3px;height:3px;background:var(--gold);border-radius:50%;box-shadow:0 0 10px 3px rgba(251,191,36,.7);animation:srBurst 2s ease-out infinite}
+@keyframes srBurst{0%{transform:translate(0,0) scale(1);opacity:1}100%{transform:translate(var(--tx),var(--ty)) scale(0);opacity:0}}
+.sr-eye{font-size:3.4rem;line-height:1;filter:drop-shadow(0 0 30px rgba(251,191,36,.9));animation:srPulse 3.2s ease-in-out infinite}
+@keyframes srPulse{0%,100%{transform:scale(1)}50%{transform:scale(1.09)}}
+.sr-pre{font-family:var(--font-mono);font-size:.64rem;font-weight:800;letter-spacing:5px;color:var(--gold);margin-top:14px;opacity:.9}
+.sr-rank{font-family:var(--font-display);font-size:4.2rem;font-weight:900;letter-spacing:4px;color:#fbbf24;line-height:1;margin:6px 0;text-shadow:0 0 40px rgba(251,191,36,.85),0 0 90px rgba(251,191,36,.45)}
+.sr-title{font-family:var(--font-display);font-size:1.25rem;font-weight:800;letter-spacing:3px;color:#fff}
+.sr-rule{width:120px;height:1px;margin:14px auto;background:linear-gradient(90deg,transparent,rgba(251,191,36,.8),transparent)}
+.sr-flavor{font-size:.76rem;line-height:1.7;color:rgba(255,255,255,.72);max-width:300px;margin:0 auto}
+.sr-dismiss{font-family:var(--font-mono);font-size:.58rem;letter-spacing:2px;color:rgba(255,255,255,.35);margin-top:26px;animation:srFade 2.2s ease-in-out infinite}
+@keyframes srFade{0%,100%{opacity:.25}50%{opacity:.8}}
