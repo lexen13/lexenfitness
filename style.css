@@ -1103,3 +1103,25 @@ input[type=checkbox]:checked::after{content:'✓';position:absolute;color:#fff;f
 .sr-flavor{font-size:.76rem;line-height:1.7;color:rgba(255,255,255,.72);max-width:300px;margin:0 auto}
 .sr-dismiss{font-family:var(--font-mono);font-size:.58rem;letter-spacing:2px;color:rgba(255,255,255,.35);margin-top:26px;animation:srFade 2.2s ease-in-out infinite}
 @keyframes srFade{0%,100%{opacity:.25}50%{opacity:.8}}
+
+/* ══ v1.24.0 — Awakening Phase II ══ */
+.phase-label{font-family:var(--font-mono);font-size:.56rem;font-weight:800;color:var(--accent);letter-spacing:2px;margin:.5rem 0 .3rem}
+.pl-sub{color:var(--dim);font-weight:600;letter-spacing:.5px;font-size:.52rem}
+.exam-card{margin-top:.7rem;padding:12px;border-radius:12px;border:1px solid var(--border);background:var(--surface)}
+.exam-card.locked{opacity:.6;border-style:dashed}
+.exam-card.ready{border-color:rgba(251,191,36,.5);background:rgba(251,191,36,.06)}
+.exam-card.active{border-color:var(--accent);background:linear-gradient(150deg,rgba(123,92,255,.09),rgba(251,191,36,.05))}
+.exam-card.passed{border-color:var(--green);background:rgba(52,211,153,.08)}
+.exam-title{font-family:var(--font-display);font-size:.92rem;font-weight:800;color:var(--text);letter-spacing:1px}
+.exam-sub{font-size:.7rem;color:var(--muted);line-height:1.5;margin-top:3px}
+.exam-countdown{font-family:var(--font-mono);font-size:.72rem;font-weight:800;color:var(--gold);margin:5px 0 8px;letter-spacing:1px}
+.exam-req{display:flex;align-items:center;gap:7px;padding:5px 0;font-size:.7rem;border-bottom:1px dashed var(--border)}
+.exam-req:last-of-type{border-bottom:none}
+.er-mark{flex-shrink:0}
+.er-label{flex:1;color:var(--text)}
+.er-detail{font-family:var(--font-mono);font-size:.6rem;color:var(--muted);text-align:right;flex-shrink:0}
+.exam-req.ok .er-label{color:var(--green)}
+.exam-req.ok .er-detail{color:var(--green)}
+.exam-note{font-size:.58rem;color:var(--dim);font-style:italic;margin-top:8px;line-height:1.4}
+.exam-fail{font-size:.64rem;color:var(--gold);line-height:1.45;margin:6px 0;padding:6px 8px;background:rgba(251,191,36,.07);border-radius:7px}
+.exam-start{width:100%;margin-top:9px;padding:11px;background:linear-gradient(135deg,var(--accent),var(--accent2));color:#0a0a14;border:none;border-radius:10px;font-family:var(--font-mono);font-size:.72rem;font-weight:800;letter-spacing:1px;cursor:pointer;box-shadow:0 3px 14px rgba(123,92,255,.3)}

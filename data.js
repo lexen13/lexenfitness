@@ -1,9 +1,16 @@
 // ═══════════════════════════════════════════
 //  LEXENFITNESS — DATA v4 (Solo Leveling)
 // ═══════════════════════════════════════════
-const APP_VERSION='1.23.0';
+const APP_VERSION='1.24.1';
 const WELCOME_MESSAGE=`Welcome to Lexen Fitness! A Solo-Leveling inspired, gamified Fitness App to help friends and family stay motivated by giving fitness a game-like experience.\n\nThis app is developed by one person, and is very much still in the testing phase. Not everything will be perfect, but please bear with me. If you have any suggestions, feel free to pass them along as I continue to make this the best app that I can, before I actually have to start buying dev rights with Apple and Google.\n\nFeel free to share this with your own family and friends as we build a community that becomes healthier together!\n\n— Gavin (founder)`;
 const CHANGELOG=[
+  {version:'1.24.0',date:'Jul 2026',title:'The Awakening · Phase II',blurb:'The final trial for S-Rank is live. Once you clear Phase I, you can begin a 14-day exam: hit your weekly goal two weeks running, log food every single day, and beat one of your own lifts. Fall short and you keep everything from Phase I — you just try again.',items:[
+    '👁️ Phase II is a 14-day exam you start when you are ready — the clock begins when you accept',
+    '📊 Live tracker shows all three requirements and days remaining while the exam runs',
+    '🏋️ The PR requirement is measured against a snapshot of your bests taken the moment you begin — you have to beat the old you',
+    '🔁 Failing costs an attempt, never your Phase I progress. Attempt number is tracked and shown',
+    '🔒 S-RANK cannot be claimed until Phase II is genuinely passed'
+  ]},
   {version:'1.23.0',date:'Jul 2026',title:'Supersets, The New Awakening & Ascension',blurb:'Supersets are now a real feature — paired movements show as a linked block and the rest timer knows to wait until you finish both. The S-Rank trial has been rebuilt into two phases so a single bad day can never undo months of work, and reaching S-Rank now triggers a full ascension sequence. Exercise history also survives renaming, and the log is easier to scan.',items:[
     '⇄ Native superset support — pair any two exercises (2A/2B) in the editor; rest timer holds until the pair is done. Gym packed? Straight through still works',
     '👁️ THE AWAKENING rebuilt: Phase I is cumulative (100 sessions · 12 perfect weeks · 20 all-mission days) and can never be lost. Phase II is a retryable 14-day final exam',

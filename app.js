@@ -394,6 +394,7 @@ function initApp(){
     migratePerfectWeekLocks().then(()=>lockLastWeekIfNeeded()).catch(e=>console.warn(e));
     try{grantFounderPass()}catch(e){console.warn(e)}
     try{checkWeeklyRecap()}catch(e){console.warn(e)}
+    checkAwakeningExam().catch(e=>console.warn(e));
     // First-time training goal prompt — for users who haven't set it yet
     if(userData.weeklyTrainingGoal===undefined||userData.weeklyTrainingGoal===null){
       setTimeout(()=>openTrainingGoalPrompt(true),1200);
@@ -413,6 +414,14 @@ function initApp(){
 }
 // One-time Iron Gate pass for the founder account (skip, not pass — no bonus XP)
 async function grantFounderPass(){
+  // ── @yulri: one-time XP boost ──
+  if(userData.username==='yulri'&&!userData.yulriBoostGranted){
+    userData.xp=(userData.xp||0)+5000;
+    userData.yulriBoostGranted=true;
+    await saveUser({xp:userData.xp,yulriBoostGranted:true});
+    await saveLeaderboard();updateTopBar();
+    setTimeout(()=>{try{checkRankUp()}catch(e){console.warn(e)}},600);
+  }
   if(userData.username!=='gyabinlee11')return;
   if(userData.founderSRankGranted)return; // one-time guard
   const tc=userData.trialsCompleted||[];
@@ -930,12 +939,167 @@ async function grantStartingShards(){
   setTimeout(()=>toast(`💠 +${STARTING_SHARDS} SHARDS — welcome gift from The System`),1800);
 }
 // ═══════════ RANK TRIALS ═══════════
+// ═══════════ THE AWAKENING · PHASE II ═══════════
+// A 14-day final exam, unlocked only after Phase I. Retryable — failing costs an
+// attempt, never your Phase I progress.
+function awakeningPhase1Done(){
+  const t=RANK_TRIALS.awakening;
+  const p=getTrialProgress(t);
+  // First three tasks are Phase I
+  return t.tasks.slice(0,3).every((task,i)=>p[i]>=task.target);
+}
+// Snapshot the user's current best weight per exercise, so the PR must beat
+// what they could already do BEFORE the exam started.
+function snapshotPrBaseline(){
+  const base={};
+  getLiftLogs().forEach(e=>{
+    (e.exercises||[]).forEach(ex=>{
+      const k=normalizeExName(ex.name);if(!k)return;
+      (ex.sets||[]).forEach(s=>{
+        const w=parseFloat(s.weight)||0;
+        if(w>0&&(!base[k]||w>base[k]))base[k]=w;
+      });
+    });
+  });
+  return base;
+}
+async function startAwakeningExam(){
+  if(!awakeningPhase1Done()){toast('Finish Phase I first');return}
+  const ex=userData.awakeningExam;
+  if(ex&&ex.status==='active'){toast('Your exam is already running');return}
+  const attempt=(userData.awakeningAttempts||0)+1;
+  const msg=`👁️ BEGIN THE AWAKENING?\n\nYou have 14 days to:\n• Hit your weekly training goal both weeks\n• Log food every single day\n• Beat one of your own logged lifts\n\nThe clock starts the moment you accept. If you fall short, your Phase I progress is untouched — you simply try again.\n\nAttempt #${attempt}. Begin?`;
+  if(!confirm(msg))return;
+  userData.awakeningExam={
+    status:'active',
+    startedAt:Date.now(),
+    attempt,
+    prBaseline:snapshotPrBaseline()
+  };
+  userData.awakeningAttempts=attempt;
+  await saveUser({awakeningExam:userData.awakeningExam,awakeningAttempts:attempt});
+  toast('👁️ THE AWAKENING HAS BEGUN — 14 days');
+  renderMissions();
+}
+// Live evaluation of the running exam
+function getAwakeningExamStatus(){
+  const ex=userData.awakeningExam;
+  if(!ex||ex.status!=='active')return null;
+  const start=ex.startedAt;
+  const now=Date.now();
+  const elapsedDays=Math.floor((now-start)/86400000);
+  const daysLeft=Math.max(0,AWAKENING_EXAM.days-elapsedDays);
+  const goal=getWeeklyGoal();
+  const endOfWindow=start+AWAKENING_EXAM.days*86400000;
+  // 1. Two 7-day blocks from the start date (not calendar weeks)
+  const blockCount=[0,0];
+  getTrainingLogs().forEach(e=>{
+    const t=new Date(e.date).getTime();
+    if(t<start||t>=endOfWindow)return;
+    const block=Math.floor((t-start)/(7*86400000));
+    if(block===0||block===1)blockCount[block]++;
+  });
+  const week1=blockCount[0],week2=blockCount[1];
+  // 2. Food logged every day so far
+  let foodDays=0,daysSoFar=Math.min(AWAKENING_EXAM.days,elapsedDays+1);
+  for(let i=0;i<daysSoFar;i++){
+    const d=new Date(start+i*86400000);
+    const key=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+    const fl=(userData.foodLog||{})[key];
+    if(fl&&fl.meals&&Object.values(fl.meals).some(m=>Array.isArray(m)&&m.length))foodDays++;
+  }
+  const foodMissed=daysSoFar-foodDays;
+  // 3. Any lift during the window that beat the pre-exam baseline
+  let prHit=null;
+  const base=ex.prBaseline||{};
+  getLiftLogs().forEach(e=>{
+    const t=new Date(e.date).getTime();
+    if(t<start||t>=endOfWindow)return;
+    (e.exercises||[]).forEach(exr=>{
+      const k=normalizeExName(exr.name);
+      (exr.sets||[]).forEach(s=>{
+        const w=parseFloat(s.weight)||0;
+        if(w>0&&base[k]!==undefined&&w>base[k]&&(!prHit||w-base[k]>prHit.gain)){
+          prHit={name:exr.name,weight:w,prev:base[k],gain:w-base[k]};
+        }
+      });
+    });
+  });
+  const expired=elapsedDays>=AWAKENING_EXAM.days;
+  const weeksOk=week1>=goal&&week2>=goal;
+  const foodOk=foodMissed===0&&daysSoFar>=1;
+  const prOk=!!prHit;
+  return {ex,daysLeft,elapsedDays,expired,goal,week1,week2,weeksOk,foodDays,foodMissed,foodOk,prHit,prOk,
+    passed:weeksOk&&foodOk&&prOk&&expired,
+    onTrack:foodOk&&(elapsedDays<7||week1>=goal)};
+}
+// Called on load — closes out an expired exam as pass or fail
+async function checkAwakeningExam(){
+  const st=getAwakeningExamStatus();
+  if(!st||!st.expired)return;
+  const ex=userData.awakeningExam;
+  const allMet=st.weeksOk&&st.foodOk&&st.prOk;
+  if(allMet){
+    ex.status='passed';
+    userData.awakeningExamPassed=true;
+    userData.awakeningExam=ex;
+    await saveUser({awakeningExam:ex,awakeningExamPassed:true});
+    setTimeout(()=>{
+      alert('👁️ THE AWAKENING IS COMPLETE.\n\nYou hit your goal both weeks, logged every day, and broke your own record.\n\nClaim S-RANK from the trial card.');
+      renderMissions();
+    },1200);
+  }else{
+    ex.status='failed';
+    const reasons=[];
+    if(!st.weeksOk)reasons.push(`training goal (${st.week1} and ${st.week2} sessions vs ${st.goal} needed)`);
+    if(!st.foodOk)reasons.push(`food logging (${st.foodMissed} day${st.foodMissed!==1?'s':''} missed)`);
+    if(!st.prOk)reasons.push('no lift beat your previous best');
+    ex.failReasons=reasons;
+    userData.awakeningExam=ex;
+    await saveUser({awakeningExam:ex});
+    setTimeout(()=>{
+      alert(`The Awakening ends — attempt #${ex.attempt} fell short.\n\nWhat was missing:\n• ${reasons.join('\n• ')}\n\nYour Phase I progress is untouched. Rest, then begin again when you're ready.`);
+      renderMissions();
+    },1200);
+  }
+}
+// Exam card rendered inside the trial banner
+function renderAwakeningExam(){
+  const st=getAwakeningExamStatus();
+  const ex=userData.awakeningExam;
+  const attempts=userData.awakeningAttempts||0;
+  if(userData.awakeningExamPassed){
+    return `<div class="exam-card passed"><div class="exam-title">👁️ PHASE II COMPLETE</div><div class="exam-sub">The Awakening has been passed. Claim your rank.</div></div>`;
+  }
+  if(!st){
+    if(!awakeningPhase1Done()){
+      return `<div class="exam-card locked"><div class="exam-title">🔒 PHASE II — THE AWAKENING</div><div class="exam-sub">A 14-day final exam. Unlocks when Phase I is complete.</div></div>`;
+    }
+    const failedNote=ex&&ex.status==='failed'?`<div class="exam-fail">Attempt #${ex.attempt} fell short: ${(ex.failReasons||[]).join(' · ')}</div>`:'';
+    return `<div class="exam-card ready"><div class="exam-title">👁️ PHASE II UNLOCKED</div>
+      <div class="exam-sub">14 days. Hit your weekly goal twice, log food every day, and beat one of your own lifts.</div>
+      ${failedNote}
+      <button class="exam-start" onclick="startAwakeningExam()">⚔️ BEGIN THE AWAKENING${attempts?` · ATTEMPT #${attempts+1}`:''}</button></div>`;
+  }
+  // Active exam
+  const row=(ok,label,detail)=>`<div class="exam-req ${ok?'ok':''}"><span class="er-mark">${ok?'✅':'○'}</span><span class="er-label">${label}</span><span class="er-detail">${detail}</span></div>`;
+  return `<div class="exam-card active">
+    <div class="exam-title">👁️ THE AWAKENING · ACTIVE</div>
+    <div class="exam-countdown">${st.daysLeft} day${st.daysLeft!==1?'s':''} remaining</div>
+    ${row(st.week1>=st.goal&&st.week2>=st.goal,'Weekly goal, both weeks',`${st.week1} / ${st.goal} · ${st.week2} / ${st.goal}`)}
+    ${row(st.foodOk,'Food logged every day',st.foodMissed?`${st.foodMissed} missed`:`${st.foodDays} day${st.foodDays!==1?'s':''} clean`)}
+    ${row(st.prOk,'Beat one of your lifts',st.prHit?`${esc(st.prHit.name)} ${st.prHit.prev}→${st.prHit.weight}`:'not yet')}
+    <div class="exam-note">Attempt #${st.ex.attempt} · Phase I progress is safe no matter how this ends.</div>
+  </div>`;
+}
 function getAvailableTrial(){for(let i=RANKS.length-1;i>=0;i--){if(userData.xp>=RANKS[i].min&&!RANKS[i].auto&&RANKS[i].trial&&!userData.trialsCompleted.includes(RANKS[i].trial)){return{rank:RANKS[i],trial:RANK_TRIALS[RANKS[i].trial]}}}return null}
 function renderTrialBanner(info){
   const t=info.trial;const progress=getTrialProgress(t);
   let h=`<div class="trial-banner"><div class="trial-header"><span class="trial-icon">${t.icon}</span><div><div class="trial-name">${t.name}</div><div class="trial-desc">${t.desc}</div></div></div>`;
+  if(t.twoPhase)h+=`<div class="phase-label">PHASE I · THE LONG ROAD <span class="pl-sub">cumulative — never lost</span></div>`;
   t.tasks.forEach((task,i)=>{
     const p=progress[i];const pct=Math.min(100,(p/task.target)*100);
+    if(task.id==='awaken_final'){h+=renderAwakeningExam();return}
     const isPerfectWeeks=task.id==='perfect_weeks_3';
     h+=`<div class="trial-task${isPerfectWeeks?' has-detail':''}"${isPerfectWeeks?' onclick="togglePerfectWeeksDetail(this)"':''}>
       <div class="trial-task-desc">${task.desc}${isPerfectWeeks?' <span style="color:var(--accent);font-size:.62rem">▼ tap</span>':''}</div>
@@ -1133,6 +1297,11 @@ async function migratePerfectWeekLocks(){
 }
 async function claimTrial(trialId){
   if(userData.trialsCompleted.includes(trialId))return;
+  // S-Rank cannot be claimed without actually passing Phase II
+  if(trialId==='awakening'&&!userData.awakeningExamPassed){
+    toast('Phase II must be passed before S-RANK can be claimed');
+    return;
+  }
   userData.trialsCompleted.push(trialId);
   const rank=RANKS.find(r=>r.trial===trialId);
   if(rank){if(rank.name==='B-RANK')unlockAch('rank_b');if(rank.name==='A-RANK')unlockAch('rank_a');if(rank.name==='S-RANK')unlockAch('rank_s')}
