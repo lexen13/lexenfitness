@@ -1,9 +1,19 @@
 // ═══════════════════════════════════════════
 //  LEXENFITNESS — DATA v4 (Solo Leveling)
 // ═══════════════════════════════════════════
-const APP_VERSION='1.27.0';
+const APP_VERSION='1.28.0';
 const WELCOME_MESSAGE=`Welcome to Lexen Fitness! A Solo-Leveling inspired, gamified Fitness App to help friends and family stay motivated by giving fitness a game-like experience.\n\nThis app is developed by one person, and is very much still in the testing phase. Not everything will be perfect, but please bear with me. If you have any suggestions, feel free to pass them along as I continue to make this the best app that I can, before I actually have to start buying dev rights with Apple and Google.\n\nFeel free to share this with your own family and friends as we build a community that becomes healthier together!\n\n— Gavin (founder)`;
 const CHANGELOG=[
+  {version:'1.28.0',date:'Oct 2026',title:'Friends, Invites & a Locked-Down System',blurb:'Your Home screen now shows what your friends are up to: workouts, PRs, rank-ups and Red Gates. A banner tells you exactly what\'s left for a perfect week. You can equip your frames and name colors from the new Wardrobe on your profile. LexenFitness is now invite-only, and a big security update keeps your chats, stats and progress private and fair.',items:[
+    '👥 Friend Activity on Home — friends\' workouts, PRs, rank-ups, perfect weeks and Red Gates, as they happen',
+    '📅 Week tracker — shows how many sessions are left for a perfect week, and stays quiet when the week is out of reach',
+    '✨ Wardrobe — equip frames and name colors from your Profile. Future cosmetics show up here automatically',
+    '🎟️ Invite-only — new hunters need a friend\'s code to join. Your friend code is your invite code (Friends page → Share invite), and anyone who joins with it is sent to you as a friend request',
+    '🔒 Privacy — chats are visible only to the two people in them, and your full profile only to friends you\'ve added',
+    '🛡️ Fair play — progress, shards, ranks and the leaderboard are now protected against tampering',
+    '🙈 New setting: choose whether your activity appears in friends\' feeds (Settings → Privacy)',
+    '🔧 Awakening\'s all-mission days are now truly permanent (older days were being dropped), and Food History keeps 300 foods'
+  ]},
   {version:'1.27.0',date:'Oct 2026',title:'Red Gates & Cosmetics',blurb:'S-Ranks now face a Red Gate every week: one boss challenge shared by every S-Rank, with targets scaled to your own history. Clear it for shards, XP, and a growing gate count. The Shop also sells profile frames and name colors that friends can see on the leaderboard. And your daily mission streak no longer resets to zero every evening.',items:[
     '⛩️ Red Gates — a weekly boss for S-Ranks, rotating through 7 challenges (volume, flawless sessions, lift PRs, mission discipline, protein, cardio, session time)',
     '⛩️ Clear a gate for +60 shards and +400 XP. Gate count shows on your profile, plus 4 new achievements',
@@ -1129,4 +1139,14 @@ const COSMETICS=[
   {id:'name_violet',type:'name',name:'Violet Name',desc:'Your @name in System violet.',cost:80,lock:null},
   {id:'name_ember',type:'name',name:'Ember Name',desc:'Your @name in burning orange.',cost:80,lock:null},
   {id:'name_monarch',type:'name',name:'Monarch Gold Name',desc:'Shimmering gold @name. S-Rank only.',cost:250,lock:'S'}
+];
+
+// ═══════════ v1.28.0 — Feed + cosmetic types ═══════════
+// Feed event types friends can see. Anything else is ignored on render.
+const FEED_TYPES=['workout','cardio','rank','gate','perfect','ach'];
+// Each cosmetic type gets its own Wardrobe section. Add a type here (plus items in
+// COSMETICS and a .cos-<id> CSS class) and it appears automatically.
+const COSMETIC_TYPES=[
+  {id:'frame',label:'Profile Frames',icon:'🖼️'},
+  {id:'name',label:'Name Colors',icon:'🎨'}
 ];

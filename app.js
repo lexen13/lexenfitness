@@ -22,18 +22,33 @@ const $=id=>document.getElementById(id);
 // XSS protection: escape HTML in user/API-sourced strings
 function esc(s){if(!s)return'';const d=document.createElement('div');d.textContent=String(s);return d.innerHTML.replace(/"/g,'&quot;').replace(/'/g,'&#39;')}
 
+// Image sources come from other users' docs. Only accept what this app produces:
+// canvas data URLs (profile uploads) or plain https URLs (Google photos). Anything
+// else — quotes, javascript:, attribute break-outs — renders as the fallback.
+function safeImgSrc(u){u=String(u||'');return /^(data:image\/(png|jpe?g|webp|gif);base64,[A-Za-z0-9+\/=]+|https:\/\/[^\s"'<>]+)$/.test(u)?u:''}
+function avatarHtml(u,fallback){const s=safeImgSrc(u);return s?'<img src="'+esc(s)+'" alt="">':(fallback==null?'👤':fallback)}
+// Numbers from other users' docs could be strings carrying HTML — coerce before rendering
+function num(n){n=Number(n);return isFinite(n)?n:0}
+// Inside onclick="fn('…')" the browser decodes &#39; back to a quote BEFORE running JS,
+// so esc() is not enough there. Strip values down to their legal character set instead.
+function safeId(x){x=String(x||'');return /^[A-Za-z0-9_-]{1,128}$/.test(x)?x:''}
+function safeName(x){return String(x||'').replace(/[^a-z0-9_]/gi,'').slice(0,20)}
+
 // Cleanup: cap unbounded data to prevent Firestore bloat
 async function cleanupOldData(){
   let dirty=false;
   if(userData.missionsCompleted){
     const cut=new Date();cut.setDate(cut.getDate()-90);const cs=cut.toISOString().slice(0,10);
+    const archive=new Set(userData.allMissionDays||[]);const before=archive.size;
+    Object.keys(userData.missionsCompleted).forEach(k=>{if(dayAllMissionsDone(k))archive.add(k)});
     Object.keys(userData.missionsCompleted).forEach(k=>{if(k<cs){delete userData.missionsCompleted[k];dirty=true}});
+    if(archive.size!==before){userData.allMissionDays=[...archive].sort();dirty=true}
   }
   if(userData.foodLog){
     const cut=new Date();cut.setDate(cut.getDate()-30);const cs=cut.toISOString().slice(0,10);
     Object.keys(userData.foodLog).forEach(k=>{if(k<cs){delete userData.foodLog[k];dirty=true}});
   }
-  if(dirty)await saveUser({missionsCompleted:userData.missionsCompleted,foodLog:userData.foodLog||{}});
+  if(dirty)await saveUser({missionsCompleted:userData.missionsCompleted,foodLog:userData.foodLog||{},allMissionDays:userData.allMissionDays||[]});
 }
 
 // ═══════════ AUTH ═══════════
@@ -48,6 +63,8 @@ async function doSignup(){
   if(/[^a-z0-9_]/.test(uname)){$('signupError').textContent='Letters, numbers, underscores only';return}
   if(!e){$('signupError').textContent='Email required';return}
   if(!p||p.length<6){$('signupError').textContent='Password must be 6+ characters';return}
+  const invite=normalizeInvite($('signupInvite').value);
+  if(invite.length!==6){$('signupError').textContent='Invite code required — ask a friend for theirs';return}
   try{
     authLock=true;
     // 1. Create auth account first (so we're authenticated for Firestore)
@@ -61,19 +78,34 @@ async function doSignup(){
       $('signupError').textContent='Username taken — try another';
       return;
     }
+    // 2b. Validate the invite code before writing anything
+    const inviterUid=await lookupInvite(invite);
+    if(!inviterUid){
+      await cred.user.delete();authLock=false;
+      $('signupError').textContent='That invite code isn\'t valid — double-check it with your friend';
+      return;
+    }
     // 3. All good — write everything
     const dn=f+(l?' '+l:'');
     await cred.user.updateProfile({displayName:dn});
     // Send welcome/verification email
     try{await cred.user.sendEmailVerification()}catch(e){}
     const fc=genFriendCode();
-    await db.collection('users').doc(cred.user.uid).set({name:dn,username:uname,email:e,friendCode:fc,xp:0,achievements:[],stats:{},prs:{},profilePic:'',class:'',subclass:'',programKey:'',program:[],friends:[],privacy:{hideName:false,hideStats:false},goal:'',experience:'',missionsCompleted:{},missionStreak:0,trialsCompleted:[],createdAt:firebase.firestore.FieldValue.serverTimestamp()});
-    await db.collection('usernames').doc(uname).set({uid:cred.user.uid});
-    await db.collection('friendCodes').doc(fc).set({uid:cred.user.uid});
+    // One atomic batch: the rules check the profile, username and code together
+    const batch=db.batch();
+    batch.set(db.collection('users').doc(cred.user.uid),newUserDoc({name:dn,username:uname,email:e,friendCode:fc,invitedBy:invite,invitedByUid:inviterUid}));
+    batch.set(db.collection('usernames').doc(uname),{uid:cred.user.uid});
+    batch.set(db.collection('friendCodes').doc(fc),{uid:cred.user.uid});
+    try{await batch.commit()}catch(bErr){
+      await cred.user.delete().catch(()=>{});authLock=false;
+      $('signupError').textContent=bErr.code==='permission-denied'?'Signup rejected — check your invite code and username':'Signup failed: '+bErr.message;
+      return;
+    }
     authLock=false;
     U=cred.user;isDev=(U.email===DEV_EMAIL);
     await loadUserData();
     prevRankName=getEffectiveRank().name;
+    sendInviterFriendRequest();
     $('loadingScreen').style.display='none';
     showScreen('classScreen');buildClassSelect();
   }catch(err){
@@ -176,9 +208,11 @@ auth.onAuthStateChanged(async u=>{
       U=u;isDev=(u.email===DEV_EMAIL);
       const doc=await db.collection('users').doc(U.uid).get();
       if(!doc.exists){
-        const fc=genFriendCode();
-        await db.collection('users').doc(U.uid).set({name:u.displayName||'',username:'',email:u.email,friendCode:fc,xp:0,achievements:[],stats:{},prs:{},profilePic:u.photoURL||'',class:'',subclass:'',programKey:'',program:[],friends:[],privacy:{hideName:false,hideStats:false},goal:'',experience:'',missionsCompleted:{},missionStreak:0,trialsCompleted:[],createdAt:firebase.firestore.FieldValue.serverTimestamp()});
-        await db.collection('friendCodes').doc(fc).set({uid:U.uid});
+        // Signed in but no hunter profile yet (new Google sign-in) → invite required
+        clearTimeout(hangTimer);
+        $('loadingScreen').style.display='none';
+        showScreen('inviteScreen');
+        return;
       }
       await loadUserData();
       prevRankName=getEffectiveRank().name;
@@ -195,7 +229,7 @@ auth.onAuthStateChanged(async u=>{
     showScreen('authScreen');
   }
 });
-function showScreen(id){['authScreen','classScreen','appScreen','usernameScreen'].forEach(s=>{$(s).classList.remove('active');$(s).style.display='none'});$(id).style.display='';$(id).classList.add('active')}
+function showScreen(id){['authScreen','classScreen','appScreen','usernameScreen','inviteScreen'].forEach(s=>{$(s).classList.remove('active');$(s).style.display='none'});$(id).style.display='';$(id).classList.add('active')}
 
 // ═══════════ USERNAME REQUIRED SCREEN ═══════════
 async function submitUsername(){
@@ -208,6 +242,7 @@ async function submitUsername(){
   // Claim username
   await db.collection('usernames').doc(uname).set({uid:U.uid});
   await saveUser({username:uname});
+  sendInviterFriendRequest();
   // Proceed to class select or app
   if(!userData.class){showScreen('classScreen');buildClassSelect()}
   else{showScreen('appScreen');initApp();checkWhatsNew()}
@@ -244,7 +279,18 @@ async function loadUserData(){
   console.log('[loadUserData] done');
 }
 async function saveUser(f){await db.collection('users').doc(U.uid).update(f);Object.assign(userData,f)}
-async function saveLeaderboard(){const r=getEffectiveRank();await db.collection('leaderboard').doc(U.uid).set({username:userData.username||'hunter',xp:userData.xp,class:userData.class,subclass:userData.subclass||'',rank:r.name,profilePic:userData.profilePic||'',bio:userData.bio||'',workouts:getLiftLogs().length,activities:getActivityLogs().length,frame:getCos().frame,nameColor:getCos().name,gatesCleared:userData.redGatesCleared||0,updatedAt:firebase.firestore.FieldValue.serverTimestamp()})}
+async function saveLeaderboard(){
+  // Never throw: a failed leaderboard write must not abort the action that triggered it
+  try{
+    const r=getEffectiveRank(),c=getCos();
+    await db.collection('leaderboard').doc(U.uid).set({
+      username:userData.username||'hunter',xp:userData.xp||0,class:userData.class||'',subclass:userData.subclass||'',
+      rank:r.name,profilePic:safeImgSrc(userData.profilePic),bio:String(userData.bio||'').slice(0,200),
+      workouts:getLiftLogs().length,activities:getActivityLogs().length,achCount:(userData.achievements||[]).length,
+      frame:c.frame,nameColor:c.name,gatesCleared:userData.redGatesCleared||0,recent:publicFeedEvents(),
+      updatedAt:firebase.firestore.FieldValue.serverTimestamp()});
+  }catch(e){console.warn('[saveLeaderboard]',e.code||e.message)}
+}
 
 // ═══════════ RANK-UP SPLASH ═══════════
 let prevLevelInfo=null;
@@ -253,7 +299,7 @@ function checkRankUp(){
   if(prevRankName&&newRank.name!==prevRankName){
     const ri=RANKS.findIndex(r=>r.name===newRank.name);
     const prevRi=RANKS.findIndex(r=>r.name===prevRankName);
-    if(ri>prevRi){showRankUpSplash(newRank)}
+    if(ri>prevRi){showRankUpSplash(newRank);pushFeedEvent('rank',{rank:newRank.name})}
   }
   prevRankName=newRank.name;
   // Level-up detection → animated burst
@@ -392,7 +438,6 @@ function initApp(){
     grantStartingShards().catch(e=>console.warn(e));
     setTimeout(()=>{try{checkAssignedPlan()}catch(e){console.warn(e)}},2200);
     migratePerfectWeekLocks().then(()=>lockLastWeekIfNeeded()).catch(e=>console.warn(e));
-    try{grantFounderPass()}catch(e){console.warn(e)}
     try{checkWeeklyRecap()}catch(e){console.warn(e)}
     checkAwakeningExam().catch(e=>console.warn(e));
     ensureRedGate().catch(e=>console.warn(e));
@@ -412,42 +457,6 @@ function initApp(){
   try{resumed=restoreSession()}catch(e){console.warn(e)}
   if(resumed){switchPage('train');return}
   switchPage(startPage&&['train','missions','nutrition','chat','ranks','profile'].includes(startPage)?startPage:'missions');
-}
-// One-time Iron Gate pass for the founder account (skip, not pass — no bonus XP)
-async function grantFounderPass(){
-  // ── @yulri: one-time XP boost ──
-  if(userData.username==='yulri'&&!userData.yulriBoostGranted){
-    userData.xp=(userData.xp||0)+5000;
-    userData.yulriBoostGranted=true;
-    await saveUser({xp:userData.xp,yulriBoostGranted:true});
-    await saveLeaderboard();updateTopBar();
-    setTimeout(()=>{try{checkRankUp()}catch(e){console.warn(e)}},600);
-  }
-  if(userData.username!=='gyabinlee11')return;
-  if(userData.founderSRankGranted)return; // one-time guard
-  const tc=userData.trialsCompleted||[];
-  ['iron_gate','gauntlet','awakening'].forEach(t=>{if(!tc.includes(t))tc.push(t)});
-  userData.trialsCompleted=tc;
-  userData.xp=(userData.xp||0)+5000;
-  // Restore the streak that wasn't being counted
-  userData.streakRestoreTo=28;
-  userData.lastStreakRestore=Date.now();
-  userData.prevWeeklyStreak=28;
-  // Credit 7 consecutive all-mission days so the record reflects what he actually did
-  const mc=userData.missionsCompleted||{};
-  for(let i=1;i<=7;i++){
-    const d=new Date();d.setDate(d.getDate()-i);
-    const key=d.toISOString().slice(0,10);
-    const ms=getDailyMissions(key,userData.class)||[];
-    if(ms.length)mc[key]=ms.map(m=>m.id);
-  }
-  userData.missionsCompleted=mc;
-  userData.missionStreak=calcMissionStreak();
-  userData.founderSRankGranted=true;
-  await saveUser({trialsCompleted:tc,xp:userData.xp,streakRestoreTo:28,lastStreakRestore:userData.lastStreakRestore,
-    prevWeeklyStreak:28,missionsCompleted:mc,missionStreak:userData.missionStreak,founderSRankGranted:true});
-  await saveLeaderboard();updateTopBar();
-  setTimeout(()=>{try{checkRankUp()}catch(e){console.warn(e)}},600);
 }
 // ═══════════ WEEKLY RECAP ═══════════
 // Shown once per week, on first open of a new week — summarizes LAST week.
@@ -711,7 +720,9 @@ function renderMissions(){
   const cap=getXpCap();const softCapped=cap.softCap<1;
   const {mult,label:multLabel}=getXpMultiplier();
   let h=renderTodayHero(completed.length,missions.length);
+  h+=renderWeekRisk();
   h+=renderProgressStrip();
+  h+=friendFeedSlot();
   h+=`<div class="page-title" style="font-size:1.1rem;margin-top:1rem">DAILY MISSIONS</div><div class="page-sub">${completed.length}/${missions.length} complete · Streak: ${userData.missionStreak} days</div>`;
   if(multLabel)h+=`<div class="xp-mult-badge">${multLabel}</div>`;
   if(softCapped){const trial=getAvailableTrial();h+=`<div class="trial-active-banner">⚔️ TRIAL ACTIVE · XP at 25% — break through ${trial?trial.trial.name:'the trial'} below for full XP + bonus</div>`}
@@ -1038,7 +1049,8 @@ async function claimRedGate(){
   userData.redGatesCleared=(userData.redGatesCleared||0)+1;
   userData.shards=(userData.shards||0)+SHARD_REWARDS.redGate;
   const gained=addXP(RED_GATE_XP);
-  await saveUser({redGate:g,redGatesCleared:userData.redGatesCleared,shards:userData.shards,xp:userData.xp});
+  queueFeedEvent('gate',{name:(RED_GATE_POOL.find(t=>t.id===g.type)||{}).name||''});
+  await saveUser({redGate:g,redGatesCleared:userData.redGatesCleared,shards:userData.shards,xp:userData.xp,feedEvents:userData.feedEvents||[]});
   await saveLeaderboard();updateTopBar();
   const type=RED_GATE_POOL.find(t=>t.id===g.type)||{};
   showGateCleared(type,gained);
@@ -1059,7 +1071,7 @@ function showGateCleared(type,gained){
   try{if(navigator.vibrate)navigator.vibrate([90,40,90,40,200])}catch(e){}
 }
 // ═══════════ COSMETICS ═══════════
-function getCos(){const c=userData.cosmetics||{};return{owned:c.owned||[],frame:c.frame||'',name:c.name||''}}
+function getCos(){const c=userData.cosmetics||{};const out={owned:Array.isArray(c.owned)?c.owned:[]};COSMETIC_TYPES.forEach(t=>{out[t.id]=c[t.id]||''});return out}
 function cosmeticLockReason(item){
   if(!item.lock)return '';
   if(item.lock==='S')return isSRank()?'':'S-RANK only';
@@ -1080,9 +1092,11 @@ async function buyCosmetic(id){
   if(cosmeticOwned(item)){toast('Already yours');return}
   if(getShards()<item.cost){toast(`Need ${item.cost-getShards()} more shards`);return}
   if(!confirm(`Buy ${item.name} for 💠${item.cost}?\n\n${item.desc}`))return;
-  if(!await spendShards(item.cost))return;
   const c=getCos();c.owned=[...c.owned,id];c[item.type]=id; // auto-equip on purchase
-  await saveCosmetics(c);
+  // Payment and ownership must land in the same write — the database rules check both together
+  const newShards=getShards()-item.cost;
+  await saveUser({shards:newShards,cosmetics:c});
+  await saveLeaderboard();
   toast(`✨ ${item.name} equipped`);renderShop();
 }
 async function equipCosmetic(id){
@@ -1097,7 +1111,7 @@ function renderCosmeticsShop(){
   COSMETICS.forEach(item=>{
     const owned=cosmeticOwned(item),lock=cosmeticLockReason(item),equipped=c[item.type]===item.id;
     const preview=item.type==='frame'
-      ?`<div class="cos-preview-frame${frameClass(item.id)}">${userData.profilePic?'<img src="'+userData.profilePic+'">':'👤'}</div>`
+      ?`<div class="cos-preview-frame${frameClass(item.id)}">${avatarHtml(userData.profilePic,'👤')}</div>`
       :`<div class="cos-preview-name${nameClass(item.id)}">@${esc(userData.username||'hunter')}</div>`;
     let btn;
     if(owned)btn=`<button class="cos-btn${equipped?' on':''}" onclick="equipCosmetic('${item.id}')">${equipped?'✓ Equipped':'Equip'}</button>`;
@@ -1106,6 +1120,239 @@ function renderCosmeticsShop(){
     h+=`<div class="cos-item${lock&&!owned?' dim':''}">${preview}<div class="cos-info"><div class="cos-name">${item.name}${item.lock==='S'?' <span class="cos-tag">S</span>':''}${item.lock&&item.lock.gates?' <span class="cos-tag red">EARNED</span>':''}</div><div class="cos-desc">${item.desc}</div></div>${btn}</div>`;
   });
   return h;
+}
+// ═══════════ FRIEND ACTIVITY FEED ═══════════
+// Events are small structured records ({t,at,d}) — never HTML. Each user publishes
+// their recent events on their leaderboard doc; friends read them from there.
+const FEED_MAX=20;
+function queueFeedEvent(t,d){
+  if(!FEED_TYPES.includes(t))return;
+  const ev={t,at:new Date().toISOString(),d:d||{}};
+  userData.feedEvents=[...(userData.feedEvents||[]),ev].slice(-FEED_MAX);
+}
+async function pushFeedEvent(t,d){
+  queueFeedEvent(t,d);
+  try{await saveUser({feedEvents:userData.feedEvents});await saveLeaderboard()}catch(e){console.warn('feed save:',e)}
+}
+// What friends get to see. Respects "share activity" and "hide body stats" privacy settings.
+function publicFeedEvents(){
+  const priv=userData.privacy||{};
+  if(priv.shareActivity===false)return[];
+  const cutoff=Date.now()-14*86400000;
+  return (userData.feedEvents||[]).filter(e=>new Date(e.at).getTime()>cutoff).map(e=>{
+    if(priv.hideStats&&e.t==='workout'&&e.d&&e.d.pr)return{...e,d:{...e.d,pr:{ex:e.d.pr.ex,w:null}}};
+    return e;
+  });
+}
+// Largest improvement over the lifter's previous best, for the workout event
+function findWorkoutPR(entry){
+  const ts=new Date(entry.date).getTime();
+  const base=prBaselineBefore(ts);let best=null;
+  (entry.exercises||[]).forEach(ex=>{
+    const k=normalizeExName(ex.name);if(base[k]===undefined)return;
+    const maxW=Math.max(0,...(ex.sets||[]).filter(s=>(parseFloat(s.reps)||0)>0).map(s=>parseFloat(s.weight)||0));
+    if(maxW>base[k]&&(!best||maxW-base[k]>best.gain))best={ex:String(ex.name).slice(0,40),w:maxW,gain:maxW-base[k]};
+  });
+  return best?{ex:best.ex,w:best.w}:null;
+}
+function timeAgo(t){const s=Math.max(0,(Date.now()-t)/1000);if(s<60)return'now';if(s<3600)return Math.floor(s/60)+'m';if(s<86400)return Math.floor(s/3600)+'h';return Math.floor(s/86400)+'d'}
+// Build the sentence for an event. Every value from another user is escaped or coerced.
+function feedEventText(ev){
+  const d=(ev&&ev.d)||{};
+  switch(ev&&ev.t){
+    case 'workout':
+      if(d.pr)return{icon:'🎉',text:`hit a PR · <strong>${esc(d.pr.ex)}</strong>${d.pr.w?` ${num(d.pr.w)} lbs`:''}`,sub:esc(d.title||'')};
+      return{icon:'🏋️',text:`logged <strong>${esc(d.title||'a workout')}</strong>`,sub:d.min?num(d.min)+' min':''};
+    case 'cardio':return{icon:'🏃',text:`did <strong>${esc(d.type||'cardio')}</strong>`,sub:d.min?num(d.min)+' min':''};
+    case 'rank':{const r=RANKS.find(x=>x.name===d.rank);if(!r)return null;return{icon:'⬆️',text:`ranked up to <strong style="color:${r.color}">${r.name}</strong>`,sub:''}}
+    case 'gate':return{icon:'⛩️',text:`cleared the Red Gate · <strong>${esc(d.name||'')}</strong>`,sub:''};
+    case 'perfect':return{icon:'🗓️',text:'banked a <strong>perfect week</strong>',sub:''};
+    case 'ach':{const a=ACHIEVEMENTS.find(x=>x.id===d.id);if(!a)return null;
+      return a.secret?{icon:'🤫',text:'unlocked a <strong>secret achievement</strong>',sub:''}:{icon:a.icon,text:`unlocked <strong>${esc(a.name)}</strong>`,sub:''}}
+  }
+  return null;
+}
+let feedCache={at:0,items:null,loading:null},feedExpanded=false;
+async function loadFriendFeed(force){
+  if(!force&&feedCache.items&&Date.now()-feedCache.at<180000)return feedCache.items;
+  if(feedCache.loading)return feedCache.loading;
+  const fids=(userData.friends||[]).filter(f=>safeId(f)).slice(0,40);
+  feedCache.loading=(async()=>{
+    const docs=await Promise.all(fids.map(fid=>db.collection('leaderboard').doc(fid).get().catch(()=>null)));
+    const items=[];const now=Date.now(),cutoff=now-7*86400000;
+    docs.forEach((doc,i)=>{
+      if(!doc||!doc.exists)return;
+      const u=doc.data();
+      (Array.isArray(u.recent)?u.recent:[]).slice(-FEED_MAX).forEach(ev=>{
+        const t=new Date(ev&&ev.at).getTime();
+        if(!t||t<cutoff||t>now+3600000)return;
+        if(feedEventText(ev))items.push({uid:fids[i],u,ev,t});
+      });
+    });
+    items.sort((a,b)=>b.t-a.t);
+    feedCache={at:Date.now(),items,loading:null};
+    return items;
+  })().catch(e=>{feedCache.loading=null;console.warn('feed load:',e);return[]});
+  return feedCache.loading;
+}
+function renderFriendFeedHtml(items){
+  const friends=(userData.friends||[]).length;
+  let h=`<div class="ff-head"><span>FRIEND ACTIVITY</span>${friends?`<button class="ff-refresh" onclick="refreshFriendFeed()" title="Refresh">↻</button>`:''}</div>`;
+  if(!friends)return h+`<div class="ff-empty">Your friends' workouts, PRs and Red Gates show up here.<br><button class="ff-cta" onclick="switchPage('profile');switchSubTab('profile','friends')">🤝 Add friends</button></div>`;
+  if(items==null)return h+`<div class="ff-empty">Loading…</div>`;
+  if(!items.length)return h+`<div class="ff-empty">Quiet week so far. Be the first to log something. ⚔️</div>`;
+  const shown=items.slice(0,feedExpanded?25:4);
+  shown.forEach(({uid,u,ev,t})=>{
+    const x=feedEventText(ev);if(!x)return;
+    h+=`<div class="ff-row" onclick="openProfileCard('${safeId(uid)}')">
+      <div class="ff-pic${frameClass(u.frame)}">${avatarHtml(u.profilePic)}</div>
+      <div class="ff-body"><div class="ff-line"><span class="ff-name${nameClass(u.nameColor)}">@${esc(u.username||'hunter')}</span> ${x.text}</div>
+      ${x.sub?`<div class="ff-sub">${x.sub}</div>`:''}</div>
+      <div class="ff-meta"><span class="ff-icon">${x.icon}</span><span class="ff-time">${timeAgo(t)}</span></div>
+    </div>`;
+  });
+  if(items.length>4)h+=`<button class="ff-more" onclick="feedExpanded=!feedExpanded;paintFriendFeed()">${feedExpanded?'Show less':'Show more ('+(Math.min(items.length,25)-4)+')'}</button>`;
+  return h;
+}
+function paintFriendFeed(){const el=$('friendFeedCard');if(el)el.innerHTML=renderFriendFeedHtml(feedCache.items)}
+function friendFeedSlot(){
+  // Paint from cache immediately, refresh in the background if stale
+  setTimeout(()=>{loadFriendFeed().then(paintFriendFeed)},0);
+  return `<div class="friend-feed" id="friendFeedCard">${renderFriendFeedHtml(feedCache.items)}</div>`;
+}
+function refreshFriendFeed(){feedCache.at=0;feedCache.items=null;paintFriendFeed();loadFriendFeed(true).then(paintFriendFeed)}
+
+// ═══════════ WEEK-AT-RISK BANNER ═══════════
+// A nudge, never a guilt trip: silent when the week is already out of reach.
+function renderWeekRisk(){
+  const goal=getWeeklyGoal();
+  const r=evaluateWeek(getMonday(new Date()).toISOString().slice(0,10),goal);
+  if(r.perfect)return `<div class="week-risk done">✓ Perfect week secured · ${r.sessions}/${r.target}. Anything more is bonus.</div>`;
+  if(r.failedSets>0||r.sessionsWithDone<r.lifts)return ''; // quality miss — more sessions can't fix it, so don't nag
+  const daysLeft=7-((new Date().getDay()+6)%7); // Mon=7 … Sun=1, today included
+  const needSessions=Math.max(0,r.target-r.sessions);
+  const needLifts=Math.max(0,Math.min(3,r.target)-r.lifts);
+  const need=Math.max(needSessions,needLifts);
+  if(need===0||need>daysLeft)return '';
+  const liftNote=needLifts>=need?(needLifts===1?' (it must be a lift)':` (all ${needLifts} must be lifts)`):needLifts>0?(needLifts===1?' · 1 must be a lift':` · ${needLifts} must be lifts`):'';
+  const s=n=>n!==1?'s':'';
+  let level='calm',msg;
+  if(need===daysLeft){level='urgent';msg=`⚠️ ${need} session${s(need)} in ${daysLeft} day${s(daysLeft)} — every day left counts for a perfect week${liftNote}`}
+  else if(daysLeft-need<=1){level='warn';msg=`⏳ ${need} more session${s(need)} · ${daysLeft} days left for a perfect week${liftNote}`}
+  else msg=`📅 ${need} session${s(need)} to go this week · ${daysLeft} days left${liftNote}`;
+  return `<div class="week-risk ${level}" onclick="switchPage('train')">${msg}</div>`;
+}
+
+// ═══════════ WARDROBE (equip cosmetics) ═══════════
+// Driven by COSMETIC_TYPES: adding a new type there + items in COSMETICS is all a
+// future cosmetic needs to appear here.
+function openWardrobe(){
+  const m=$('wardrobeModal');if(!m)return;
+  const c=getCos();
+  let h=`<h2>✨ Wardrobe</h2><p class="wd-sub">Equip what you've earned or bought. Friends see it on the leaderboard, their feed, and your profile card.</p>`;
+  COSMETIC_TYPES.forEach(t=>{
+    const owned=COSMETICS.filter(x=>x.type===t.id&&cosmeticOwned(x));
+    h+=`<div class="wd-section">${t.icon} ${t.label.toUpperCase()}</div><div class="wd-grid">`;
+    h+=wardrobeTile(t.id,'',!c[t.id],null);
+    owned.forEach(x=>{h+=wardrobeTile(t.id,x.id,c[t.id]===x.id,x)});
+    h+=`</div>`;
+    if(!owned.length)h+=`<div class="wd-empty">Nothing here yet — find these in the Shop.</div>`;
+  });
+  h+=`<button class="edit-stats-btn" style="width:100%;margin-top:.7rem" onclick="closeWardrobe();switchPage('ranks');switchSubTab('ranks','shop')">💠 Browse the Shop</button>
+    <div class="m-actions" style="margin-top:.4rem"><button class="m-cancel" onclick="closeWardrobe()">Done</button></div>`;
+  m.querySelector('.modal').innerHTML=h;
+  m.classList.add('open');
+}
+function closeWardrobe(){const m=$('wardrobeModal');if(m)m.classList.remove('open')}
+function wardrobeTile(type,id,on,item){
+  let preview;
+  if(type==='frame')preview=`<div class="cos-preview-frame${frameClass(id)}">${avatarHtml(userData.profilePic)}</div>`;
+  else if(type==='name')preview=`<div class="cos-preview-name${nameClass(id)}">@${esc(userData.username||'hunter')}</div>`;
+  else preview=`<div class="wd-generic">${id?'✨':'—'}</div>`;
+  return `<button class="wd-tile${on?' on':''}" onclick="wardrobeEquip('${safeId(type)}','${safeId(id)}')">${preview}<div class="wd-name">${item?esc(item.name):'None'}</div>${on?'<div class="wd-on">EQUIPPED</div>':''}</button>`;
+}
+async function wardrobeEquip(type,id){
+  if(!COSMETIC_TYPES.some(t=>t.id===type))return;
+  if(id){const item=COSMETICS.find(x=>x.id===id&&x.type===type);if(!item||!cosmeticOwned(item)){toast('You don\'t own that yet');return}}
+  const c=getCos();
+  if(c[type]===id){openWardrobe();return}
+  c[type]=id;
+  await saveCosmetics(c);
+  openWardrobe();
+  if(currentPage==='profile')renderProfile();
+  toast(id?'✨ Equipped':'Removed');
+}
+
+// ═══════════ INVITE-ONLY SIGNUP ═══════════
+// Your friend code doubles as your invite code. The database rules refuse to create
+// a new account's profile without a valid one, so this can't be skipped client-side.
+function normalizeInvite(v){return String(v||'').trim().toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,6)}
+async function lookupInvite(code){
+  if(code.length!==6)return null;
+  try{const s=await db.collection('friendCodes').doc(code).get();return s.exists&&s.data().uid?s.data().uid:null}catch(e){return null}
+}
+function newUserDoc(extra){
+  return Object.assign({xp:0,achievements:[],stats:{},prs:{},profilePic:'',class:'',subclass:'',programKey:'',program:[],friends:[],
+    privacy:{hideName:false,hideStats:false},goal:'',experience:'',missionsCompleted:{},missionStreak:0,trialsCompleted:[],
+    createdAt:firebase.firestore.FieldValue.serverTimestamp()},extra);
+}
+// After the new hunter has a username, send their inviter a friend request automatically
+async function sendInviterFriendRequest(){
+  const to=safeId(userData.invitedByUid);
+  if(!to||to===U.uid||userData.inviteRequestSent||!userData.username)return;
+  try{
+    await db.collection('friendRequests').add({from:U.uid,to,fromUsername:userData.username,fromPic:safeImgSrc(userData.profilePic),status:'pending',createdAt:firebase.firestore.FieldValue.serverTimestamp()});
+    await saveUser({inviteRequestSent:true});
+  }catch(e){console.warn('inviter request:',e)}
+}
+// Google sign-in for someone without an account yet → ask for an invite code
+async function submitInviteCode(){
+  const code=normalizeInvite($('inviteCodeInput').value);
+  $('inviteError').textContent='';
+  if(code.length!==6){$('inviteError').textContent='Invite codes are 6 characters';return}
+  const inviterUid=await lookupInvite(code);
+  if(!inviterUid){$('inviteError').textContent='That invite code isn\'t valid — double-check it with your friend';return}
+  try{
+    const fc=genFriendCode();
+    const batch=db.batch();
+    batch.set(db.collection('users').doc(U.uid),newUserDoc({name:U.displayName||'',username:'',email:U.email||'',friendCode:fc,profilePic:safeImgSrc(U.photoURL),invitedBy:code,invitedByUid:inviterUid}));
+    batch.set(db.collection('friendCodes').doc(fc),{uid:U.uid});
+    await batch.commit();
+    await loadUserData();
+    prevRankName=getEffectiveRank().name;
+    showScreen('usernameScreen');
+  }catch(e){console.error('[invite]',e);$('inviteError').textContent='Could not join: '+(e.code==='permission-denied'?'invite code rejected':e.message)}
+}
+function shareInvite(){
+  const fc=userData.friendCode||'';if(!fc)return;
+  const text=`Join me on LexenFitness ⚔️ — sign up at https://lexen13.github.io/lexenfitness and use my invite code: ${fc}`;
+  if(navigator.share){navigator.share({title:'LexenFitness invite',text}).catch(()=>{})}
+  else if(navigator.clipboard){navigator.clipboard.writeText(text).then(()=>toast('Invite copied — paste it to your friend')).catch(()=>fallbackCopy(text))}
+  else fallbackCopy(text);
+}
+
+// ═══════════ DEV: GRANT TO USER ═══════════
+// Large one-off grants (XP, shards, trials) go through the dev account, which the
+// database rules allow. Regular accounts are capped per write.
+async function devGrantToUser(){
+  if(!isDev)return;
+  const un=(prompt('Grant to which username?')||'').trim().toLowerCase();if(!un)return;
+  const snap=await db.collection('usernames').doc(un).get();
+  if(!snap.exists){toast('No such user');return}
+  const uid=snap.data().uid;
+  const ud=(await db.collection('users').doc(uid).get()).data()||{};
+  const xpAdd=parseInt(prompt(`@${un} has ${ud.xp||0} XP. XP to ADD (0 for none):`,'0'))||0;
+  const shardAdd=parseInt(prompt(`@${un} has ${ud.shards||0} shards. Shards to ADD (0 for none):`,'0'))||0;
+  const trialIn=(prompt(`Trials to mark complete (comma-separated: iron_gate, gauntlet, awakening). Current: [${(ud.trialsCompleted||[]).join(', ')}]`,'')||'');
+  const trials=trialIn.split(',').map(s=>s.trim()).filter(t=>['iron_gate','gauntlet','awakening'].includes(t));
+  const upd={};
+  if(xpAdd)upd.xp=Math.max(0,(ud.xp||0)+xpAdd);
+  if(shardAdd)upd.shards=Math.max(0,(ud.shards||0)+shardAdd);
+  if(trials.length)upd.trialsCompleted=[...new Set([...(ud.trialsCompleted||[]),...trials])];
+  if(!Object.keys(upd).length){toast('Nothing to grant');return}
+  if(!confirm(`Apply to @${un}?\n\n${JSON.stringify(upd,null,1)}\n\nTheir leaderboard updates on their next app open.`))return;
+  await db.collection('users').doc(uid).update(upd);
+  toast(`🎁 Granted to @${un}`);
 }
 // ═══════════ ASSIGNED PLANS (force-accept) ═══════════
 // A pushed plan cannot be dismissed — the only way out of the modal is Accept.
@@ -1394,16 +1641,17 @@ function calcEarnedPerfectWeeks(){
   if(evaluateWeek(currentMon,getWeeklyGoal()).perfect)count++;
   return count;
 }
-// Cumulative count of days where every daily mission was completed
+// Cumulative count of days where every daily mission was completed — the archive keeps
+// days that cleanup has trimmed out of missionsCompleted
+function dayAllMissionsDone(key){
+  const ms=getDailyMissions(key,userData.class)||[];
+  const comp=(userData.missionsCompleted||{})[key]||[];
+  return ms.length>0&&ms.every(m=>comp.includes(m.id));
+}
 function calcAllMissionDays(){
-  const mc=userData.missionsCompleted||{};
-  let n=0;
-  Object.keys(mc).forEach(key=>{
-    const ms=getDailyMissions(key,userData.class)||[];
-    const comp=mc[key]||[];
-    if(ms.length&&ms.every(m=>comp.includes(m.id)))n++;
-  });
-  return n;
+  const days=new Set(userData.allMissionDays||[]);
+  Object.keys(userData.missionsCompleted||{}).forEach(k=>{if(dayAllMissionsDone(k))days.add(k)});
+  return days.size;
 }
 // ═══════════ PERFECT WEEKS ═══════════
 // "Perfect" = at least max(weeklyTrainingGoal, 3) sessions in the week,
@@ -1493,8 +1741,8 @@ async function lockLastWeekIfNeeded(){
   if(r.sessions===0)return; // no activity, don't bother locking
   locked[lastMon]=r.perfect;
   userData.perfectWeeksLocked=locked;
-  if(r.perfect)userData.shards=(userData.shards||0)+SHARD_REWARDS.perfectWeek;
-  try{await saveUser({perfectWeeksLocked:locked,shards:userData.shards||0})}catch(e){console.warn('lockLastWeek failed:',e)}
+  if(r.perfect){userData.shards=(userData.shards||0)+SHARD_REWARDS.perfectWeek;queueFeedEvent('perfect',{})}
+  try{await saveUser({perfectWeeksLocked:locked,shards:userData.shards||0,feedEvents:userData.feedEvents||[]});if(r.perfect)await saveLeaderboard()}catch(e){console.warn('lockLastWeek failed:',e)}
   if(r.perfect)toast(`💠 +${SHARD_REWARDS.perfectWeek} shards — perfect week banked`);
 }
 // One-time migration (v1.14.1): weeks locked before the active-rest fix were scored
@@ -1571,6 +1819,7 @@ function renderDevTools(){
     </div>
     <div class="dev-row" style="margin-top:.3rem;border-top:1px dashed var(--border);padding-top:.4rem">
       <button class="dev-btn" style="color:var(--green)" onclick="devPushProgram()">Push Program to User</button>
+      <button class="dev-btn" style="color:var(--gold)" onclick="devGrantToUser()">🎁 Grant XP/Shards/Trials to User</button>
     </div>
     <div class="dev-row" style="margin-top:.3rem;border-top:1px dashed var(--border);padding-top:.4rem">
       <button class="dev-btn" style="color:var(--gold)" onclick="devPromoteTrainer()">👨‍🏫 Promote User to Trainer</button>
@@ -2399,7 +2648,8 @@ async function logWorkoutWithOptions(opts){
     if(getLiftLogs().length>=2){const prevMax=Math.max(0,...getLiftLogs().slice(1).flatMap(e=>Array.isArray(e.exercises)?e.exercises.flatMap(ex=>Array.isArray(ex.sets)?ex.sets.map(s=>parseInt(s.weight)||0):[]):[]));if(maxW>prevMax&&prevMax>0)unlockAch('pr_breaker')}
     const nx=userData.xp+xp;if(nx>=500)unlockAch('rank_d');if(nx>=1500)unlockAch('rank_c');
   }
-  const gained=addXP(xp);await saveUser({xp:userData.xp});await saveLeaderboard();updateTopBar();checkRankUp();
+  if(!isBackdated){const pr=findWorkoutPR(entry);queueFeedEvent('workout',{title:String(day.title||'').slice(0,40),min:opts.durationSec?Math.round(opts.durationSec/60):0,...(pr?{pr}:{})})}
+  const gained=addXP(xp);await saveUser({xp:userData.xp,feedEvents:userData.feedEvents||[]});await saveLeaderboard();updateTopBar();checkRankUp();
   let msg;
   if(isBackdated)msg=day.title+' logged for earlier day (no XP)';
   else{
@@ -2565,7 +2815,8 @@ async function unlockAch(id){
   if(a&&a.xp>0)addXP(a.xp);
   celebrateAch(a);
   userData.shards=(userData.shards||0)+SHARD_REWARDS.achievement;
-  await saveUser({achievements:userData.achievements,xp:userData.xp,shards:userData.shards});await saveLeaderboard();updateTopBar();
+  if(a&&(a.xp>=100||a.secret))queueFeedEvent('ach',{id});
+  await saveUser({achievements:userData.achievements,xp:userData.xp,shards:userData.shards,feedEvents:userData.feedEvents||[]});await saveLeaderboard();updateTopBar();
 }
 // Silent version — just mutates userData in memory, caller is responsible for saving later.
 // Used by checkPassiveAchievements to batch many unlocks into ONE Firestore write.
@@ -2632,10 +2883,10 @@ function renderProfile(){
   const r=getEffectiveRank(),info=getXpBarInfo();
   const title=(r.title&&r.title[userData.class])||r.name;const st=userData.stats||{};const prs=userData.prs||{};
   const myCos=getCos();
-  let h=`<div class="profile-card"><div class="profile-pic-wrap${frameClass(myCos.frame)}" onclick="checkPhotoPrivacy(()=>document.getElementById('picInput').click())">${userData.profilePic?'<img src="'+userData.profilePic+'">':'<div class="pp-placeholder">👤</div>'}</div>
+  let h=`<div class="profile-card"><div class="profile-pic-wrap${frameClass(myCos.frame)}" onclick="checkPhotoPrivacy(()=>document.getElementById('picInput').click())">${avatarHtml(userData.profilePic,'<div class="pp-placeholder">👤</div>')}</div>
     <div class="profile-name${nameClass(myCos.name)}">@${userData.username||'???'}</div>
-    <div class="profile-realname">${userData.name||''} <span style="font-size:.6rem;color:var(--dim)">(only you see this)</span></div>
-    <div class="profile-class">${userData.class}${userData.subclass?' — '+userData.subclass:''}</div>
+    <div class="profile-realname">${esc(userData.name||'')} <span style="font-size:.6rem;color:var(--dim)">(only you see this)</span></div>
+    <div class="profile-class">${esc(userData.class||'')}${userData.subclass?' — '+esc(userData.subclass):''}</div>
     <div class="profile-rank-badge" style="color:${r.color};background:${r.color}22;border:1px solid ${r.color}44">${r.name} — ${title}</div>
     ${(userData.redGatesCleared||0)>0?`<div class="profile-gates">⛩️ ${userData.redGatesCleared} Red Gate${userData.redGatesCleared!==1?'s':''} cleared</div>`:''}
     ${userData.bio?'<div class="profile-bio">'+esc(userData.bio)+'</div>':''}
@@ -2652,6 +2903,7 @@ function renderProfile(){
   else if(wkStreakP===0&&workoutLog.length>0){h+=`<div class="streak-warning lost">💀 Streak broken. Get 3 sessions this week to start a new one.</div>`}
   h+=`<button class="edit-stats-btn" onclick="openWeighIn()" style="background:rgba(52,211,153,.08);border-color:var(--green);color:var(--green)">📏 Weekly Check-in</button>`;
   h+=`<button class="edit-stats-btn" onclick="openProgressPhotos()" style="background:rgba(123,92,255,.08);border-color:var(--accent);color:var(--accent2)">📸 Progress Photos <span style="font-size:.6rem;color:var(--dim);margin-left:4px">device-only</span></button>`;
+  h+=`<button class="edit-stats-btn wardrobe-btn" onclick="openWardrobe()">✨ Wardrobe <span style="font-size:.6rem;color:var(--dim);margin-left:4px">frames · name colors</span></button>`;
   h+=`<button class="edit-stats-btn" onclick="openSettings()">⚙️ Settings</button>`;
   if(userData.role==='trainer')h+=`<button class="edit-stats-btn" onclick="switchSubTab('profile','trainer')" style="background:rgba(251,191,36,.08);border-color:var(--gold);color:var(--gold)">👨‍🏫 Trainer Dashboard</button>`;
   h+=renderDevTools();
@@ -2663,7 +2915,9 @@ function renderFriendsPage(){
   const fc=userData.friendCode||'------';
   const friends=userData.friends||[];
   let h=`<div class="page-title">FRIENDS</div>`;
-  h+=`<div class="profile-friend-code" style="text-align:center;margin:.5rem 0">Your Friend Code: <strong style="font-size:1.1rem;letter-spacing:2px;color:var(--gold)">${fc}</strong> <button class="copy-code-btn" onclick="copyFriendCode()">📋 Copy</button></div>`;
+  h+=`<div class="invite-card"><div class="ic-label">YOUR FRIEND &amp; INVITE CODE</div><div class="ic-code">${esc(fc)}</div>
+    <div class="ic-sub">New hunters need a code like this to sign up. Anyone who joins with yours is sent to you as a friend request.</div>
+    <div class="ic-btns"><button class="copy-code-btn" onclick="copyFriendCode()">📋 Copy code</button><button class="copy-code-btn ic-share" onclick="shareInvite()">📨 Share invite</button></div></div>`;
   h+=`<div class="friend-add-row" style="margin-bottom:.6rem"><input type="text" id="friendCodeInput" class="auth-input" placeholder="Enter friend code" maxlength="6" style="margin:0;flex:1" autocapitalize="characters"><button class="m-save-btn" style="flex:0 0 auto;padding:10px 14px;border-radius:8px" onclick="sendFriendRequest()">Send Request</button></div>`;
   h+=`<div id="friendRequests"></div>`;
   h+=`<div class="section-title" style="margin:.6rem 0 .3rem">FRIENDS LIST (${friends.length})</div>`;
@@ -2686,7 +2940,7 @@ function openSettings(){
   $('setBio').value=userData.bio||'';
   $('setBench').value=prs.bench||'';$('setSquat').value=prs.squat||'';$('setDeadlift').value=prs.deadlift||'';$('setOhp').value=prs.ohp||'';
   $('setGoal').value=userData.goal||'';$('setExperience').value=userData.experience||'';
-  $('setHideName').checked=!!priv.hideName;$('setHideStats').checked=!!priv.hideStats;
+  $('setHideName').checked=!!priv.hideName;$('setHideStats').checked=!!priv.hideStats;$('setShareActivity').checked=priv.shareActivity!==false;
   // Training goal button label
   const tgBtn=$('setTrainingGoalBtn');
   if(tgBtn){
@@ -2764,7 +3018,7 @@ async function saveSettings(){
   const stats={height:$('setHeight').value.trim(),weight:$('setWeight').value.trim(),age:$('setAge').value.trim(),bodyFat:$('setBodyFat').value.trim(),sex:$('setSex').value};
   const prs={bench:$('setBench').value.trim(),squat:$('setSquat').value.trim(),deadlift:$('setDeadlift').value.trim(),ohp:$('setOhp').value.trim()};
   if(prs.bench&&prs.squat&&prs.deadlift&&prs.ohp)unlockAch('set_prs');
-  const privacy={hideName:$('setHideName').checked,hideStats:$('setHideStats').checked};
+  const privacy={hideName:$('setHideName').checked,hideStats:$('setHideStats').checked,shareActivity:$('setShareActivity').checked};
   const notifPrefs={
     messages:$('setNotifMessages').checked,
     friendRequests:$('setNotifFriendReqs').checked,
@@ -2822,7 +3076,7 @@ async function sendFriendRequest(){
   await db.collection('friendRequests').add({
     from:U.uid,to:toUid,
     fromUsername:userData.username||'hunter',
-    fromPic:userData.profilePic||'',
+    fromPic:safeImgSrc(userData.profilePic),
     status:'pending',
     createdAt:firebase.firestore.FieldValue.serverTimestamp()
   });
@@ -2838,10 +3092,10 @@ async function loadFriendRequests(){
     for(const doc of snap.docs){
       const req=doc.data();
       h+=`<div class="friend-request">
-        <div class="lb-pic">${req.fromPic?'<img src="'+req.fromPic+'">':'👤'}</div>
+        <div class="lb-pic">${avatarHtml(req.fromPic,'👤')}</div>
         <div class="lb-info"><div class="lb-name">@${esc(req.fromUsername)}</div><div class="lb-class">wants to be friends</div></div>
-        <button class="fr-accept" onclick="acceptFriendRequest('${doc.id}','${req.from}')">✓</button>
-        <button class="fr-decline" onclick="declineFriendRequest('${doc.id}')">✕</button>
+        <button class="fr-accept" onclick="acceptFriendRequest('${safeId(doc.id)}','${safeId(req.from)}')">✓</button>
+        <button class="fr-decline" onclick="declineFriendRequest('${safeId(doc.id)}')">✕</button>
       </div>`;
     }
     el.innerHTML=h;
@@ -2906,7 +3160,7 @@ async function loadFriendsList(){
   let h='';let loaded=0;
   for(const fid of friends.slice(0,20)){
     try{
-      const d=await db.collection('users').doc(fid).get();
+      const d=await db.collection('leaderboard').doc(fid).get();
       if(!d.exists){h+=`<div class="friend-row" style="opacity:.4"><div class="lb-pic">👤</div><div class="lb-info"><div class="lb-name">Deleted user</div></div></div>`;continue}
       const f=d.data();const r=(f.rank&&RANKS.find(x=>x.name===f.rank))||getRank(f.xp||0);
       let streak=myPokeStreaks[fid]||0;
@@ -2923,8 +3177,8 @@ async function loadFriendsList(){
       const streakDisplay=streak>0?`<span class="poke-streak${atRisk?' at-risk':''}" title="${atRisk?'Both poke today to keep streak':'Streak active'}">🔥${streak}${atRisk?'⚠️':''}</span>`:'';
       const pokeBtn=pokedTodayFlag
         ?`<button class="poke-btn poked" disabled title="Already poked today">✓</button>`
-        :`<button class="poke-btn" onclick="event.stopPropagation();sendPoke('${fid}','${esc(f.username||'hunter')}')">👋</button>`;
-      h+=`<div class="friend-row"><div class="lb-pic">${f.profilePic?'<img src="'+f.profilePic+'">':'👤'}</div><div class="lb-info"><div class="lb-name">@${esc(f.username||'hunter')} ${streakDisplay}</div><div class="lb-class">${f.class||''}</div></div>${pokeBtn}<div class="lb-xp">${f.xp||0}</div><div class="lb-rank" style="color:${r.color}">${r.name}</div></div>`;
+        :`<button class="poke-btn" onclick="event.stopPropagation();sendPoke('${safeId(fid)}','${safeName(f.username||'hunter')}')">👋</button>`;
+      h+=`<div class="friend-row" onclick="openProfileCard('${safeId(fid)}')"><div class="lb-pic${frameClass(f.frame)}">${avatarHtml(f.profilePic,'👤')}</div><div class="lb-info"><div class="lb-name${nameClass(f.nameColor)}">@${esc(f.username||'hunter')} ${streakDisplay}</div><div class="lb-class">${esc(f.class||'')}</div></div>${pokeBtn}<div class="lb-xp">${num(f.xp)}</div><div class="lb-rank" style="color:${r.color}">${r.name}</div></div>`;
       loaded++;
     }catch(e){
       h+=`<div class="friend-row" style="opacity:.5"><div class="lb-pic">⚠️</div><div class="lb-info"><div class="lb-name" style="color:var(--red)">Load failed</div><div class="lb-class">${e.message}</div></div></div>`;
@@ -3027,7 +3281,7 @@ async function sendPoke(fid,fusername){
 
     toast(`👋 Poked @${fusername}! +${gained} XP${streakMsg}`);
     loadFriendsList();
-  }catch(e){console.error(e);toast('Poke failed: '+e.message)}
+  }catch(e){console.error(e);toast(e.code==='permission-denied'?`Can't poke @${fusername} yet — they need to open the app once so your friendship syncs`:'Poke failed: '+e.message)}
 }
 function getDateStr(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')}
 
@@ -3072,10 +3326,10 @@ async function renderLeaderboard(){let list=[];if(lbMode==='friends'){const fids
       const poked=myPokedToday[u.uid]===today;
       const pokeBtn=poked
         ? `<button class="poke-btn poked" disabled>✓</button>`
-        : `<button class="poke-btn" onclick="event.stopPropagation();sendPoke('${u.uid}','${esc(u.username||'hunter')}')">👋</button>`;
+        : `<button class="poke-btn" onclick="event.stopPropagation();sendPoke('${safeId(u.uid)}','${safeName(u.username||'hunter')}')">👋</button>`;
       pokeUI=streakTag+pokeBtn;
     }
-    return`<div class="lb-row${me?' me':''}" onclick="openProfileCard('${u.uid}')"><span class="lb-pos ${pc}">${i+1}</span><div class="lb-pic${frameClass(u.frame)}">${u.profilePic?'<img src="'+u.profilePic+'">':'👤'}</div><div class="lb-info"><div class="lb-name${nameClass(u.nameColor)}">@${esc(u.username||'hunter')}</div><div class="lb-class">${esc(u.class||'')}${u.subclass?' • '+esc(u.subclass):''}</div></div>${pokeUI}<div class="lb-xp">${u.xp}</div><div class="lb-rank" style="color:${r.color}">${r.name}</div></div>`;
+    return`<div class="lb-row${me?' me':''}" onclick="openProfileCard('${safeId(u.uid)}')"><span class="lb-pos ${pc}">${i+1}</span><div class="lb-pic${frameClass(u.frame)}">${avatarHtml(u.profilePic,'👤')}</div><div class="lb-info"><div class="lb-name${nameClass(u.nameColor)}">@${esc(u.username||'hunter')}</div><div class="lb-class">${esc(u.class||'')}${u.subclass?' • '+esc(u.subclass):''}</div></div>${pokeUI}<div class="lb-xp">${num(u.xp)}</div><div class="lb-rank" style="color:${r.color}">${r.name}</div></div>`;
   }).join(''):'<p style="color:var(--muted);font-size:.82rem">No hunters yet.</p>';
   $('lbList').innerHTML=h}
 
@@ -3088,30 +3342,30 @@ async function openProfileCard(uid){
   try{
     // Try leaderboard cache first, then fetch full user doc
     let u=lbData.find(x=>x.uid===uid);
-    const userDoc=await db.collection('users').doc(uid).get();
-    if(userDoc.exists){const ud=userDoc.data();u={...u,...ud,uid}}
+    if(!u){try{const ld=await db.collection('leaderboard').doc(uid).get();if(ld.exists)u={...ld.data(),uid}}catch(e){}}
+    try{const userDoc=await db.collection('users').doc(uid).get();if(userDoc.exists){const ud=userDoc.data();u={...u,...ud,uid}}}catch(e){/* not friends — public card only */}
     if(!u){modal.classList.remove('open');toast('User not found');return}
     const r=(u.rank&&RANKS.find(x=>x.name===u.rank))||getRank(u.xp||0);
     const title=(r.title&&r.title[u.class])||r.name;
     const isFriend=(userData.friends||[]).includes(uid);
     let h=`<div class="pc-header">
-      <div class="pc-pic${frameClass(u.frame||(u.cosmetics&&u.cosmetics.frame))}">${u.profilePic?'<img src="'+u.profilePic+'">':'<div class="pp-placeholder" style="width:60px;height:60px;font-size:1.6rem">👤</div>'}</div>
+      <div class="pc-pic${frameClass(u.frame||(u.cosmetics&&u.cosmetics.frame))}">${avatarHtml(u.profilePic,'<div class="pp-placeholder" style="width:60px;height:60px;font-size:1.6rem">👤</div>')}</div>
       <div class="pc-info">
         <div class="pc-username${nameClass(u.nameColor||(u.cosmetics&&u.cosmetics.name))}">@${esc(u.username||'hunter')}</div>
-        <div class="pc-class">${u.class||''}${u.subclass?' — '+u.subclass:''}</div>
+        <div class="pc-class">${esc(u.class||'')}${u.subclass?' — '+esc(u.subclass):''}</div>
         <div class="pc-rank" style="color:${r.color}">${r.name} — ${title}</div>
       </div>
     </div>`;
     if(u.bio)h+=`<div class="pc-bio">${esc(u.bio)}</div>`;
     h+=`<div class="pc-stats">
-      <div class="pc-stat"><div class="pc-stat-val">${u.xp||0}</div><div class="pc-stat-label">XP</div></div>
-      <div class="pc-stat"><div class="pc-stat-val">${u.workouts||'?'}</div><div class="pc-stat-label">Workouts</div></div>
-      <div class="pc-stat"><div class="pc-stat-val">${(u.achievements||[]).length}</div><div class="pc-stat-label">Achieve.</div></div>
+      <div class="pc-stat"><div class="pc-stat-val">${num(u.xp)}</div><div class="pc-stat-label">XP</div></div>
+      <div class="pc-stat"><div class="pc-stat-val">${u.workouts!=null?num(u.workouts):'?'}</div><div class="pc-stat-label">Workouts</div></div>
+      <div class="pc-stat"><div class="pc-stat-val">${u.achievements?u.achievements.length:(u.achCount!=null?num(u.achCount):'—')}</div><div class="pc-stat-label">Badges</div></div>
     </div>`;
     if(isFriend){
       h+=`<div class="pc-friend-status">✅ Friends</div>`;
     }else{
-      h+=`<button class="pc-add-btn" onclick="addFriendFromCard('${uid}')">🤝 Add Friend</button>`;
+      h+=`<button class="pc-add-btn" onclick="addFriendFromCard('${safeId(uid)}')">🤝 Add Friend</button>`;
     }
     h+=`<div class="m-actions" style="margin-top:.6rem"><button class="m-cancel" onclick="closeProfileCard()">Close</button></div>`;
     modal.querySelector('.modal').innerHTML=h;
@@ -3130,7 +3384,7 @@ async function addFriendFromCard(uid){
   const reverse=await db.collection('friendRequests').where('from','==',uid).where('to','==',U.uid).where('status','==','pending').get();
   if(!reverse.empty){await acceptFriendRequest(reverse.docs[0].id,uid);closeProfileCard();return}
   // Send request
-  await db.collection('friendRequests').add({from:U.uid,to:uid,fromUsername:userData.username||'hunter',fromPic:userData.profilePic||'',status:'pending',createdAt:firebase.firestore.FieldValue.serverTimestamp()});
+  await db.collection('friendRequests').add({from:U.uid,to:uid,fromUsername:userData.username||'hunter',fromPic:safeImgSrc(userData.profilePic),status:'pending',createdAt:firebase.firestore.FieldValue.serverTimestamp()});
   toast('Friend request sent!');closeProfileCard();
 }
 
@@ -3582,10 +3836,14 @@ async function checkPassiveAchievements(){
   const gainedXp=userData.xp-xpBefore;
   if(gainedAch>0||gainedXp>0){
     try{
+      // The database caps each write at +3000 XP / +600 shards. A big one-time batch
+      // (e.g. a content drop after a long break) steps up in chunks instead of failing.
+      const userRef=db.collection('users').doc(U.uid);
+      for(let x=xpBefore+2500;x<userData.xp;x+=2500)await userRef.update({xp:x});
       await saveUser({achievements:userData.achievements,xp:userData.xp});
       await saveLeaderboard();
       updateTopBar();
-      if(gainedAch>0){userData.shards=(userData.shards||0)+gainedAch*SHARD_REWARDS.achievement;await saveUser({shards:userData.shards});celebrateAch({icon:'🏆',name:gainedAch===1?'New achievement earned':gainedAch+' achievements earned',xp:gainedXp,desc:''})}
+      if(gainedAch>0){const s0=userData.shards||0,s1=s0+gainedAch*SHARD_REWARDS.achievement;for(let s=s0+500;s<s1;s+=500)await userRef.update({shards:s});userData.shards=s1;await saveUser({shards:s1});celebrateAch({icon:'🏆',name:gainedAch===1?'New achievement earned':gainedAch+' achievements earned',xp:gainedXp,desc:''})}
       console.log('[checkPassiveAchievements] batched',gainedAch,'unlocks, +'+gainedXp,'XP');
     }catch(e){console.warn('[checkPassiveAchievements] batch save failed:',e)}
   }
@@ -3821,7 +4079,8 @@ async function saveActivityLog(){
     const actCount=getActivityLogs().filter(e=>!e.backdated).length;
     if(actCount>=5)unlockAch('cardio_5');if(actCount>=20)unlockAch('cardio_20');
   }
-  await saveUser({xp:userData.xp});await saveLeaderboard();
+  if(!isBackdated)queueFeedEvent('cardio',{type:String(name||'Cardio').slice(0,30),min:num(dur)});
+  await saveUser({xp:userData.xp,feedEvents:userData.feedEvents||[]});await saveLeaderboard();
   updateTopBar();checkRankUp();
   closeActivityLog();
   let msg;
@@ -3982,8 +4241,8 @@ async function loadTrainerClientList(){
       const daysSince=last?Math.floor((Date.now()-new Date(last).getTime())/86400000):999;
       const status=daysSince<=2?'🟢 Active':daysSince<=7?'🟡 Slow':'🔴 Inactive';
       const weighIns=(u.weighIns||[]).length;
-      h+=`<div class="client-card" onclick="openClientDetail('${uid}')">
-        <div class="lb-pic">${u.profilePic?'<img src="'+u.profilePic+'">':'👤'}</div>
+      h+=`<div class="client-card" onclick="openClientDetail('${safeId(uid)}')">
+        <div class="lb-pic">${avatarHtml(u.profilePic,'👤')}</div>
         <div class="client-info">
           <div class="client-name">@${esc(u.username||'hunter')} <span class="client-status">${status}</span></div>
           <div class="client-stats">${lifts} lifts · ${activities} cardio · ${rest} rest · ${weighIns} check-ins</div>
@@ -4044,7 +4303,7 @@ async function openClientDetail(uid){
     const goal=u.nutritionGoal||u.goal||'No goal set';
 
     let h=`<div class="pc-header">
-      <div class="pc-pic${frameClass(u.frame||(u.cosmetics&&u.cosmetics.frame))}">${u.profilePic?'<img src="'+u.profilePic+'">':'<div class="pp-placeholder" style="width:60px;height:60px;font-size:1.6rem">👤</div>'}</div>
+      <div class="pc-pic${frameClass(u.frame||(u.cosmetics&&u.cosmetics.frame))}">${avatarHtml(u.profilePic,'<div class="pp-placeholder" style="width:60px;height:60px;font-size:1.6rem">👤</div>')}</div>
       <div class="pc-info">
         <div class="pc-username${nameClass(u.nameColor||(u.cosmetics&&u.cosmetics.name))}">@${esc(u.username||'hunter')}</div>
         <div class="pc-class">${esc(u.class||'')}${u.subclass?' — '+esc(u.subclass):''} · ${esc(rank)}</div>
@@ -4055,7 +4314,7 @@ async function openClientDetail(uid){
 
     // Quick glance stats
     h+=`<div class="client-stat-grid">
-      <div class="cs-cell"><div class="cs-v">${u.xp||0}</div><div class="cs-l">XP</div></div>
+      <div class="cs-cell"><div class="cs-v">${num(u.xp)}</div><div class="cs-l">XP</div></div>
       <div class="cs-cell"><div class="cs-v">${liftsRecent}</div><div class="cs-l">Lifts/30d</div></div>
       <div class="cs-cell"><div class="cs-v">${actRecent}</div><div class="cs-l">Cardio/30d</div></div>
       <div class="cs-cell"><div class="cs-v">${restRecent}</div><div class="cs-l">Rest/30d</div></div>
@@ -4094,7 +4353,7 @@ async function openClientDetail(uid){
     else logs.slice(0,10).forEach(e=>{
       const dt=new Date(e.date).toLocaleDateString('en-US',{month:'short',day:'numeric'});
       const type=e.isRest?'😴 Rest':e.isActivity?'🏃 Activity':'🏋️ Lift';
-      const detail=e.isActivity?(e.duration?' · '+e.duration+'m':''):'';
+      const detail=e.isActivity?(e.duration?' · '+num(e.duration)+'m':''):'';
       h+=`<div style="display:flex;justify-content:space-between;font-size:.72rem;padding:3px 0;border-bottom:1px solid var(--border)"><span>${type} · ${esc(e.dayTitle||'Workout')}${detail}</span><span style="color:var(--dim)">${dt}</span></div>`;
     });
 
@@ -4110,7 +4369,7 @@ async function openClientDetail(uid){
       });
     }
 
-    h+=`<div class="m-actions" style="margin-top:.8rem;flex-wrap:wrap;gap:6px"><button class="m-cancel" onclick="closeProfileCard()" style="flex:1">Close</button><button class="m-save-btn" onclick="messageClient('${uid}')" style="flex:1">💬 Message</button></div>`;
+    h+=`<div class="m-actions" style="margin-top:.8rem;flex-wrap:wrap;gap:6px"><button class="m-cancel" onclick="closeProfileCard()" style="flex:1">Close</button><button class="m-save-btn" onclick="messageClient('${safeId(uid)}')" style="flex:1">💬 Message</button></div>`;
     modal.querySelector('.modal').innerHTML=h;
     modal.classList.add('open');
   }catch(e){console.error(e);toast('Error: '+e.message)}
@@ -4202,7 +4461,7 @@ async function renderProgressPhotos(){
       const poseEmoji={front:'👤',side:'🧍',back:'🔙',other:'📷'}[p.pose]||'📷';
       const weight=p.weight?` · ${p.weight} lbs`:'';
       h+=`<div class="photo-card" onclick="viewPhoto(${p.id})">
-        <img src="${p.dataUrl}" alt="Progress">
+        <img src="${esc(safeImgSrc(p.dataUrl))}" alt="Progress">
         <div class="photo-meta">
           <div class="photo-date">${dt}</div>
           <div class="photo-pose">${poseEmoji} ${p.pose}${weight}</div>
@@ -4262,7 +4521,7 @@ async function viewPhoto(id){
   const p=photos.find(x=>x.id===id);if(!p)return;
   const modal=$('photoCompareModal');
   const dt=new Date(p.date).toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric',year:'numeric'});
-  $('photoCompareBody').innerHTML=`<img src="${p.dataUrl}" style="width:100%;border-radius:10px;margin-bottom:.5rem"><div style="font-size:.75rem;color:var(--muted)">${dt}<br>${p.pose}${p.weight?' · '+p.weight+' lbs':''}</div>`;
+  $('photoCompareBody').innerHTML=`<img src="${esc(safeImgSrc(p.dataUrl))}" style="width:100%;border-radius:10px;margin-bottom:.5rem"><div style="font-size:.75rem;color:var(--muted)">${dt}<br>${p.pose}${p.weight?' · '+p.weight+' lbs':''}</div>`;
   modal.classList.add('open');
 }
 function closePhotoCompare(){$('photoCompareModal').classList.remove('open')}
@@ -4277,8 +4536,8 @@ async function openPhotoCompare(){
   const weightDiff=first.weight&&latest.weight?(parseFloat(latest.weight)-parseFloat(first.weight)).toFixed(1):null;
   $('photoCompareBody').innerHTML=`
     <div class="compare-grid">
-      <div class="compare-col"><img src="${first.dataUrl}"><div class="compare-cap">${d1}<br>${first.weight?first.weight+' lbs':''}</div></div>
-      <div class="compare-col"><img src="${latest.dataUrl}"><div class="compare-cap">${d2}<br>${latest.weight?latest.weight+' lbs':''}</div></div>
+      <div class="compare-col"><img src="${esc(safeImgSrc(first.dataUrl))}"><div class="compare-cap">${d1}<br>${first.weight?first.weight+' lbs':''}</div></div>
+      <div class="compare-col"><img src="${esc(safeImgSrc(latest.dataUrl))}"><div class="compare-cap">${d2}<br>${latest.weight?latest.weight+' lbs':''}</div></div>
     </div>
     <div class="compare-summary">${daysBetween} days${weightDiff!==null?' · '+(weightDiff>0?'+':'')+weightDiff+' lbs':''}</div>`;
   $('photoCompareModal').classList.add('open');

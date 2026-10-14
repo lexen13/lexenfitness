@@ -28,9 +28,10 @@ async function renderChatList(){
   const chatItems=[];
   for(const fid of friends.slice(0,30)){
     try{
-      const d=await db.collection('users').doc(fid).get();
+      // Public leaderboard record — private profiles are only readable by people the owner friended
+      const d=await db.collection('leaderboard').doc(fid).get();
       if(!d.exists)continue;
-      const f=d.data();const r=(f.rank&&RANKS.find(x=>x.name===f.rank))||getRank(f.xp||0);
+      const f=d.data();const r=(f.rank&&RANKS.find(x=>x.name===f.rank))||getRank(num(f.xp));
       let preview='No messages yet',previewTime='',sortTime=0,isUnread=false,senderName='';
       try{
         const chatId=getChatId(U.uid,fid);
@@ -65,10 +66,10 @@ async function renderChatList(){
     return b.sortTime-a.sortTime;
   });
   let h='<div class="page-title">MESSAGES</div><div class="page-sub">Tap a friend to chat</div>';
-  if(!chatItems.length)h+='<p style="color:var(--red);font-size:.78rem;padding:.5rem">Could not load friends. Make sure Firestore rules allow reading user docs.</p>';
+  if(!chatItems.length)h+='<p style="color:var(--muted);font-size:.78rem;padding:.5rem">Couldn\'t load your friends right now — pull down or reopen the tab to retry.</p>';
   chatItems.forEach(c=>{
-    h+=`<div class="chat-list-item${c.isUnread?' unread':''}" onclick="openChat('${c.fid}')">
-      <div class="lb-pic">${c.f.profilePic?'<img src="'+c.f.profilePic+'">':'👤'}</div>
+    h+=`<div class="chat-list-item${c.isUnread?' unread':''}" onclick="openChat('${safeId(c.fid)}')">
+      <div class="lb-pic">${avatarHtml(c.f.profilePic,'👤')}</div>
       <div class="chat-list-info">
         <div class="chat-list-name">@${esc(c.f.username||'hunter')} <span class="chat-list-rank" style="color:${c.r.color}">${c.r.name}</span></div>
         <div class="chat-list-preview${c.isUnread?' unread-text':''}">${c.isUnread?'<strong>@'+esc(c.senderName)+':</strong> ':''}${esc(c.preview)}</div>
@@ -87,7 +88,7 @@ function getChatId(uid1,uid2){return [uid1,uid2].sort().join('_')}
 async function openChat(friendUid){
   currentChatFriend=friendUid;
   let friend={username:'hunter',profilePic:''};
-  try{const fDoc=await db.collection('users').doc(friendUid).get();if(fDoc.exists)friend=fDoc.data()}catch(e){}
+  try{const fDoc=await db.collection('leaderboard').doc(friendUid).get();if(fDoc.exists)friend=fDoc.data()}catch(e){}
   const chatId=getChatId(U.uid,friendUid);
 
   // Create chat doc if needed — use set+merge to avoid read-before-write permission issue
@@ -102,7 +103,7 @@ async function openChat(friendUid){
   el.innerHTML=`
     <div class="chat-header">
       <button class="chat-back" onclick="closeChat()">← Back</button>
-      <div class="lb-pic" style="width:28px;height:28px">${friend.profilePic?'<img src="'+friend.profilePic+'">':'👤'}</div>
+      <div class="lb-pic" style="width:28px;height:28px">${avatarHtml(friend.profilePic,'👤')}</div>
       <span class="chat-header-name">@${esc(friend.username||'hunter')}</span>
     </div>
     <div class="chat-messages" id="chatMessages"><p style="color:var(--muted);font-size:.78rem;text-align:center;padding:2rem 0">Loading...</p></div>

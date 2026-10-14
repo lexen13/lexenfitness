@@ -38,6 +38,7 @@
   <div class="auth-error" id="loginError"></div>
 </div>
 <div id="signupForm" style="display:none">
+  <input class="auth-input invite-input" type="text" id="signupInvite" placeholder="Invite code (ask a friend)" maxlength="6" autocapitalize="characters" autocomplete="off">
   <div class="auth-name-row"><input class="auth-input" type="text" id="signupFirst" placeholder="First name"><input class="auth-input" type="text" id="signupLast" placeholder="Last name"></div>
   <input class="auth-input" type="text" id="signupUsername" placeholder="Username (required — your hunter ID)" maxlength="20" autocapitalize="off" style="border-color:var(--accent)">
   <input class="auth-input" type="email" id="signupEmail" placeholder="Email">
@@ -49,6 +50,18 @@
   <button class="auth-btn ghost" onclick="showLogin()">Sign in →</button>
   <div class="auth-error" id="signupError"></div>
 </div>
+</div>
+</div>
+
+<!-- INVITE REQUIRED (new Google sign-ins) -->
+<div class="screen-center" id="inviteScreen" style="display:none">
+<div class="auth-box">
+  <div class="auth-logo"><h1>INVITE ONLY</h1><p>The System admits hunters by invitation</p></div>
+  <input class="auth-input invite-input" type="text" id="inviteCodeInput" placeholder="6-character invite code" maxlength="6" autocapitalize="characters" autocomplete="off" onkeydown="if(event.key==='Enter')submitInviteCode()">
+  <p style="font-size:.68rem;color:var(--muted);margin-bottom:.8rem">Ask a friend who already uses LexenFitness for their code — it's on their Friends page.</p>
+  <button class="auth-btn primary" onclick="submitInviteCode()">ENTER</button>
+  <button class="auth-btn ghost" onclick="doLogout()" style="margin-top:.3rem;font-size:.72rem">Use a different account</button>
+  <div class="auth-error" id="inviteError"></div>
 </div>
 </div>
 
@@ -268,6 +281,7 @@
 <div class="settings-section">PRIVACY</div>
 <label class="toggle-row"><input type="checkbox" class="toggle-cb" id="setHideName"><span>Hide real name everywhere (username only)</span></label>
 <label class="toggle-row"><input type="checkbox" class="toggle-cb" id="setHideStats"><span>Hide body stats from others</span></label>
+<label class="toggle-row"><input type="checkbox" class="toggle-cb" id="setShareActivity"><span>Show my workouts, PRs and gates in friends' activity feeds</span></label>
 <div class="settings-section">NOTIFICATIONS</div>
 <div id="notifStatus" style="font-size:.68rem;color:var(--muted);margin-bottom:.5rem;line-height:1.4"></div>
 <label class="toggle-row"><input type="checkbox" class="toggle-cb" id="setNotifMessages"><span>💬 New messages</span></label>
@@ -473,6 +487,9 @@
 
 <!-- WEEKLY RECAP MODAL -->
 <div class="modal-bg" id="weeklyRecapModal"><div class="modal"></div></div>
+
+<!-- WARDROBE MODAL -->
+<div class="modal-bg" id="wardrobeModal"><div class="modal" style="max-height:85vh;overflow-y:auto"></div></div>
 
 <!-- SWAP EXERCISE MODAL -->
 <div class="modal-bg" id="swapModal"><div class="modal" style="max-height:85vh;overflow-y:auto"></div></div>

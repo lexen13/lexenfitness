@@ -1211,3 +1211,48 @@ input[type=checkbox]:checked::after{content:'✓';position:absolute;color:#fff;f
 .cos-name_ember{color:#fb923c!important}
 .cos-name_monarch{background:linear-gradient(90deg,#f59e0b,#fff3c4,#fbbf24,#f59e0b);background-size:200% auto;-webkit-background-clip:text;background-clip:text;color:transparent!important;-webkit-text-fill-color:transparent;animation:cosShimmer 3s linear infinite}
 @keyframes cosShimmer{to{background-position:200% center}}
+
+/* ══ v1.28.0 — Friend feed ══ */
+.friend-feed{margin:.7rem 0;padding:11px 12px;background:var(--surface);border:1px solid var(--border);border-radius:14px}
+.ff-head{display:flex;justify-content:space-between;align-items:center;font-family:var(--font-mono);font-size:.58rem;font-weight:800;letter-spacing:2px;color:var(--accent2);margin-bottom:6px}
+.ff-refresh{background:none;border:none;color:var(--muted);font-size:.9rem;cursor:pointer;padding:0 2px}
+.ff-row{display:flex;align-items:center;gap:9px;padding:7px 2px;border-top:1px solid var(--border);cursor:pointer}
+.ff-row:first-of-type{border-top:none}
+.ff-pic{width:32px;height:32px;border-radius:50%;overflow:hidden;flex-shrink:0;background:var(--surface2);display:flex;align-items:center;justify-content:center;font-size:.85rem;border:1.5px solid transparent}
+.ff-pic img{width:100%;height:100%;object-fit:cover}
+.ff-body{flex:1;min-width:0}
+.ff-line{font-size:.74rem;color:var(--muted);line-height:1.35}
+.ff-line strong{color:var(--text);font-weight:700}
+.ff-name{font-weight:800;color:var(--text)}
+.ff-sub{font-family:var(--font-mono);font-size:.58rem;color:var(--dim);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ff-meta{display:flex;flex-direction:column;align-items:flex-end;gap:1px;flex-shrink:0}
+.ff-icon{font-size:.95rem}
+.ff-time{font-family:var(--font-mono);font-size:.54rem;color:var(--dim)}
+.ff-empty{font-size:.72rem;color:var(--muted);line-height:1.5;padding:6px 0 2px;text-align:center}
+.ff-cta{margin-top:7px;padding:7px 12px;border-radius:9px;border:1px solid var(--accent);background:rgba(123,92,255,.1);color:var(--accent2);font-family:var(--font-mono);font-size:.64rem;font-weight:800;cursor:pointer}
+.ff-more{width:100%;margin-top:6px;padding:6px;background:none;border:1px dashed var(--border);border-radius:8px;color:var(--muted);font-family:var(--font-mono);font-size:.6rem;cursor:pointer}
+/* ══ Week-at-risk ══ */
+.week-risk{margin:.6rem 0;padding:9px 12px;border-radius:11px;font-size:.72rem;line-height:1.45;cursor:pointer;border:1px solid var(--border);background:var(--surface);color:var(--muted)}
+.week-risk.warn{border-color:rgba(251,191,36,.4);background:rgba(251,191,36,.06);color:var(--gold)}
+.week-risk.urgent{border-color:rgba(239,68,68,.45);background:rgba(239,68,68,.07);color:#fca5a5;font-weight:600}
+.week-risk.done{border-color:rgba(52,211,153,.4);background:rgba(52,211,153,.06);color:var(--green);cursor:default}
+/* ══ Wardrobe ══ */
+.wardrobe-btn{background:linear-gradient(135deg,rgba(123,92,255,.12),rgba(251,191,36,.08));border-color:rgba(123,92,255,.4)}
+.wd-sub{font-size:.72rem;color:var(--muted);line-height:1.5;margin-bottom:.4rem}
+.wd-section{font-family:var(--font-mono);font-size:.6rem;font-weight:800;letter-spacing:2px;color:var(--accent2);margin:.9rem 0 .45rem}
+.wd-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:7px}
+.wd-tile{position:relative;display:flex;flex-direction:column;align-items:center;gap:6px;padding:11px 5px 9px;background:var(--surface);border:1.5px solid var(--border);border-radius:12px;cursor:pointer;color:var(--text);font-family:var(--font-body);min-width:0}
+.wd-tile.on{border-color:var(--green);background:rgba(52,211,153,.06)}
+.wd-tile .cos-preview-name{width:100%;text-align:center}
+.wd-name{font-size:.6rem;font-weight:700;color:var(--muted);text-align:center;line-height:1.2}
+.wd-on{font-family:var(--font-mono);font-size:.46rem;font-weight:800;letter-spacing:1px;color:var(--green)}
+.wd-empty{font-size:.64rem;color:var(--dim);margin-top:5px;font-style:italic}
+.wd-generic{width:42px;height:42px;display:flex;align-items:center;justify-content:center;font-size:1.2rem}
+/* ══ Invite ══ */
+.invite-input{letter-spacing:3px;text-transform:uppercase;font-family:var(--font-mono);text-align:center;border-color:var(--gold)!important}
+.invite-card{text-align:center;margin:.5rem 0 .7rem;padding:12px;border:1px solid rgba(251,191,36,.35);border-radius:13px;background:rgba(251,191,36,.05)}
+.ic-label{font-family:var(--font-mono);font-size:.56rem;font-weight:800;letter-spacing:2px;color:var(--muted)}
+.ic-code{font-family:var(--font-mono);font-size:1.5rem;font-weight:800;letter-spacing:5px;color:var(--gold);margin:3px 0}
+.ic-sub{font-size:.64rem;color:var(--muted);line-height:1.45;margin-bottom:8px}
+.ic-btns{display:flex;gap:6px;justify-content:center}
+.ic-share{border-color:var(--gold)!important;color:var(--gold)!important}

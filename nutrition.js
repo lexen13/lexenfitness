@@ -440,12 +440,12 @@ async function saveFoodItem(food){
   if(!dayLog.meals[activeMeal])dayLog.meals[activeMeal]=[];
   dayLog.meals[activeMeal].push(food);
   setDayLog(today,dayLog);
-  // Track in recent foods (keep last 150 unique by name — full history is also searchable)
+  // Track in recent foods (keep last 300 unique by name — the daily food log itself is trimmed to 30 days)
   const recent=userData.recentFoods||[];
   const exists=recent.findIndex(r=>r.name===food.name);
   if(exists>=0)recent.splice(exists,1);
   recent.unshift({name:food.name,cal:food.cal,protein:food.protein,carbs:food.carbs,fat:food.fat,serving:food.serving});
-  if(recent.length>150)recent.length=150;
+  if(recent.length>300)recent.length=300;
   await saveUser({foodLog:userData.foodLog,recentFoods:recent});
   // Achievements
   const totalItems=getDayItemCount(dayLog);
@@ -895,7 +895,7 @@ async function editRecentFood(idx){
   const {count,last,recentRank,...clean}=updated;
   const ri=recent.findIndex(r=>r.name===f.name);
   if(ri>=0)recent[ri]=clean;else recent.unshift(clean);
-  if(recent.length>150)recent.length=150;
+  if(recent.length>300)recent.length=300;
   await saveUser({recentFoods:recent});
   openRecentFoods();
   toast('✏️ Default updated');
