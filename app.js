@@ -244,7 +244,7 @@ async function loadUserData(){
   console.log('[loadUserData] done');
 }
 async function saveUser(f){await db.collection('users').doc(U.uid).update(f);Object.assign(userData,f)}
-async function saveLeaderboard(){const r=getEffectiveRank();await db.collection('leaderboard').doc(U.uid).set({username:userData.username||'hunter',xp:userData.xp,class:userData.class,subclass:userData.subclass||'',rank:r.name,profilePic:userData.profilePic||'',bio:userData.bio||'',workouts:getLiftLogs().length,activities:getActivityLogs().length,updatedAt:firebase.firestore.FieldValue.serverTimestamp()})}
+async function saveLeaderboard(){const r=getEffectiveRank();await db.collection('leaderboard').doc(U.uid).set({username:userData.username||'hunter',xp:userData.xp,class:userData.class,subclass:userData.subclass||'',rank:r.name,profilePic:userData.profilePic||'',bio:userData.bio||'',workouts:getLiftLogs().length,activities:getActivityLogs().length,frame:getCos().frame,nameColor:getCos().name,gatesCleared:userData.redGatesCleared||0,updatedAt:firebase.firestore.FieldValue.serverTimestamp()})}
 
 // ═══════════ RANK-UP SPLASH ═══════════
 let prevLevelInfo=null;
@@ -395,6 +395,7 @@ function initApp(){
     try{grantFounderPass()}catch(e){console.warn(e)}
     try{checkWeeklyRecap()}catch(e){console.warn(e)}
     checkAwakeningExam().catch(e=>console.warn(e));
+    ensureRedGate().catch(e=>console.warn(e));
     // First-time training goal prompt — for users who haven't set it yet
     if(userData.weeklyTrainingGoal===undefined||userData.weeklyTrainingGoal===null){
       setTimeout(()=>openTrainingGoalPrompt(true),1200);
@@ -716,6 +717,8 @@ function renderMissions(){
   if(softCapped){const trial=getAvailableTrial();h+=`<div class="trial-active-banner">⚔️ TRIAL ACTIVE · XP at 25% — break through ${trial?trial.trial.name:'the trial'} below for full XP + bonus</div>`}
   const trialInfo=getAvailableTrial();
   if(trialInfo)h+=renderTrialBanner(trialInfo);
+  else if(isSRank())h+=renderRedGateCard();
+  else if(getEffectiveRank().name==='A-RANK')h+=`<div class="rg-teaser">⛩️ <strong>Red Gates</strong> open at S-Rank — a new boss challenge every week, scaled to you.</div>`;
   // ── Event Mission ──
   const evt=getEventMission(today);
   if(evt){
@@ -758,7 +761,22 @@ async function completeMission(mid){
   await saveLeaderboard();updateTopBar();checkRankUp();renderMissions();
   toast(`${m.icon} ${m.name} +${gained} XP${bonusMsg}`);
 }
-function calcMissionStreak(){let streak=0;const d=new Date();for(let i=0;i<365;i++){const ds=new Date(d);ds.setDate(ds.getDate()-i);const key=ds.toISOString().slice(0,10);const missions=getDailyMissions(key,userData.class);const comp=userData.missionsCompleted[key]||[];if(missions.every(m=>comp.includes(m.id)))streak++;else break}return streak}
+// Missions are saved under LOCAL date keys, so the streak must read local keys too
+// (UTC keys zeroed the streak every evening in US time zones). Today still being in
+// progress doesn't break the streak — it just isn't counted until it's complete.
+function calcMissionStreak(){
+  let streak=0;const d=new Date();const mc=userData.missionsCompleted||{};
+  for(let i=0;i<365;i++){
+    const ds=new Date(d);ds.setDate(ds.getDate()-i);
+    const key=getDateStr(ds);
+    const missions=getDailyMissions(key,userData.class)||[];
+    const comp=mc[key]||[];
+    if(missions.length&&missions.every(m=>comp.includes(m.id)))streak++;
+    else if(i===0)continue;
+    else break;
+  }
+  return streak;
+}
 
 // ═══════════ SYSTEM SHARDS ═══════════
 // Earned currency. Spendable on recovery items — NEVER on trial completion directly.
@@ -805,7 +823,7 @@ function renderShop(){
       ${lockNote?`<div class="si-lock">🔒 ${lockNote}</div>`:`<button class="si-buy" ${afford?'':'disabled'} onclick="buyShopItem('${item.id}')">${afford?'Redeem':'Need '+(item.cost-bal)+' more'}</button>`}
     </div>`;
   });
-  h+=`<div class="shop-note">More coming: profile frames, name colors, rank badge variants.</div>`;
+  h+=renderCosmeticsShop();
   el.innerHTML=h;
 }
 async function buyShopItem(id){
@@ -888,6 +906,206 @@ async function buyXpSurge(item){
   await saveUser({xpSurgeUntil:userData.xpSurgeUntil,shards:userData.shards});
   toast('⚡ XP SURGE ACTIVE — 1.5× for 24 hours');
   renderShop();updateTopBar();
+}
+// ═══════════ RED GATES (S-Rank weekly boss) ═══════════
+function isSRank(){return getEffectiveRank().name==='S-RANK'}
+function gateWeekKey(d){return getMonday(d||new Date()).toISOString().slice(0,10)}
+// Shift by whole weeks using calendar math at noon — safe across DST changes
+function shiftWeek(monIso,n){const d=new Date(monIso+'T12:00:00');d.setDate(d.getDate()+7*n);return gateWeekKey(d)}
+function weekBounds(monIso){const s=new Date(monIso+'T00:00:00');const e=new Date(s);e.setDate(e.getDate()+7);return[s.getTime(),e.getTime()]}
+function weekDayKeys(monIso){const out=[];for(let i=0;i<7;i++){const d=new Date(monIso+'T12:00:00');d.setDate(d.getDate()+i);out.push(getDateStr(d))}return out}
+// Same gate for every S-Rank each week. Fixed 7-week cycle: every gate shows up once
+// per cycle and never twice in a row. Week index uses UTC date math (DST-proof).
+function pickGateType(monIso){
+  const [y,m,d]=monIso.split('-').map(Number);
+  const idx=Math.round((Date.UTC(y,m-1,d)-Date.UTC(2026,0,5))/(7*86400000));
+  const n=RED_GATE_POOL.length;
+  return RED_GATE_POOL[((idx%n)+n)%n];
+}
+function inGateWeek(e,monIso){const[s,end]=weekBounds(monIso);const t=new Date(e.date).getTime();return t>=s&&t<end&&!e.backdated}
+function weeklyVolume(monIso){let v=0;getLiftLogs().forEach(x=>{if(!inGateWeek(x,monIso))return;(x.exercises||[]).forEach(ex=>(ex.sets||[]).forEach(st=>{v+=(parseFloat(st.weight)||0)*(parseFloat(st.reps)||0)}))});return v}
+function weeklySessionMinutes(monIso){return workoutLog.filter(e=>inGateWeek(e,monIso)).reduce((a,e)=>a+(e.durationSec||0)/60,0)}
+// Best weight per exercise from everything logged BEFORE a timestamp
+function prBaselineBefore(ts){
+  const base={};
+  getLiftLogs().forEach(e=>{
+    if(new Date(e.date).getTime()>=ts)return;
+    (e.exercises||[]).forEach(ex=>{const k=normalizeExName(ex.name);if(!k)return;
+      (ex.sets||[]).forEach(s=>{const w=parseFloat(s.weight)||0;if(w>0&&(!base[k]||w>base[k]))base[k]=w})});
+  });
+  return base;
+}
+function computeGateTarget(type,monIso){
+  switch(type.id){
+    case 'volume_siege':{let best=0;for(let i=1;i<=8;i++)best=Math.max(best,weeklyVolume(shiftWeek(monIso,-i)));return Math.max(15000,Math.round(best*1.1/500)*500)}
+    case 'endurance_gate':{let tot=0,n=0;for(let i=1;i<=4;i++){const m=weeklySessionMinutes(shiftWeek(monIso,-i));if(m>0){tot+=m;n++}}return Math.max(180,Math.round((n?tot/n:0)*1.2/10)*10)}
+    case 'flawless_five':return 5;
+    case 'double_breach':return 2;
+    case 'iron_discipline':return 5;
+    case 'fuel_the_hunt':return 5;
+    case 'cardio_raid':return 150;
+  }
+  return 1;
+}
+// Live progress → {val, target, blocker}
+function getGateProgress(g){
+  const wk=g.week;let val=0,blocker='';
+  switch(g.type){
+    case 'volume_siege':val=Math.round(weeklyVolume(wk));break;
+    case 'flawless_five':{
+      const logs=getTrainingLogs().filter(e=>inGateWeek(e,wk));val=logs.length;
+      let unchecked=0;
+      logs.forEach(e=>{if(e.isRest||e.isActivity)return;(e.exercises||[]).forEach(ex=>(ex.sets||[]).forEach(s=>{const has=s&&((s.weight&&String(s.weight).trim())||(s.reps&&String(s.reps).trim()));if(has&&!s.done)unchecked++}))});
+      if(unchecked)blocker=`${unchecked} logged set${unchecked!==1?'s':''} left unchecked — the gate demands a flawless week`;
+      break}
+    case 'double_breach':{
+      const[s]=weekBounds(wk);const base=prBaselineBefore(s);const beaten=new Set();
+      getLiftLogs().forEach(e=>{if(!inGateWeek(e,wk))return;(e.exercises||[]).forEach(ex=>{const k=normalizeExName(ex.name);if(base[k]===undefined)return;
+        (ex.sets||[]).forEach(st=>{if((parseFloat(st.weight)||0)>base[k])beaten.add(k)})})});
+      val=beaten.size;break}
+    case 'iron_discipline':{
+      const mc=userData.missionsCompleted||{};
+      val=weekDayKeys(wk).filter(k=>{const ms=getDailyMissions(k,userData.class)||[];const c=mc[k]||[];return ms.length&&ms.every(m=>c.includes(m.id))}).length;break}
+    case 'endurance_gate':val=Math.round(weeklySessionMinutes(wk));break;
+    case 'fuel_the_hunt':{
+      const t=(typeof calcTDEE==='function')?calcTDEE():null;
+      if(!t){blocker='Set up your nutrition targets first (Nutrition → Adjust Targets)';break}
+      val=weekDayKeys(wk).filter(k=>getDayTotals(getDayLog(k)).p>=t.proteinG).length;break}
+    case 'cardio_raid':val=Math.round(getActivityLogs().filter(e=>inGateWeek(e,wk)).reduce((a,e)=>a+(parseFloat(e.duration)||0),0));break;
+  }
+  return {val,target:g.target,blocker,done:val>=g.target&&!blocker};
+}
+// Opens this week's gate (and archives last week's) — runs on load and on render
+async function ensureRedGate(){
+  if(!isSRank())return null;
+  const wk=gateWeekKey();
+  let g=userData.redGate;
+  if(g&&g.week===wk)return g;
+  if(g){
+    const hist=userData.redGateHistory||[];
+    if(!hist.some(h=>h.week===g.week))hist.push({week:g.week,type:g.type,cleared:!!g.cleared});
+    userData.redGateHistory=hist.slice(-52);
+  }
+  const type=pickGateType(wk);
+  g={week:wk,type:type.id,target:computeGateTarget(type,wk),cleared:false};
+  userData.redGate=g;
+  try{await saveUser({redGate:g,redGateHistory:userData.redGateHistory||[]})}catch(e){console.warn('gate save:',e)}
+  return g;
+}
+function calcGateStreak(){
+  const all=[...(userData.redGateHistory||[])];
+  const g=userData.redGate;
+  if(g&&g.cleared)all.push({week:g.week,cleared:true});
+  const byWeek={};all.forEach(h=>{byWeek[h.week]=h.cleared});
+  let expect=(g&&g.cleared)?g.week:shiftWeek(gateWeekKey(),-1);
+  let n=0;while(byWeek[expect]){n++;expect=shiftWeek(expect,-1)}
+  return n;
+}
+function fmtGateNum(n,unit){return unit==='lbs'?(n>=1000?(n/1000).toFixed(n>=100000?0:1)+'k':n):n}
+function renderRedGateCard(){
+  const g=userData.redGate;
+  if(!g||g.week!==gateWeekKey()){
+    ensureRedGate().then(()=>{if(currentPage==='missions')renderMissions()});
+    return `<div class="red-gate opening"><div class="rg-label">⛩️ A RED GATE IS OPENING…</div></div>`;
+  }
+  const type=RED_GATE_POOL.find(t=>t.id===g.type)||RED_GATE_POOL[0];
+  const p=getGateProgress(g);
+  const pct=Math.min(100,(p.val/p.target)*100);
+  const msLeft=weekBounds(g.week)[1]-Date.now();
+  const dLeft=Math.floor(msLeft/86400000),hLeft=Math.floor((msLeft%86400000)/3600000);
+  const weekLabel=new Date(g.week+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'});
+  let action='';
+  if(g.cleared)action=`<div class="rg-cleared">✓ GATE CLEARED</div>`;
+  else if(p.done)action=`<button class="rg-claim" onclick="claimRedGate()">⛩️ CLAIM · +${SHARD_REWARDS.redGate} 💠 · +${RED_GATE_XP} XP</button>`;
+  return `<div class="red-gate${g.cleared?' cleared':''}">
+    <div class="rg-head"><div class="rg-sigil">⛩️</div>
+      <div class="rg-titles"><div class="rg-label">RED GATE · WEEK OF ${weekLabel.toUpperCase()}</div><div class="rg-name">${type.icon} ${type.name}</div></div>
+      ${g.cleared?'':`<div class="rg-timer">${dLeft}d ${hLeft}h</div>`}
+    </div>
+    <div class="rg-desc">${type.desc}</div>
+    <div class="rg-bar"><div class="rg-fill" style="width:${pct}%"></div></div>
+    <div class="rg-nums"><span>${fmtGateNum(p.val,type.unit)} / ${fmtGateNum(p.target,type.unit)} ${type.unit}</span><span>${Math.round(pct)}%</span></div>
+    ${p.blocker&&!g.cleared?`<div class="rg-blocker">⚠️ ${p.blocker}</div>`:''}
+    ${action}
+    <div class="rg-foot">Cleared ${userData.redGatesCleared||0} · Gate streak ${calcGateStreak()} · Every S-Rank faces the same gate · Resets Monday</div>
+  </div>`;
+}
+async function claimRedGate(){
+  const g=userData.redGate;if(!g||g.cleared)return;
+  const p=getGateProgress(g);
+  if(!p.done){toast('The gate still stands');return}
+  g.cleared=true;g.clearedAt=Date.now();
+  userData.redGatesCleared=(userData.redGatesCleared||0)+1;
+  userData.shards=(userData.shards||0)+SHARD_REWARDS.redGate;
+  const gained=addXP(RED_GATE_XP);
+  await saveUser({redGate:g,redGatesCleared:userData.redGatesCleared,shards:userData.shards,xp:userData.xp});
+  await saveLeaderboard();updateTopBar();
+  const type=RED_GATE_POOL.find(t=>t.id===g.type)||{};
+  showGateCleared(type,gained);
+  const n=userData.redGatesCleared;
+  if(n>=1)unlockAch('red_gate_1');if(n>=5)unlockAch('red_gate_5');if(n>=25)unlockAch('red_gate_25');
+  if(calcGateStreak()>=4)unlockAch('red_gate_streak_4');
+  if(currentPage==='missions')renderMissions();
+}
+function showGateCleared(type,gained){
+  let ov=$('gateCleared');
+  if(!ov){ov=document.createElement('div');ov.id='gateCleared';ov.className='gate-cleared';document.body.appendChild(ov)}
+  ov.innerHTML=`<div class="gc-core"><div class="gc-sigil">⛩️</div><div class="gc-pre">RED GATE CLEARED</div>
+    <div class="gc-name">${type.icon||''} ${esc(type.name||'')}</div>
+    <div class="gc-rewards"><span>+${gained} XP</span><span>+${SHARD_REWARDS.redGate} 💠</span></div>
+    <div class="gc-count">Gate #${userData.redGatesCleared}</div><div class="gc-tap">tap to continue</div></div>`;
+  ov.onclick=()=>ov.classList.remove('show');
+  requestAnimationFrame(()=>ov.classList.add('show'));
+  try{if(navigator.vibrate)navigator.vibrate([90,40,90,40,200])}catch(e){}
+}
+// ═══════════ COSMETICS ═══════════
+function getCos(){const c=userData.cosmetics||{};return{owned:c.owned||[],frame:c.frame||'',name:c.name||''}}
+function cosmeticLockReason(item){
+  if(!item.lock)return '';
+  if(item.lock==='S')return isSRank()?'':'S-RANK only';
+  if(item.lock.gates){const n=userData.redGatesCleared||0;return n>=item.lock.gates?'':`Clear ${item.lock.gates} Red Gates (${n}/${item.lock.gates})`}
+  return '';
+}
+function cosmeticOwned(item){
+  if(item.lock&&item.lock.gates)return (userData.redGatesCleared||0)>=item.lock.gates; // earned, never sold
+  return getCos().owned.includes(item.id);
+}
+// IDs can come from other users' leaderboard docs — only ever emit known catalog IDs
+function frameClass(id){return COSMETICS.some(c=>c.type==='frame'&&c.id===id)?' cos-'+id:''}
+function nameClass(id){return COSMETICS.some(c=>c.type==='name'&&c.id===id)?' cos-'+id:''}
+async function saveCosmetics(c){userData.cosmetics=c;await saveUser({cosmetics:c});await saveLeaderboard()}
+async function buyCosmetic(id){
+  const item=COSMETICS.find(x=>x.id===id);if(!item)return;
+  const lock=cosmeticLockReason(item);if(lock){toast('🔒 '+lock);return}
+  if(cosmeticOwned(item)){toast('Already yours');return}
+  if(getShards()<item.cost){toast(`Need ${item.cost-getShards()} more shards`);return}
+  if(!confirm(`Buy ${item.name} for 💠${item.cost}?\n\n${item.desc}`))return;
+  if(!await spendShards(item.cost))return;
+  const c=getCos();c.owned=[...c.owned,id];c[item.type]=id; // auto-equip on purchase
+  await saveCosmetics(c);
+  toast(`✨ ${item.name} equipped`);renderShop();
+}
+async function equipCosmetic(id){
+  const item=COSMETICS.find(x=>x.id===id);if(!item||!cosmeticOwned(item))return;
+  const c=getCos();c[item.type]=c[item.type]===id?'':id;
+  await saveCosmetics(c);
+  toast(c[item.type]?`✨ ${item.name} equipped`:`${item.name} removed`);renderShop();
+}
+function renderCosmeticsShop(){
+  const c=getCos();
+  let h=`<div class="shop-section">COSMETICS <span class="ss-sub">shown on your profile and the leaderboard</span></div>`;
+  COSMETICS.forEach(item=>{
+    const owned=cosmeticOwned(item),lock=cosmeticLockReason(item),equipped=c[item.type]===item.id;
+    const preview=item.type==='frame'
+      ?`<div class="cos-preview-frame${frameClass(item.id)}">${userData.profilePic?'<img src="'+userData.profilePic+'">':'👤'}</div>`
+      :`<div class="cos-preview-name${nameClass(item.id)}">@${esc(userData.username||'hunter')}</div>`;
+    let btn;
+    if(owned)btn=`<button class="cos-btn${equipped?' on':''}" onclick="equipCosmetic('${item.id}')">${equipped?'✓ Equipped':'Equip'}</button>`;
+    else if(lock)btn=`<div class="si-lock">🔒 ${lock}</div>`;
+    else btn=`<button class="cos-btn buy" ${getShards()>=item.cost?'':'disabled'} onclick="buyCosmetic('${item.id}')">💠 ${item.cost}</button>`;
+    h+=`<div class="cos-item${lock&&!owned?' dim':''}">${preview}<div class="cos-info"><div class="cos-name">${item.name}${item.lock==='S'?' <span class="cos-tag">S</span>':''}${item.lock&&item.lock.gates?' <span class="cos-tag red">EARNED</span>':''}</div><div class="cos-desc">${item.desc}</div></div>${btn}</div>`;
+  });
+  return h;
 }
 // ═══════════ ASSIGNED PLANS (force-accept) ═══════════
 // A pushed plan cannot be dismissed — the only way out of the modal is Accept.
@@ -1712,9 +1930,12 @@ function renderDay(){const prog=userData.program||[],day=prog.find(d=>d.id===cur
       const members=day.exercises.filter(x=>x.group&&String(x.group).replace(/[A-Za-z]/g,'')===grpNum).map(x=>x.group);
       h+=`<div class="superset-block"><div class="ss-header"><span class="ss-tag">⇄ SUPERSET ${members.join(' / ')}</span><span class="ss-hint">back to back · rest after the pair</span></div>`;
     }
-    h+=`<div class="exercise${grpNum?' in-superset':''}"><div class="ex-header"><span class="ex-num">${grp?esc(grp):ei+1}</span><span class="ex-name">${ex.name}</span><button class="ex-edit" onclick="toggleExNote('${day.id}_e${ei}_note')" title="Session note">📝</button><button class="ex-edit" onclick="openEdit(${di},${ei})">✏️</button></div>`;
+    const swapKey=day.id+'_e'+ei+'_swap';
+    const swappedName=savedInputs[swapKey]||'';
+    const shownName=swappedName||ex.name;
+    h+=`<div class="exercise${grpNum?' in-superset':''}"><div class="ex-header"><span class="ex-num">${grp?esc(grp):ei+1}</span><span class="ex-name">${esc(shownName)}${swappedName?'<span class="swapped-tag">⇆ swapped</span>':''}</span><button class="ex-edit" onclick="openSwapModal(${di},${ei})" title="Swap exercise">⇆</button><button class="ex-edit" onclick="toggleExNote('${day.id}_e${ei}_note')" title="Session note">📝</button><button class="ex-edit" onclick="openEdit(${di},${ei})">✏️</button></div>`;
     if(ex.notes)h+=`<div class="ex-notes">${esc(ex.notes)}</div>`;
-    h+=overloadHint(ex,lastMap);
+    h+=overloadHint(swappedName?{...ex,name:swappedName}:ex,lastMap);
     const noteId=day.id+'_e'+ei+'_note';
     const noteDraft=savedInputs[noteId]||'';
     h+=`<div class="ex-note-row${noteDraft?' open':''}" id="row_${noteId}"><input type="text" class="ex-note-input" id="${noteId}" placeholder="Note for this session (e.g. knee felt off on set 2)" value="${esc(noteDraft)}" maxlength="200"></div>`;
@@ -1729,6 +1950,74 @@ function renderDay(){const prog=userData.program||[],day=prog.find(d=>d.id===cur
   h+=`<button class="add-ex" onclick="openAdd(${di})">+ Add Exercise</button>`;
   $('dayContent').innerHTML=h}
 
+// ═══════════ EXERCISE SWAP ═══════════
+// Equipment taken? Swap to a same-pattern alternative for today, or permanently.
+let swapTarget=null;
+function openSwapModal(di,ei){
+  const day=userData.program[di];if(!day)return;
+  const ex=day.exercises[ei];if(!ex)return;
+  swapTarget={di,ei};
+  const swapKey=day.id+'_e'+ei+'_swap';
+  const current=savedInputs[swapKey]||ex.name;
+  const groupId=getExerciseGroup(ex.name)||getExerciseGroup(current);
+  const modal=$('swapModal');if(!modal)return;
+  let h=`<h2>⇆ Swap Exercise</h2>
+    <p style="color:var(--muted);font-size:.74rem;line-height:1.5;margin-bottom:.6rem">Equipment taken? Pick a movement that trains the same pattern. Your sets, reps and history carry over.</p>
+    <div class="swap-current">Currently: <strong>${esc(current)}</strong></div>`;
+  if(!groupId){
+    h+=`<p style="color:var(--gold);font-size:.72rem;line-height:1.5;margin:.6rem 0">No close matches recognized for this exercise. You can type a replacement instead.</p>`;
+  }else{
+    const g=EXERCISE_GROUPS[groupId];
+    h+=`<div class="swap-group-label">${g.label.toUpperCase()} — SAME PATTERN</div><div class="swap-list">`;
+    g.items.forEach(alt=>{
+      const isCur=normalizeExName(alt)===normalizeExName(current);
+      h+=`<button class="swap-opt${isCur?' current':''}" ${isCur?'disabled':''} onclick="applySwap('${esc(alt).replace(/'/g,"\\'")}',false)">${esc(alt)}${isCur?' <span style="color:var(--dim);font-size:.6rem">(current)</span>':''}</button>`;
+    });
+    h+=`</div>`;
+  }
+  h+=`<div class="m-field" style="margin-top:.6rem"><label>Or type your own</label><input type="text" id="swapCustom" placeholder="e.g. Landmine Press" maxlength="60"></div>
+    <button class="m-save-btn" style="width:100%;margin-top:.4rem" onclick="applyCustomSwap(false)">⇆ Swap for today</button>
+    <button class="edit-stats-btn" style="width:100%;margin-top:.4rem" onclick="applyCustomSwap(true)">📌 Replace permanently in my plan</button>
+    ${savedInputs[swapKey]?`<button class="edit-stats-btn" style="width:100%;margin-top:.4rem;color:var(--gold);border-color:var(--gold)" onclick="clearSwap()">↩ Revert to ${esc(ex.name)}</button>`:''}
+    <div class="m-actions" style="margin-top:.5rem"><button class="m-cancel" onclick="closeSwapModal()">Cancel</button></div>`;
+  modal.querySelector('.modal').innerHTML=h;
+  modal.classList.add('open');
+}
+function closeSwapModal(){$('swapModal').classList.remove('open');swapTarget=null}
+async function applySwap(name,permanent){
+  if(!swapTarget||!name)return;
+  const {di,ei}=swapTarget;
+  const day=userData.program[di];
+  captureInputs();
+  if(permanent){
+    day.exercises[ei].name=name;
+    delete savedInputs[day.id+'_e'+ei+'_swap'];
+    await saveUser({program:userData.program});
+    toast(`📌 ${name} is now part of your plan`);
+  }else{
+    savedInputs[day.id+'_e'+ei+'_swap']=name;
+    try{await db.collection('users').doc(U.uid).collection('meta').doc('inputs').set({data:savedInputs})}catch(e){console.warn(e)}
+    toast(`⇆ Swapped to ${name} for today`);
+  }
+  if(sessionActive)persistSession();
+  closeSwapModal();renderDay();
+}
+function applyCustomSwap(permanent){
+  const el=$('swapCustom');
+  const v=el&&el.value.trim();
+  if(!v){toast('Type a replacement first, or pick one above');return}
+  applySwap(v,permanent);
+}
+async function clearSwap(){
+  if(!swapTarget)return;
+  const {di,ei}=swapTarget;
+  const day=userData.program[di];
+  captureInputs();
+  delete savedInputs[day.id+'_e'+ei+'_swap'];
+  try{await db.collection('users').doc(U.uid).collection('meta').doc('inputs').set({data:savedInputs})}catch(e){console.warn(e)}
+  if(sessionActive)persistSession();
+  closeSwapModal();renderDay();toast('↩ Reverted');
+}
 // ═══════════ SMART NOTES ═══════════
 const INJURY_RX=/(pain|hurt|injur|buckl|tweak|pinch|click|pop|strain|sharp|numb|swell)/i;
 function toggleExNote(noteId){
@@ -2006,7 +2295,44 @@ function cancelSession(){
 function openEdit(di,ei){editTarget={di,ei};const ex=userData.program[di].exercises[ei];$('editName').value=ex.name;$('editSets').value=ex.sets;$('editReps').value=ex.reps;$('editNotes').value=ex.notes||'';const g=$('editGroup');if(g)g.value=ex.group||'';$('editModal').classList.add('open')}
 function closeEdit(){$('editModal').classList.remove('open')}
 async function saveEdit(){if(!editTarget)return;captureInputs();const ex=userData.program[editTarget.di].exercises[editTarget.ei];ex.name=$('editName').value.trim()||ex.name;ex.sets=parseInt($('editSets').value)||ex.sets;ex.reps=$('editReps').value.trim()||ex.reps;ex.notes=$('editNotes').value.trim();const gEl=$('editGroup');if(gEl){const gv=gEl.value.trim().toUpperCase();if(gv)ex.group=gv;else delete ex.group}ex.isTime=/sec|s$/i.test(ex.reps);await saveUser({program:userData.program});closeEdit();renderDay();unlockAch('customize');toast('Updated!')}
-async function deleteEx(){if(!editTarget||!confirm('Remove?'))return;captureInputs();userData.program[editTarget.di].exercises.splice(editTarget.ei,1);await saveUser({program:userData.program});closeEdit();renderDay();toast('Removed.')}
+// savedInputs are keyed by exercise INDEX, so removing an exercise would leave every
+// exercise after it inheriting the previous slot's typed values. Shift them down to match.
+function reindexSavedInputsAfterDelete(day,deletedIdx,oldLen){
+  const MAXS=30;
+  const setKeys=(i,s)=>[day.id+'_e'+i+'_s'+s+'_w',day.id+'_e'+i+'_s'+s+'_r',day.id+'_e'+i+'_s'+s+'_c'];
+  const auxKeys=i=>[day.id+'_e'+i+'_note',day.id+'_e'+i+'_swap'];
+  for(let i=deletedIdx+1;i<oldLen;i++){
+    for(let s=0;s<MAXS;s++){
+      const from=setKeys(i,s),to=setKeys(i-1,s);
+      from.forEach((f,k)=>{
+        if(savedInputs[f]!==undefined){savedInputs[to[k]]=savedInputs[f];delete savedInputs[f]}
+        else delete savedInputs[to[k]];
+      });
+    }
+    const fa=auxKeys(i),ta=auxKeys(i-1);
+    fa.forEach((f,k)=>{
+      if(savedInputs[f]!==undefined){savedInputs[ta[k]]=savedInputs[f];delete savedInputs[f]}
+      else delete savedInputs[ta[k]];
+    });
+  }
+  // Clear the now-vacant final slot
+  const lastIdx=oldLen-1;
+  for(let s=0;s<MAXS;s++)setKeys(lastIdx,s).forEach(k=>delete savedInputs[k]);
+  auxKeys(lastIdx).forEach(k=>delete savedInputs[k]);
+}
+async function deleteEx(){
+  if(!editTarget||!confirm('Remove?'))return;
+  captureInputs();
+  const day=userData.program[editTarget.di];
+  const oldLen=day.exercises.length;
+  const ei=editTarget.ei;
+  day.exercises.splice(ei,1);
+  reindexSavedInputsAfterDelete(day,ei,oldLen);
+  await saveUser({program:userData.program});
+  try{await db.collection('users').doc(U.uid).collection('meta').doc('inputs').set({data:savedInputs})}catch(e){console.warn(e)}
+  if(sessionActive)persistSession();
+  closeEdit();renderDay();toast('Removed.');
+}
 function openAdd(di){addDayIdx=di;$('addName').value='';$('addSets').value=3;$('addReps').value='';$('addNotes').value='';$('addModal').classList.add('open')}
 function closeAdd(){$('addModal').classList.remove('open')}
 async function saveAdd(){if(addDayIdx===null)return;const name=$('addName').value.trim();if(!name){toast('Enter a name');return}captureInputs();userData.program[addDayIdx].exercises.push({name,sets:parseInt($('addSets').value)||3,reps:$('addReps').value.trim()||'8-12',notes:$('addNotes').value.trim(),isTime:/sec|s$/i.test($('addReps').value)});await saveUser({program:userData.program});closeAdd();renderDay();toast('Added!')}
@@ -2037,12 +2363,12 @@ async function logWorkoutWithOptions(opts){
   if(opts.durationSec)entry.durationSec=opts.durationSec;
   if(isBackdated)entry.backdated=true;
   let hasData=false,allDone=true,maxW=0;
-  day.exercises.forEach((ex,ei)=>{const sets=[];for(let s=0;s<ex.sets;s++){const wEl=$(day.id+'_e'+ei+'_s'+s+'_w'),rEl=$(day.id+'_e'+ei+'_s'+s+'_r'),cEl=$(day.id+'_e'+ei+'_s'+s+'_c');const w=wEl?wEl.value:'',r=rEl?rEl.value:'',d=cEl?cEl.checked:false;if(w||r)hasData=true;if(!d)allDone=false;if(parseInt(w)>maxW)maxW=parseInt(w);sets.push({weight:w,reps:r,done:d,isTime:!!ex.isTime})}const exObj={name:ex.name,sets};const nEl=$(day.id+'_e'+ei+'_note');if(nEl&&nEl.value.trim())exObj.note=nEl.value.trim();entry.exercises.push(exObj)});
+  day.exercises.forEach((ex,ei)=>{const sets=[];for(let s=0;s<ex.sets;s++){const wEl=$(day.id+'_e'+ei+'_s'+s+'_w'),rEl=$(day.id+'_e'+ei+'_s'+s+'_r'),cEl=$(day.id+'_e'+ei+'_s'+s+'_c');const w=wEl?wEl.value:'',r=rEl?rEl.value:'',d=cEl?cEl.checked:false;if(w||r)hasData=true;if(!d)allDone=false;if(parseInt(w)>maxW)maxW=parseInt(w);sets.push({weight:w,reps:r,done:d,isTime:!!ex.isTime})}const exObj={name:savedInputs[day.id+'_e'+ei+'_swap']||ex.name,sets};const nEl=$(day.id+'_e'+ei+'_note');if(nEl&&nEl.value.trim())exObj.note=nEl.value.trim();entry.exercises.push(exObj)});
   if(opts.sessionNote&&String(opts.sessionNote).trim())entry.notes=String(opts.sessionNote).trim();
   if(!hasData){toast('Fill in sets!');logLock=false;return}
   const ref=await db.collection('users').doc(U.uid).collection('log').add(entry);entry._id=ref.id;workoutLog.unshift(entry);
   // Notes are per-session: clear drafts for this day after logging
-  day.exercises.forEach((ex,ei)=>{const nid=day.id+'_e'+ei+'_note';delete savedInputs[nid];const nEl=$(nid);if(nEl)nEl.value=''});
+  day.exercises.forEach((ex,ei)=>{const nid=day.id+'_e'+ei+'_note';delete savedInputs[nid];const nEl=$(nid);if(nEl)nEl.value='';delete savedInputs[day.id+'_e'+ei+'_swap']});
   const anyInjury=entry.exercises.some(ex=>ex.note&&INJURY_RX.test(ex.note))||(entry.notes&&INJURY_RX.test(entry.notes));
   if(anyInjury)toast('⚠️ Injury note saved — The System will flag it next session.');
   if(isBackdated)unlockAch('the_historian');
@@ -2152,7 +2478,7 @@ async function logAllDays(){
     if(!hasData)continue;
     // Build entry from savedInputs
     const entry={dayId:day.id,dayTitle:day.title,date:new Date().toISOString(),exercises:[]};let allDone=true,maxW=0;
-    day.exercises.forEach((ex,ei)=>{const sets=[];for(let s=0;s<ex.sets;s++){const w=savedInputs[day.id+'_e'+ei+'_s'+s+'_w']||'',r=savedInputs[day.id+'_e'+ei+'_s'+s+'_r']||'',d=!!savedInputs[day.id+'_e'+ei+'_s'+s+'_c'];if(!d)allDone=false;if(parseInt(w)>maxW)maxW=parseInt(w);sets.push({weight:w,reps:r,done:d,isTime:!!ex.isTime})}const exObj={name:ex.name,sets};const nEl=$(day.id+'_e'+ei+'_note');if(nEl&&nEl.value.trim())exObj.note=nEl.value.trim();entry.exercises.push(exObj)});
+    day.exercises.forEach((ex,ei)=>{const sets=[];for(let s=0;s<ex.sets;s++){const w=savedInputs[day.id+'_e'+ei+'_s'+s+'_w']||'',r=savedInputs[day.id+'_e'+ei+'_s'+s+'_r']||'',d=!!savedInputs[day.id+'_e'+ei+'_s'+s+'_c'];if(!d)allDone=false;if(parseInt(w)>maxW)maxW=parseInt(w);sets.push({weight:w,reps:r,done:d,isTime:!!ex.isTime})}const exObj={name:savedInputs[day.id+'_e'+ei+'_swap']||ex.name,sets};const nEl=$(day.id+'_e'+ei+'_note');if(nEl&&nEl.value.trim())exObj.note=nEl.value.trim();entry.exercises.push(exObj)});
   if(opts.sessionNote&&String(opts.sessionNote).trim())entry.notes=String(opts.sessionNote).trim();
     const ref=await db.collection('users').doc(U.uid).collection('log').add(entry);entry._id=ref.id;workoutLog.unshift(entry);
     let xp=50;if(allDone)xp+=50;totalXp+=xp;logged++;
@@ -2305,11 +2631,13 @@ function toggleAchCat(el){
 function renderProfile(){
   const r=getEffectiveRank(),info=getXpBarInfo();
   const title=(r.title&&r.title[userData.class])||r.name;const st=userData.stats||{};const prs=userData.prs||{};
-  let h=`<div class="profile-card"><div class="profile-pic-wrap" onclick="checkPhotoPrivacy(()=>document.getElementById('picInput').click())">${userData.profilePic?'<img src="'+userData.profilePic+'">':'<div class="pp-placeholder">👤</div>'}</div>
-    <div class="profile-name">@${userData.username||'???'}</div>
+  const myCos=getCos();
+  let h=`<div class="profile-card"><div class="profile-pic-wrap${frameClass(myCos.frame)}" onclick="checkPhotoPrivacy(()=>document.getElementById('picInput').click())">${userData.profilePic?'<img src="'+userData.profilePic+'">':'<div class="pp-placeholder">👤</div>'}</div>
+    <div class="profile-name${nameClass(myCos.name)}">@${userData.username||'???'}</div>
     <div class="profile-realname">${userData.name||''} <span style="font-size:.6rem;color:var(--dim)">(only you see this)</span></div>
     <div class="profile-class">${userData.class}${userData.subclass?' — '+userData.subclass:''}</div>
     <div class="profile-rank-badge" style="color:${r.color};background:${r.color}22;border:1px solid ${r.color}44">${r.name} — ${title}</div>
+    ${(userData.redGatesCleared||0)>0?`<div class="profile-gates">⛩️ ${userData.redGatesCleared} Red Gate${userData.redGatesCleared!==1?'s':''} cleared</div>`:''}
     ${userData.bio?'<div class="profile-bio">'+esc(userData.bio)+'</div>':''}
     <div class="xp-bar-wrap"><div class="xp-bar-label"><span>${info.label}</span><span>${info.sublabel}</span></div><div class="xp-bar"><div class="xp-bar-fill" style="width:${info.pct}%;background:linear-gradient(90deg,${r.color},${r.color}cc)"></div></div></div></div>`;
   // Stats
@@ -2747,7 +3075,7 @@ async function renderLeaderboard(){let list=[];if(lbMode==='friends'){const fids
         : `<button class="poke-btn" onclick="event.stopPropagation();sendPoke('${u.uid}','${esc(u.username||'hunter')}')">👋</button>`;
       pokeUI=streakTag+pokeBtn;
     }
-    return`<div class="lb-row${me?' me':''}" onclick="openProfileCard('${u.uid}')"><span class="lb-pos ${pc}">${i+1}</span><div class="lb-pic">${u.profilePic?'<img src="'+u.profilePic+'">':'👤'}</div><div class="lb-info"><div class="lb-name">@${esc(u.username||'hunter')}</div><div class="lb-class">${esc(u.class||'')}${u.subclass?' • '+esc(u.subclass):''}</div></div>${pokeUI}<div class="lb-xp">${u.xp}</div><div class="lb-rank" style="color:${r.color}">${r.name}</div></div>`;
+    return`<div class="lb-row${me?' me':''}" onclick="openProfileCard('${u.uid}')"><span class="lb-pos ${pc}">${i+1}</span><div class="lb-pic${frameClass(u.frame)}">${u.profilePic?'<img src="'+u.profilePic+'">':'👤'}</div><div class="lb-info"><div class="lb-name${nameClass(u.nameColor)}">@${esc(u.username||'hunter')}</div><div class="lb-class">${esc(u.class||'')}${u.subclass?' • '+esc(u.subclass):''}</div></div>${pokeUI}<div class="lb-xp">${u.xp}</div><div class="lb-rank" style="color:${r.color}">${r.name}</div></div>`;
   }).join(''):'<p style="color:var(--muted);font-size:.82rem">No hunters yet.</p>';
   $('lbList').innerHTML=h}
 
@@ -2767,9 +3095,9 @@ async function openProfileCard(uid){
     const title=(r.title&&r.title[u.class])||r.name;
     const isFriend=(userData.friends||[]).includes(uid);
     let h=`<div class="pc-header">
-      <div class="pc-pic">${u.profilePic?'<img src="'+u.profilePic+'">':'<div class="pp-placeholder" style="width:60px;height:60px;font-size:1.6rem">👤</div>'}</div>
+      <div class="pc-pic${frameClass(u.frame||(u.cosmetics&&u.cosmetics.frame))}">${u.profilePic?'<img src="'+u.profilePic+'">':'<div class="pp-placeholder" style="width:60px;height:60px;font-size:1.6rem">👤</div>'}</div>
       <div class="pc-info">
-        <div class="pc-username">@${esc(u.username||'hunter')}</div>
+        <div class="pc-username${nameClass(u.nameColor||(u.cosmetics&&u.cosmetics.name))}">@${esc(u.username||'hunter')}</div>
         <div class="pc-class">${u.class||''}${u.subclass?' — '+u.subclass:''}</div>
         <div class="pc-rank" style="color:${r.color}">${r.name} — ${title}</div>
       </div>
@@ -3716,9 +4044,9 @@ async function openClientDetail(uid){
     const goal=u.nutritionGoal||u.goal||'No goal set';
 
     let h=`<div class="pc-header">
-      <div class="pc-pic">${u.profilePic?'<img src="'+u.profilePic+'">':'<div class="pp-placeholder" style="width:60px;height:60px;font-size:1.6rem">👤</div>'}</div>
+      <div class="pc-pic${frameClass(u.frame||(u.cosmetics&&u.cosmetics.frame))}">${u.profilePic?'<img src="'+u.profilePic+'">':'<div class="pp-placeholder" style="width:60px;height:60px;font-size:1.6rem">👤</div>'}</div>
       <div class="pc-info">
-        <div class="pc-username">@${esc(u.username||'hunter')}</div>
+        <div class="pc-username${nameClass(u.nameColor||(u.cosmetics&&u.cosmetics.name))}">@${esc(u.username||'hunter')}</div>
         <div class="pc-class">${esc(u.class||'')}${u.subclass?' — '+esc(u.subclass):''} · ${esc(rank)}</div>
         <div style="font-size:.7rem;color:var(--accent2);margin-top:2px">🎯 ${esc(goal)}</div>
         <div style="font-size:.7rem;margin-top:4px">${statusEmoji} ${esc(statusLabel)}</div>

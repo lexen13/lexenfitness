@@ -349,7 +349,7 @@ async function searchFood(){
     if(!data.products||!data.products.length){$('foodSearchResults').innerHTML='<p style="color:var(--muted);font-size:.78rem;padding:.5rem">No results found.</p>';return}
     window._foodResults=data.products.map(p=>{
       const nut=p.nutriments||{};
-      return{name:String(p.product_name||'Unknown').slice(0,100),calPer100:Math.round(nut['energy-kcal_100g']||nut['energy-kcal']||0),proteinPer100:Math.round(nut.proteins_100g||0),carbsPer100:Math.round(nut.carbohydrates_100g||0),fatPer100:Math.round(nut.fat_100g||0),servingSuggestion:p.serving_size||''};
+      return{name:String(p.product_name||'Unknown').slice(0,100),calPer100:Math.round(nut['energy-kcal_100g']||nut['energy-kcal']||0),proteinPer100:Math.round(nut.proteins_100g||0),carbsPer100:Math.round(nut.carbohydrates_100g||0),fatPer100:Math.round(nut.fat_100g||0),servingSuggestion:p.serving_size||'',servingGrams:parseServingGrams(p)};
     });
     $('foodSearchResults').innerHTML=window._foodResults.map((f,i)=>
       `<div class="food-result" onclick="openServingModal(${i})"><div class="food-result-name">${esc(f.name)}</div><div class="food-result-macros">${f.calPer100} cal · P:${f.proteinPer100}g C:${f.carbsPer100}g F:${f.fatPer100}g <span style="color:var(--dim)">per 100g</span>${f.servingSuggestion?'<br><span style="color:var(--gold)">Serving: '+esc(f.servingSuggestion)+'</span>':''}</div></div>`
@@ -358,6 +358,14 @@ async function searchFood(){
 }
 
 // ── SERVING SIZE MODAL ──
+// Open Food Facts gives serving_quantity (numeric, g or ml). Fall back to parsing
+// the label, e.g. "2 slices (56 g)" → 56. Returns grams or 0 if unknown.
+function parseServingGrams(p){
+  const q=parseFloat(p.serving_quantity);
+  if(q>0&&q<5000)return q;
+  const m=String(p.serving_size||'').match(/(\d+(?:\.\d+)?)\s*(g|ml)\b/i);
+  return m?parseFloat(m[1]):0;
+}
 const UNIT_TO_GRAMS={g:1,ml:1,oz:28.35,floz:29.57,cup:240,serving:100};
 let pendingFood=null;
 
@@ -366,6 +374,15 @@ function openServingModal(idx){
   $('servingFoodName').textContent=pendingFood.name;
   $('servingAmount').value=1;
   const sugg=(pendingFood.servingSuggestion||'').toLowerCase();
+  // Known serving size → default to exactly 1 recommended serving
+  if(pendingFood.servingGrams>0){
+    $('servingUnit').value='serving';
+    $('servingAmount').value=1;
+    $('servingSuggestion').innerHTML=`Recommended serving: <strong>${esc(pendingFood.servingSuggestion||pendingFood.servingGrams+'g')}</strong> · defaulted to 1 serving`;
+    updateServingPreview();
+    $('servingModal').classList.add('open');
+    return;
+  }
   let defaultUnit='serving';
   if(sugg.includes('ml')||sugg.includes('fl'))defaultUnit='ml';
   else if(sugg.includes('oz'))defaultUnit='floz';
@@ -382,12 +399,16 @@ function openServingModal(idx){
   updateServingPreview();
   $('servingModal').classList.add('open');
 }
+function servingUnitGrams(unit){
+  if(unit==='serving'&&pendingFood&&pendingFood.servingGrams>0)return pendingFood.servingGrams;
+  return UNIT_TO_GRAMS[unit]||100;
+}
 function closeServingModal(){$('servingModal').classList.remove('open');pendingFood=null}
 function updateServingPreview(){
   if(!pendingFood)return;
   const amount=parseFloat($('servingAmount').value)||1;
   const unit=$('servingUnit').value;
-  const grams=amount*(UNIT_TO_GRAMS[unit]||100);
+  const grams=amount*servingUnitGrams(unit);
   const mult=grams/100;
   $('servingPreview').innerHTML=`<strong>${Math.round(pendingFood.calPer100*mult)} cal</strong> · P:${Math.round(pendingFood.proteinPer100*mult)}g · C:${Math.round(pendingFood.carbsPer100*mult)}g · F:${Math.round(pendingFood.fatPer100*mult)}g → <span style="color:var(--gold)">Meal ${activeMeal}</span>`;
 }
@@ -396,7 +417,7 @@ async function confirmServing(){
   const amount=parseFloat($('servingAmount').value)||1;
   const unit=$('servingUnit').value;
   const unitLabels={g:'g',ml:'ml',oz:'oz',floz:'fl oz',cup:'cup(s)',serving:'serving(s)'};
-  const grams=amount*(UNIT_TO_GRAMS[unit]||100);
+  const grams=amount*servingUnitGrams(unit);
   const mult=grams/100;
   const food={
     name:pendingFood.name,
@@ -404,7 +425,7 @@ async function confirmServing(){
     protein:Math.round(pendingFood.proteinPer100*mult),
     carbs:Math.round(pendingFood.carbsPer100*mult),
     fat:Math.round(pendingFood.fatPer100*mult),
-    serving:amount+' '+(unitLabels[unit]||unit)
+    serving:amount+' '+(unitLabels[unit]||unit)+(unit==='serving'&&pendingFood.servingGrams>0?' ('+Math.round(pendingFood.servingGrams*amount)+'g)':'')
   };
   await saveFoodItem(food);
   closeServingModal();closeFoodSearch();
@@ -419,12 +440,12 @@ async function saveFoodItem(food){
   if(!dayLog.meals[activeMeal])dayLog.meals[activeMeal]=[];
   dayLog.meals[activeMeal].push(food);
   setDayLog(today,dayLog);
-  // Track in recent foods (keep last 30 unique by name)
+  // Track in recent foods (keep last 150 unique by name — full history is also searchable)
   const recent=userData.recentFoods||[];
   const exists=recent.findIndex(r=>r.name===food.name);
   if(exists>=0)recent.splice(exists,1);
   recent.unshift({name:food.name,cal:food.cal,protein:food.protein,carbs:food.carbs,fat:food.fat,serving:food.serving});
-  if(recent.length>30)recent.length=30;
+  if(recent.length>150)recent.length=150;
   await saveUser({foodLog:userData.foodLog,recentFoods:recent});
   // Achievements
   const totalItems=getDayItemCount(dayLog);
@@ -479,7 +500,7 @@ async function lookupBarcode(code){
     const data=await res.json();
     if(data.status!==1||!data.product){toast('Product not found');return}
     const p=data.product;const nut=p.nutriments||{};
-    window._foodResults=[{name:String(p.product_name||'Unknown').slice(0,100),calPer100:Math.round(nut['energy-kcal_100g']||0),proteinPer100:Math.round(nut.proteins_100g||0),carbsPer100:Math.round(nut.carbohydrates_100g||0),fatPer100:Math.round(nut.fat_100g||0),servingSuggestion:p.serving_size||''}];
+    window._foodResults=[{name:String(p.product_name||'Unknown').slice(0,100),calPer100:Math.round(nut['energy-kcal_100g']||0),proteinPer100:Math.round(nut.proteins_100g||0),carbsPer100:Math.round(nut.carbohydrates_100g||0),fatPer100:Math.round(nut.fat_100g||0),servingSuggestion:p.serving_size||'',servingGrams:parseServingGrams(p)}];
     unlockAch('scan_1');
     const sc=(userData.scanCount||0)+1;await saveUser({scanCount:sc});if(sc>=5)unlockAch('scan_5');if(sc>=25)unlockAch('scan_25');
     openServingModal(0);
@@ -783,35 +804,77 @@ async function saveMacroSettings(){
   closeMacroModal();renderNutritionPage();toast('Nutrition settings saved!');
 }
 
-// ── RECENT FOODS ──
+// ── RECENT FOODS + SEARCHABLE HISTORY ──
+// Builds one deduped list from the ENTIRE food log plus saved recents, so every food
+// ever logged stays findable. Saved recents win on macros (they hold edited defaults).
+let foodHistory=[];
+function buildFoodHistory(){
+  const map={};
+  const fl=userData.foodLog||{};
+  Object.keys(fl).forEach(day=>{
+    const meals=(fl[day]&&fl[day].meals)||{};
+    Object.values(meals).forEach(items=>(items||[]).forEach(f=>{
+      if(!f||!f.name)return;
+      const k=f.name.trim().toLowerCase();
+      if(!map[k])map[k]={name:f.name,cal:f.cal||0,protein:f.protein||0,carbs:f.carbs||0,fat:f.fat||0,serving:f.serving||'',count:0,last:''};
+      map[k].count++;
+      if(day>=map[k].last){
+        map[k].last=day;
+        Object.assign(map[k],{cal:f.cal||0,protein:f.protein||0,carbs:f.carbs||0,fat:f.fat||0,serving:f.serving||''});
+      }
+    }));
+  });
+  (userData.recentFoods||[]).forEach((r,i)=>{
+    const k=r.name.trim().toLowerCase();
+    map[k]={...(map[k]||{count:0,last:''}),...r,recentRank:i};
+  });
+  // Recently used first, then by how often you eat it
+  return Object.values(map).sort((a,b)=>{
+    const ar=a.recentRank??9999,br=b.recentRank??9999;
+    if(ar!==br)return ar-br;
+    if((b.last||'')!==(a.last||''))return (b.last||'').localeCompare(a.last||'');
+    return b.count-a.count;
+  });
+}
 function openRecentFoods(){
   const modal=$('recentFoodsModal');if(!modal)return;
-  const recent=userData.recentFoods||[];
-  let h=`<h2>🕐 Recent Foods</h2>`;
-  if(!recent.length){
-    h+=`<p style="color:var(--muted);font-size:.78rem;padding:1rem 0">No recent foods yet. Log something first!</p>`;
+  foodHistory=buildFoodHistory();
+  let h=`<h2>🕐 Food History</h2>`;
+  if(!foodHistory.length){
+    h+=`<p style="color:var(--muted);font-size:.78rem;padding:1rem 0">No foods logged yet. Log something first!</p>`;
   }else{
-    h+=`<div class="page-sub" style="margin-bottom:.5rem">Tap to log · ✏️ to edit the default · Meal ${activeMeal}</div>`;
-    h+=`<div class="recent-list">`;
-    recent.forEach((f,i)=>{
-      h+=`<div class="recent-item" onclick="openRecentServing(${i})">
-        <div class="food-item-info">
-          <div class="food-item-name">${esc(f.name)}</div>
-          <div class="food-item-detail">${esc(f.serving||'')} · ${f.cal} cal · P:${f.protein}g C:${f.carbs}g F:${f.fat}g</div>
-        </div>
-        <button class="recent-edit" onclick="event.stopPropagation();editRecentFood(${i})" title="Edit">✏️</button>
-        <div class="recent-quick" onclick="event.stopPropagation();quickRelog(${i})">⚡</div>
-      </div>`;
-    });
-    h+=`</div>`;
+    h+=`<input type="search" id="foodHistSearch" class="food-hist-search" placeholder="Search ${foodHistory.length} foods you've logged…" oninput="renderFoodHistoryList()" autocomplete="off">`;
+    h+=`<div class="page-sub" style="margin:.4rem 0 .5rem">Tap to adjust · ⚡ to log instantly · ✏️ edit default · Meal ${activeMeal}</div>`;
+    h+=`<div class="recent-list" id="foodHistList"></div>`;
   }
   h+=`<div class="m-actions" style="margin-top:.6rem"><button class="m-cancel" onclick="closeRecentFoods()">Close</button></div>`;
   modal.querySelector('.modal').innerHTML=h;
   modal.classList.add('open');
+  if(foodHistory.length)renderFoodHistoryList();
+}
+function renderFoodHistoryList(){
+  const el=$('foodHistList');if(!el)return;
+  const q=(($('foodHistSearch')||{}).value||'').trim().toLowerCase();
+  const terms=q.split(/\s+/).filter(Boolean);
+  // Every search word must appear somewhere in the name ("chicken rice" finds "Rice & Chicken Bowl")
+  const rows=foodHistory.map((f,i)=>({f,i})).filter(({f})=>terms.every(t=>f.name.toLowerCase().includes(t)));
+  const shown=q?rows:rows.slice(0,60);
+  if(!shown.length){el.innerHTML=`<p style="color:var(--muted);font-size:.74rem;padding:.8rem 0">No match for "${esc(q)}". Try fewer words, or use Search to look it up.</p>`;return}
+  el.innerHTML=shown.map(({f,i})=>{
+    const meta=f.count>1?`<span class="fh-count">×${f.count}</span>`:'';
+    return `<div class="recent-item" onclick="openRecentServing(${i})">
+      <div class="food-item-info">
+        <div class="food-item-name">${esc(f.name)} ${meta}</div>
+        <div class="food-item-detail">${esc(f.serving||'')} · ${f.cal} cal · P:${f.protein}g C:${f.carbs}g F:${f.fat}g</div>
+      </div>
+      <button class="recent-edit" onclick="event.stopPropagation();editRecentFood(${i})" title="Edit">✏️</button>
+      <div class="recent-quick" onclick="event.stopPropagation();quickRelog(${i})">⚡</div>
+    </div>`;
+  }).join('')+(!q&&rows.length>60?`<p style="color:var(--dim);font-size:.66rem;text-align:center;padding:.5rem 0">Showing 60 of ${rows.length} — search to find the rest</p>`:'');
 }
 async function editRecentFood(idx){
   const recent=userData.recentFoods||[];
-  const f=recent[idx];if(!f)return;
+  const f=foodHistory[idx];if(!f)return;
   const currentServing=f.serving||'1 serving';
   const newServing=prompt(`Edit default serving for ${f.name}:\n\n(e.g. "150g", "1 cup", "2 slices")`,currentServing);
   if(!newServing||newServing.trim()===currentServing)return;
@@ -828,7 +891,11 @@ async function editRecentFood(idx){
       updated.fat=Math.round(f.fat*ratio*10)/10;
     }
   }
-  recent[idx]=updated;
+  // Upsert by name so edits stick even for foods that only lived in older logs
+  const {count,last,recentRank,...clean}=updated;
+  const ri=recent.findIndex(r=>r.name===f.name);
+  if(ri>=0)recent[ri]=clean;else recent.unshift(clean);
+  if(recent.length>150)recent.length=150;
   await saveUser({recentFoods:recent});
   openRecentFoods();
   toast('✏️ Default updated');
@@ -837,17 +904,16 @@ function closeRecentFoods(){$('recentFoodsModal').classList.remove('open')}
 
 // Quick relog — same serving, instant add
 async function quickRelog(idx){
-  const recent=userData.recentFoods||[];
-  const f=recent[idx];if(!f)return;
-  await saveFoodItem({...f});
+  const f=foodHistory[idx];if(!f)return;
+  const {count,last,recentRank,...food}=f;
+  await saveFoodItem(food);
   closeRecentFoods();
 }
 
 // Relog with serving adjustment
 let recentPending=null;
 function openRecentServing(idx){
-  const recent=userData.recentFoods||[];
-  recentPending=recent[idx];if(!recentPending)return;
+  recentPending=foodHistory[idx];if(!recentPending)return;
   closeRecentFoods();
   const modal=$('recentServingModal');if(!modal)return;
   let h=`<h2>🍽️ Adjust Serving</h2>`;

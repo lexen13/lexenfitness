@@ -1,9 +1,28 @@
 // ═══════════════════════════════════════════
 //  LEXENFITNESS — DATA v4 (Solo Leveling)
 // ═══════════════════════════════════════════
-const APP_VERSION='1.24.1';
+const APP_VERSION='1.27.0';
 const WELCOME_MESSAGE=`Welcome to Lexen Fitness! A Solo-Leveling inspired, gamified Fitness App to help friends and family stay motivated by giving fitness a game-like experience.\n\nThis app is developed by one person, and is very much still in the testing phase. Not everything will be perfect, but please bear with me. If you have any suggestions, feel free to pass them along as I continue to make this the best app that I can, before I actually have to start buying dev rights with Apple and Google.\n\nFeel free to share this with your own family and friends as we build a community that becomes healthier together!\n\n— Gavin (founder)`;
 const CHANGELOG=[
+  {version:'1.27.0',date:'Oct 2026',title:'Red Gates & Cosmetics',blurb:'S-Ranks now face a Red Gate every week: one boss challenge shared by every S-Rank, with targets scaled to your own history. Clear it for shards, XP, and a growing gate count. The Shop also sells profile frames and name colors that friends can see on the leaderboard. And your daily mission streak no longer resets to zero every evening.',items:[
+    '⛩️ Red Gates — a weekly boss for S-Ranks, rotating through 7 challenges (volume, flawless sessions, lift PRs, mission discipline, protein, cardio, session time)',
+    '⛩️ Clear a gate for +60 shards and +400 XP. Gate count shows on your profile, plus 4 new achievements',
+    '✨ Cosmetics in the Shop: profile frames and name colors, visible on the leaderboard and friend cards',
+    '👑 S-Rank-only Monarch frame and gold name. The Crimson Gate frame is earned by clearing 5 gates and cannot be bought',
+    '🐛 FIXED: the daily mission streak read 0 every evening in US time zones and every morning before you finished your missions. It now counts correctly'
+  ]},
+  {version:'1.26.0',date:'Oct 2026',title:'Food History & Accurate Scans',blurb:'Scanning a barcode now starts at the serving size printed on the label, so a 60g protein bar logs as 60g instead of 100g. Recent Foods is now a searchable history of everything you have ever logged.',items:[
+    '📸 Scans and searches default to 1 recommended serving using the label\'s real size. Previously every "serving" was treated as 100g, which over-counted most packaged foods',
+    '🔎 Recent Foods is now Food History: search every food you have ever logged, with how often you eat it',
+    '🕐 Recent list holds 150 foods (was 30), and older foods are still found by search',
+    '✏️ Editing a default works on any food in your history, not just the last 30'
+  ]},
+  {version:'1.25.0',date:'Jul 2026',title:'Exercise Swaps & A Real Logging Fix',blurb:'Equipment taken? Tap the swap icon on any exercise and pick a movement that trains the same pattern — just for today, or permanently. Also fixed a genuine bug where deleting an exercise mid-workout shuffled your typed numbers onto the wrong exercises.',items:[
+    '⇆ Swap any exercise for a same-pattern alternative — 18 movement groups covering presses, pulls, squats, hinges, arms and cardio',
+    '⇆ Swaps last for the session by default, or can be made permanent in your plan. Your history follows the swap',
+    '🐛 FIXED: deleting an exercise mid-workout used to shift every following exercise onto the previous one\'s typed weights and reps. Values now stay with the right exercise',
+    '✏️ You can also type your own replacement if nothing in the list fits'
+  ]},
   {version:'1.24.0',date:'Jul 2026',title:'The Awakening · Phase II',blurb:'The final trial for S-Rank is live. Once you clear Phase I, you can begin a 14-day exam: hit your weekly goal two weeks running, log food every single day, and beat one of your own lifts. Fall short and you keep everything from Phase I — you just try again.',items:[
     '👁️ Phase II is a 14-day exam you start when you are ready — the clock begins when you accept',
     '📊 Live tracker shows all three requirements and days remaining while the exam runs',
@@ -1027,3 +1046,87 @@ const AWAKENING_EXAM={
     {id:'exam_pr',label:'Beat a previously logged number on any lift'}
   ]
 };
+
+// ═══════════ EXERCISE SUBSTITUTIONS (v1.25.0) ═══════════
+// Grouped by movement pattern. When equipment is taken, swap within the same group.
+const EXERCISE_GROUPS={
+  horizontal_press:{label:'Horizontal Press',items:['Barbell Bench Press','Dumbbell Bench Press','Machine Chest Press','Smith Machine Bench Press','Push-Up','Weighted Push-Up','Cable Chest Press']},
+  incline_press:{label:'Incline Press',items:['Incline Barbell Press','Incline Dumbbell Press','Incline Machine Press','Incline Smith Press','Low-to-High Cable Fly']},
+  vertical_press:{label:'Vertical Press',items:['Overhead Press','Dumbbell Shoulder Press','Machine Shoulder Press','Arnold Press','Seated Barbell Press','Landmine Press']},
+  horizontal_pull:{label:'Horizontal Pull',items:['Barbell Row','Dumbbell Row','Seated Cable Row','Chest-Supported Row','Machine Row','T-Bar Row','Inverted Row']},
+  vertical_pull:{label:'Vertical Pull',items:['Lat Pulldown','Pull-Up','Chin-Up','Assisted Pull-Up','Neutral-Grip Pulldown','Single-Arm Lat Pulldown']},
+  squat:{label:'Squat Pattern',items:['Back Squat','Front Squat','Goblet Squat','Hack Squat','Machine Squat','Leg Press','Smith Machine Squat','Bulgarian Split Squat']},
+  hinge:{label:'Hip Hinge',items:['Romanian Deadlift','Conventional Deadlift','Stiff Leg Deadlift','Dumbbell RDL','Good Morning','Cable Pull-Through','Back Extension','Trap Bar Deadlift']},
+  hip_thrust:{label:'Hip Thrust',items:['Barbell Hip Thrust','Glute-Bridge Machine','Dumbbell Hip Thrust','Single-Leg Hip Thrust','Cable Pull-Through']},
+  knee_flex:{label:'Hamstring Curl',items:['Lying Leg Curl','Seated Leg Curl','Standing Leg Curl','Nordic Curl','Stability Ball Curl']},
+  knee_ext:{label:'Quad Extension',items:['Leg Extension','Single-Leg Extension','Sissy Squat','Reverse Nordic']},
+  calf:{label:'Calf Raise',items:['Standing Calf Raise','Seated Calf Raise','Leg Press Calf Raise','Smith Machine Calf Raise','Single-Leg Calf Raise']},
+  lateral_delt:{label:'Lateral Delt',items:['Dumbbell Lateral Raise','Cable Lateral Raise','Machine Lateral Raise','Leaning Lateral Raise']},
+  rear_delt:{label:'Rear Delt',items:['Rear Delt Fly','Face Pull','Reverse Pec Deck','Cable Rear Delt Fly','Bent-Over Reverse Fly']},
+  chest_iso:{label:'Chest Isolation',items:['Cable Fly','Pec Deck','Dumbbell Fly','Low-to-High Cable Fly','Machine Fly']},
+  biceps:{label:'Biceps',items:['EZ-Bar Curl','Dumbbell Curl','Hammer Curl','Cable Curl','Preacher Curl','Incline Dumbbell Curl','Machine Curl']},
+  triceps:{label:'Triceps',items:['Triceps Pushdown','Overhead Rope Extension','Skullcrusher','Dumbbell Overhead Extension','Close-Grip Bench Press','Dip','Machine Triceps Extension']},
+  lat_iso:{label:'Lat Isolation',items:['Straight-Arm Pulldown','Cable Pullover','Dumbbell Pullover','Machine Pullover']},
+  cardio:{label:'Cardio',items:['Incline Walk','Bike','Rower','Stair Climber','Elliptical','Jog','Ski Erg']}
+};
+// Keyword → group. First match wins, so order matters (specific before generic).
+const EXERCISE_GROUP_RULES=[
+  [/straight.?arm|pullover/i,'lat_iso'],
+  [/incline.*(press|bench)/i,'incline_press'],
+  [/face pull|rear delt|reverse (pec|fly)/i,'rear_delt'],
+  [/lateral raise|side raise/i,'lateral_delt'],
+  [/(cable|pec deck|machine|dumbbell).*fly|pec deck/i,'chest_iso'],
+  [/calf/i,'calf'],
+  [/leg curl|hamstring curl|nordic/i,'knee_flex'],
+  [/leg extension|sissy/i,'knee_ext'],
+  [/hip thrust|glute bridge/i,'hip_thrust'],
+  [/romanian|rdl|stiff leg|deadlift|good morning|pull.?through|back extension/i,'hinge'],
+  [/squat|leg press|hack/i,'squat'],
+  [/finisher|bike|rower|row erg|ski erg|incline walk|jog|run\b|elliptical|stair|treadmill/i,'cardio'],
+  [/pulldown|pull.?up|chin.?up/i,'vertical_pull'],
+  [/row/i,'horizontal_pull'],  // note: cardio rule runs earlier so "rower" isn't caught here
+  [/(overhead|shoulder|arnold|military).*press|ohp/i,'vertical_press'],
+  [/pushdown|skullcrusher|triceps|tricep|dip/i,'triceps'],
+  [/curl/i,'biceps'],
+  [/bench press|chest press|push.?up/i,'horizontal_press'],
+  [/walk/i,'cardio']
+];
+function getExerciseGroup(name){
+  const n=String(name||'');
+  for(const [rx,g] of EXERCISE_GROUP_RULES){if(rx.test(n))return g}
+  return null;
+}
+
+// ═══════════ RED GATES (v1.27.0) ═══════════
+// S-Rank weekly boss. Everyone at S faces the SAME gate each week (so friends can
+// compare notes), but the target is scaled to each hunter's own history.
+SHARD_REWARDS.redGate=60;
+const RED_GATE_XP=400;
+const RED_GATE_POOL=[
+  {id:'volume_siege',icon:'🏰',name:'VOLUME SIEGE',desc:'Move 110% of your best weekly volume from the last 8 weeks.',unit:'lbs'},
+  {id:'iron_discipline',icon:'📜',name:'IRON DISCIPLINE',desc:'Complete every daily mission on 5 of the 7 days.',unit:'days'},
+  {id:'double_breach',icon:'💥',name:'DOUBLE BREACH',desc:'Beat your best weight on 2 different lifts.',unit:'lifts'},
+  {id:'cardio_raid',icon:'🫀',name:'CARDIO RAID',desc:'Log 150 minutes of cardio this week.',unit:'min'},
+  {id:'flawless_five',icon:'⚔️',name:'FLAWLESS FIVE',desc:'5 training sessions this week. Every logged set checked off.',unit:'sessions'},
+  {id:'fuel_the_hunt',icon:'🥩',name:'FUEL THE HUNT',desc:'Hit your protein target on 5 of the 7 days.',unit:'days'},
+  {id:'endurance_gate',icon:'⏳',name:'ENDURANCE GATE',desc:'Spend 120% of your usual weekly minutes in Session Mode.',unit:'min'}
+];
+ACHIEVEMENTS.push(
+  {id:'red_gate_1',icon:'⛩️',name:'Through the Red Gate',desc:'Clear your first Red Gate',xp:50},
+  {id:'red_gate_5',icon:'🩸',name:'Gate Breaker',desc:'Clear 5 Red Gates',xp:100},
+  {id:'red_gate_25',icon:'👹',name:'Monarch of Gates',desc:'Clear 25 Red Gates',xp:300},
+  {id:'red_gate_streak_4',icon:'🔥',name:'Unbroken Siege',desc:'Clear 4 Red Gates in a row',xp:150}
+);
+
+// ═══════════ COSMETICS (v1.27.0) ═══════════
+// Pure flair — shown on your profile and to friends on the leaderboard. No stat effects.
+// lock: null = anyone can buy · 'S' = S-Rank only · {gates:N} = earned by clearing N Red Gates (never sold)
+const COSMETICS=[
+  {id:'frame_shadow',type:'frame',name:'Shadow Frame',desc:'A slow violet pulse around your portrait.',cost:120,lock:null},
+  {id:'frame_frost',type:'frame',name:'Frost Frame',desc:'Cold blue edge, faint shimmer.',cost:120,lock:null},
+  {id:'frame_crimson',type:'frame',name:'Crimson Gate Frame',desc:'Proof you\'ve walked through 5 Red Gates. Cannot be bought.',cost:0,lock:{gates:5}},
+  {id:'frame_monarch',type:'frame',name:'Monarch Frame',desc:'A living gold halo. S-Rank only.',cost:300,lock:'S'},
+  {id:'name_violet',type:'name',name:'Violet Name',desc:'Your @name in System violet.',cost:80,lock:null},
+  {id:'name_ember',type:'name',name:'Ember Name',desc:'Your @name in burning orange.',cost:80,lock:null},
+  {id:'name_monarch',type:'name',name:'Monarch Gold Name',desc:'Shimmering gold @name. S-Rank only.',cost:250,lock:'S'}
+];
