@@ -1750,3 +1750,18 @@ body.in-session .page{padding-bottom:200px}
 .un-list .ico.gold{color:var(--gold);border-color:rgba(242,193,78,.5)}
 .un-list .t.gold{color:var(--gold)}
 .un-list .btn-s.sm{height:34px;font-size:13px;padding:0 12px}
+
+/* v1.32.1 — cosmetics restored (the v1.29 cleanup removed them because their class names are built in code) */
+[class*="cos-frame_"]{border-style:solid!important;border-width:2px!important}
+.cos-frame_shadow{border-color:#8b5cf6!important;box-shadow:0 0 0 2px rgba(139,92,246,.3),0 0 16px rgba(139,92,246,.55);animation:cosPulse 3s ease-in-out infinite}
+@keyframes cosPulse{50%{box-shadow:0 0 0 3px rgba(139,92,246,.5),0 0 26px rgba(139,92,246,.85)}}
+.cos-frame_frost{border-color:#7dd3fc!important;box-shadow:0 0 0 2px rgba(125,211,252,.25),0 0 14px rgba(125,211,252,.55)}
+.cos-frame_crimson{border-color:#ef4444!important;box-shadow:0 0 0 2px rgba(239,68,68,.3),0 0 18px rgba(239,68,68,.65);animation:cosCrimson 2.4s ease-in-out infinite}
+@keyframes cosCrimson{50%{box-shadow:0 0 0 3px rgba(239,68,68,.5),0 0 28px rgba(239,68,68,.9)}}
+.cos-frame_monarch{border-color:#fbbf24!important;animation:cosMonarch 3.5s ease-in-out infinite}
+@keyframes cosMonarch{0%,100%{box-shadow:0 0 0 2px rgba(251,191,36,.35),0 0 18px rgba(251,191,36,.6)}50%{box-shadow:0 0 0 4px rgba(255,243,196,.55),0 0 34px rgba(251,191,36,.95)}}
+.cos-name_violet{color:#a78bfa!important}
+.cos-name_ember{color:#fb923c!important}
+.cos-name_monarch{background:linear-gradient(90deg,#f59e0b,#fff3c4,#fbbf24,#f59e0b);background-size:200% auto;-webkit-background-clip:text;background-clip:text;color:transparent!important;-webkit-text-fill-color:transparent;animation:cosShimmer 3s linear infinite}
+@keyframes cosShimmer{to{background-position:200% center}}
+@media (prefers-reduced-motion:reduce){[class*="cos-frame_"],.cos-name_monarch{animation:none!important}}
