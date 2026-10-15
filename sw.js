@@ -2,7 +2,7 @@
 //  LEXENFITNESS — Service Worker
 //  IMPORTANT: Bump CACHE_NAME with every deploy
 // ═══════════════════════════════════════════
-const CACHE_NAME = 'lexen-v1.28.0';
+const CACHE_NAME = 'lexen-v1.30.0';
 const STATIC_ASSETS = [
   '/lexenfitness/',
   '/lexenfitness/index.html',
@@ -12,6 +12,14 @@ const STATIC_ASSETS = [
   '/lexenfitness/nutrition.js',
   '/lexenfitness/chat.js',
   '/lexenfitness/manifest.json',
+  '/lexenfitness/icons/logo-mark.svg',
+  '/lexenfitness/fonts/chakra-petch-latin-500-normal.woff2',
+  '/lexenfitness/fonts/chakra-petch-latin-600-normal.woff2',
+  '/lexenfitness/fonts/chakra-petch-latin-700-normal.woff2',
+  '/lexenfitness/fonts/barlow-latin-400-normal.woff2',
+  '/lexenfitness/fonts/barlow-latin-500-normal.woff2',
+  '/lexenfitness/fonts/barlow-latin-600-normal.woff2',
+  '/lexenfitness/fonts/barlow-latin-700-normal.woff2',
   '/lexenfitness/icons/icon-192x192.png',
   '/lexenfitness/icons/icon-192x192-maskable.png',
   '/lexenfitness/icons/icon-512x512.png',
@@ -22,7 +30,9 @@ const STATIC_ASSETS = [
 self.addEventListener('install', e => {
   e.waitUntil(
     caches.open(CACHE_NAME)
-      .then(cache => cache.addAll(STATIC_ASSETS))
+      // Fonts are best-effort: a missing font file must never block the update
+      .then(cache => cache.addAll(STATIC_ASSETS.filter(u => !/\/(fonts|icons)\//.test(u)))
+        .then(() => Promise.all(STATIC_ASSETS.filter(u => /\/(fonts|icons)\//.test(u)).map(u => cache.add(u).catch(() => {})))))
       .then(() => self.skipWaiting())
   );
 });
@@ -47,6 +57,7 @@ self.addEventListener('fetch', e => {
 
   // Skip: let Firebase, APIs, CDNs go straight to network
   if (
+    url.origin !== self.location.origin ||
     url.hostname.includes('googleapis.com') ||
     url.hostname.includes('firebaseio.com') ||
     url.hostname.includes('firebaseapp.com') ||

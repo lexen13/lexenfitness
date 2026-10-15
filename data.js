@@ -1,305 +1,322 @@
 // ═══════════════════════════════════════════
 //  LEXENFITNESS — DATA v4 (Solo Leveling)
 // ═══════════════════════════════════════════
-const APP_VERSION='1.28.0';
+const APP_VERSION='1.30.0';
 const WELCOME_MESSAGE=`Welcome to Lexen Fitness! A Solo-Leveling inspired, gamified Fitness App to help friends and family stay motivated by giving fitness a game-like experience.\n\nThis app is developed by one person, and is very much still in the testing phase. Not everything will be perfect, but please bear with me. If you have any suggestions, feel free to pass them along as I continue to make this the best app that I can, before I actually have to start buying dev rights with Apple and Google.\n\nFeel free to share this with your own family and friends as we build a community that becomes healthier together!\n\n— Gavin (founder)`;
 const CHANGELOG=[
+  {version:'1.30.0',date:'Oct 2026',title:'NEW ERA BEGINS',blurb:'A new mark for the System, and three new things to chase. Every hunter below S-Rank now gets a weekly Blue Gate, you can earn titles to wear under your name, and the Hall of Fame shows the heaviest lifts anyone in LexenFitness has logged.',items:[
+    'New app icon and loading screen. Re-add LexenFitness to your home screen if the old icon sticks around',
+    'Blue Gates: a new weekly challenge for E through A-Rank, scaled to your own training. Clear it for shards and XP. You\'ll find it on Home',
+    'Titles: earn them from trials, gates, streaks and big milestones, then equip one in Profile, Wardrobe. It shows under your name for everyone',
+    'Hall of Fame: Guild, Ranks, Hall of Fame. Heaviest bench, squat, deadlift, overhead press and big three total, plus most workouts, longest streak and most Blue Gates',
+    'Records come from sets you actually logged and finished. Turn off "Show my records in the Hall of Fame" in Settings, Privacy to stay out of it'
+  ]},
+  {version:'1.29.0',date:'Oct 2026',title:'A new look, back to the System',blurb:'LexenFitness has a full redesign. Calmer screens, the System\'s glowing windows are back, and purple is home again. Everything you used before is still here, a few things just moved. Google sign-in works now too.',items:[
+    'Chat, the leaderboard and Friends now live in the new Guild tab. A dot on Guild means a new message or friend request',
+    'Badges, Shop, Rank info and Wardrobe are in Profile, under your Status window',
+    'Train shows your workout as a clean list. Tap the three dots on any exercise to swap, edit or remove it',
+    'Start session for the rest timer, or tap "Log it without the timer" to log afterwards like before',
+    'Your Status window shows STR, VIT, AGI and END. STR is your best logged bench, squat and deadlift added together',
+    'Meals can have names now (Nutrition, then the meals button). They stay numbered unless you name them',
+    'Fixed: Google sign-in was being blocked and showed an internal error',
+    'The app now carries its own fonts, so it looks the same with a weak signal'
+  ]},
   {version:'1.28.0',date:'Oct 2026',title:'Friends, Invites & a Locked-Down System',blurb:'Your Home screen now shows what your friends are up to: workouts, PRs, rank-ups and Red Gates. A banner tells you exactly what\'s left for a perfect week. You can equip your frames and name colors from the new Wardrobe on your profile. LexenFitness is now invite-only, and a big security update keeps your chats, stats and progress private and fair.',items:[
-    '👥 Friend Activity on Home — friends\' workouts, PRs, rank-ups, perfect weeks and Red Gates, as they happen',
-    '📅 Week tracker — shows how many sessions are left for a perfect week, and stays quiet when the week is out of reach',
-    '✨ Wardrobe — equip frames and name colors from your Profile. Future cosmetics show up here automatically',
-    '🎟️ Invite-only — new hunters need a friend\'s code to join. Your friend code is your invite code (Friends page → Share invite), and anyone who joins with it is sent to you as a friend request',
-    '🔒 Privacy — chats are visible only to the two people in them, and your full profile only to friends you\'ve added',
-    '🛡️ Fair play — progress, shards, ranks and the leaderboard are now protected against tampering',
-    '🙈 New setting: choose whether your activity appears in friends\' feeds (Settings → Privacy)',
-    '🔧 Awakening\'s all-mission days are now truly permanent (older days were being dropped), and Food History keeps 300 foods'
+    'Friend Activity on Home — friends\' workouts, PRs, rank-ups, perfect weeks and Red Gates, as they happen',
+    'Week tracker — shows how many sessions are left for a perfect week, and stays quiet when the week is out of reach',
+    'Wardrobe — equip frames and name colors from your Profile. Future cosmetics show up here automatically',
+    'Invite-only — new hunters need a friend\'s code to join. Your friend code is your invite code (Friends page → Share invite), and anyone who joins with it is sent to you as a friend request',
+    'Privacy — chats are visible only to the two people in them, and your full profile only to friends you\'ve added',
+    'Fair play — progress, shards, ranks and the leaderboard are now protected against tampering',
+    'New setting: choose whether your activity appears in friends\' feeds (Settings → Privacy)',
+    'Awakening\'s all-mission days are now truly permanent (older days were being dropped), and Food History keeps 300 foods'
   ]},
   {version:'1.27.0',date:'Oct 2026',title:'Red Gates & Cosmetics',blurb:'S-Ranks now face a Red Gate every week: one boss challenge shared by every S-Rank, with targets scaled to your own history. Clear it for shards, XP, and a growing gate count. The Shop also sells profile frames and name colors that friends can see on the leaderboard. And your daily mission streak no longer resets to zero every evening.',items:[
-    '⛩️ Red Gates — a weekly boss for S-Ranks, rotating through 7 challenges (volume, flawless sessions, lift PRs, mission discipline, protein, cardio, session time)',
-    '⛩️ Clear a gate for +60 shards and +400 XP. Gate count shows on your profile, plus 4 new achievements',
-    '✨ Cosmetics in the Shop: profile frames and name colors, visible on the leaderboard and friend cards',
-    '👑 S-Rank-only Monarch frame and gold name. The Crimson Gate frame is earned by clearing 5 gates and cannot be bought',
-    '🐛 FIXED: the daily mission streak read 0 every evening in US time zones and every morning before you finished your missions. It now counts correctly'
+    'Red Gates — a weekly boss for S-Ranks, rotating through 7 challenges (volume, flawless sessions, lift PRs, mission discipline, protein, cardio, session time)',
+    'Clear a gate for +60 shards and +400 XP. Gate count shows on your profile, plus 4 new achievements',
+    'Cosmetics in the Shop: profile frames and name colors, visible on the leaderboard and friend cards',
+    'S-Rank-only Monarch frame and gold name. The Crimson Gate frame is earned by clearing 5 gates and cannot be bought',
+    'FIXED: the daily mission streak read 0 every evening in US time zones and every morning before you finished your missions. It now counts correctly'
   ]},
   {version:'1.26.0',date:'Oct 2026',title:'Food History & Accurate Scans',blurb:'Scanning a barcode now starts at the serving size printed on the label, so a 60g protein bar logs as 60g instead of 100g. Recent Foods is now a searchable history of everything you have ever logged.',items:[
-    '📸 Scans and searches default to 1 recommended serving using the label\'s real size. Previously every "serving" was treated as 100g, which over-counted most packaged foods',
-    '🔎 Recent Foods is now Food History: search every food you have ever logged, with how often you eat it',
-    '🕐 Recent list holds 150 foods (was 30), and older foods are still found by search',
-    '✏️ Editing a default works on any food in your history, not just the last 30'
+    'Scans and searches default to 1 recommended serving using the label\'s real size. Previously every "serving" was treated as 100g, which over-counted most packaged foods',
+    'Recent Foods is now Food History: search every food you have ever logged, with how often you eat it',
+    'Recent list holds 150 foods (was 30), and older foods are still found by search',
+    'Editing a default works on any food in your history, not just the last 30'
   ]},
   {version:'1.25.0',date:'Jul 2026',title:'Exercise Swaps & A Real Logging Fix',blurb:'Equipment taken? Tap the swap icon on any exercise and pick a movement that trains the same pattern — just for today, or permanently. Also fixed a genuine bug where deleting an exercise mid-workout shuffled your typed numbers onto the wrong exercises.',items:[
     '⇆ Swap any exercise for a same-pattern alternative — 18 movement groups covering presses, pulls, squats, hinges, arms and cardio',
     '⇆ Swaps last for the session by default, or can be made permanent in your plan. Your history follows the swap',
-    '🐛 FIXED: deleting an exercise mid-workout used to shift every following exercise onto the previous one\'s typed weights and reps. Values now stay with the right exercise',
-    '✏️ You can also type your own replacement if nothing in the list fits'
+    'FIXED: deleting an exercise mid-workout used to shift every following exercise onto the previous one\'s typed weights and reps. Values now stay with the right exercise',
+    'You can also type your own replacement if nothing in the list fits'
   ]},
   {version:'1.24.0',date:'Jul 2026',title:'The Awakening · Phase II',blurb:'The final trial for S-Rank is live. Once you clear Phase I, you can begin a 14-day exam: hit your weekly goal two weeks running, log food every single day, and beat one of your own lifts. Fall short and you keep everything from Phase I — you just try again.',items:[
-    '👁️ Phase II is a 14-day exam you start when you are ready — the clock begins when you accept',
-    '📊 Live tracker shows all three requirements and days remaining while the exam runs',
-    '🏋️ The PR requirement is measured against a snapshot of your bests taken the moment you begin — you have to beat the old you',
-    '🔁 Failing costs an attempt, never your Phase I progress. Attempt number is tracked and shown',
-    '🔒 S-RANK cannot be claimed until Phase II is genuinely passed'
+    'Phase II is a 14-day exam you start when you are ready — the clock begins when you accept',
+    'Live tracker shows all three requirements and days remaining while the exam runs',
+    'The PR requirement is measured against a snapshot of your bests taken the moment you begin — you have to beat the old you',
+    'Failing costs an attempt, never your Phase I progress. Attempt number is tracked and shown',
+    'S-RANK cannot be claimed until Phase II is genuinely passed'
   ]},
   {version:'1.23.0',date:'Jul 2026',title:'Supersets, The New Awakening & Ascension',blurb:'Supersets are now a real feature — paired movements show as a linked block and the rest timer knows to wait until you finish both. The S-Rank trial has been rebuilt into two phases so a single bad day can never undo months of work, and reaching S-Rank now triggers a full ascension sequence. Exercise history also survives renaming, and the log is easier to scan.',items:[
     '⇄ Native superset support — pair any two exercises (2A/2B) in the editor; rest timer holds until the pair is done. Gym packed? Straight through still works',
-    '👁️ THE AWAKENING rebuilt: Phase I is cumulative (100 sessions · 12 perfect weeks · 20 all-mission days) and can never be lost. Phase II is a retryable 14-day final exam',
-    '🔒 Weeks bought with shards do NOT count toward S-Rank. The pinnacle can not be purchased',
-    '✨ Reaching S-RANK now triggers a full-screen ascension sequence',
-    '🔎 Exercise history now survives renaming — "DB Bench Press" and "Dumbbell Bench Press" share numbers, while Seated and Standing variations stay correctly separate',
-    '📖 Logs are easier to scan — day-of-week chips on every entry and session counts on each week',
-    '📋 New plans assigned to a few hunters'
+    'THE AWAKENING rebuilt: Phase I is cumulative (100 sessions · 12 perfect weeks · 20 all-mission days) and can never be lost. Phase II is a retryable 14-day final exam',
+    'Weeks bought with shards do NOT count toward S-Rank. The pinnacle can not be purchased',
+    'Reaching S-RANK now triggers a full-screen ascension sequence',
+    'Exercise history now survives renaming — "DB Bench Press" and "Dumbbell Bench Press" share numbers, while Seated and Standing variations stay correctly separate',
+    'Logs are easier to scan — day-of-week chips on every entry and session counts on each week',
+    'New plans assigned to a few hunters'
   ]},
   {version:'1.22.0',date:'Jul 2026',title:'Welcome Shards & Assigned Plans',blurb:'Everyone starts with 150 shards on the house. The Perfect Week Buyback now explains exactly what qualifies and tells you week-by-week why anything was turned down. The System can also hand out training plans directly.',items:[
-    '💠 One-time +150 shard welcome grant for all existing users',
-    '🗓️ Buyback now shows the full rulebook and a per-week reason when nothing qualifies',
-    '⚔️ The System can now assign a training plan — delivered as a notice you must accept, so it can never be missed by tapping away',
-    '📋 Assigned plans replace your workout days but never touch your logged history'
+    'One-time +150 shard welcome grant for all existing users',
+    'Buyback now shows the full rulebook and a per-week reason when nothing qualifies',
+    'The System can now assign a training plan — delivered as a notice you must accept, so it can never be missed by tapping away',
+    'Assigned plans replace your workout days but never touch your logged history'
   ]},
   {version:'1.21.0',date:'Jul 2026',title:'System Shards',blurb:'A new earned currency. Bank shards from achievements, all-mission days, perfect weeks, and trials — then spend them to revive a broken streak, claim back a week you missed by exactly one session, or trigger a 24-hour XP surge. Find it under Ranks → Shop.',items:[
-    '💠 Shards earned: +5 per achievement, +5 per all-missions day, +25 per perfect week, +100 per trial',
-    '🔥 Streak Restore (50) — revive your weekly streak, once every 30 days',
-    '🗓️ Perfect Week Buyback (150) — only for weeks missed by exactly ONE session with every logged set checked. Two or more missed days stay on the record',
-    '⚡ XP Surge (75) — 1.5× XP for 24 hours',
-    '🛒 New Shop tab under Ranks'
+    'Shards earned: +5 per achievement, +5 per all-missions day, +25 per perfect week, +100 per trial',
+    'Streak Restore (50) — revive your weekly streak, once every 30 days',
+    'Perfect Week Buyback (150) — only for weeks missed by exactly ONE session with every logged set checked. Two or more missed days stay on the record',
+    'XP Surge (75) — 1.5× XP for 24 hours',
+    'New Shop tab under Ranks'
   ]},
   {version:'1.20.0',date:'Jul 2026',title:'Clearer Targets & Deficit Safety',blurb:'Your nutrition card now shows the actual calorie target you\'re eating to, not just maintenance and a deficit you had to subtract yourself. Aggressive cuts also come with a plain-English heads-up and a "Learn more" guide on deficits and their risks.',items:[
-    '🎯 Target calories now shown directly on the nutrition card',
-    '⚖️ Deficits of 20%+ (or very low daily calories) surface a short, non-judgy heads-up — this fires on custom overrides too, not just presets',
-    '📖 New "Deficits & Risks" guide covering sustainable vs aggressive vs severe cuts, why protein matters, and diet breaks',
-    '🛟 Setting a custom target under 1,200 cal now asks you to confirm first'
+    'Target calories now shown directly on the nutrition card',
+    'Deficits of 20%+ (or very low daily calories) surface a short, non-judgy heads-up — this fires on custom overrides too, not just presets',
+    'New "Deficits & Risks" guide covering sustainable vs aggressive vs severe cuts, why protein matters, and diet breaks',
+    'Setting a custom target under 1,200 cal now asks you to confirm first'
   ]},
   {version:'1.19.1',date:'Jun 2026',title:'HOTFIX: Nutrition Goal Not Recalculating',blurb:'Fixed a bug where switching your nutrition plan (e.g. to Aggressive Cut) kept your old maintenance calories instead of applying the new deficit. Changing your goal now instantly updates your calorie and macro targets, and there\'s a new "Reset from my goal" button if your numbers ever look stuck.',items:[
-    '🔧 Changing the Goal dropdown now recalculates target calories and macros live — even with custom overrides on',
+    'Changing the Goal dropdown now recalculates target calories and macros live — even with custom overrides on',
     '↻ New "Reset calories & macros from my goal" button in Adjust Targets → Custom Overrides',
-    '🩹 Root cause: custom-macro override froze calories at maintenance and ignored the selected plan\'s deficit'
+    'Root cause: custom-macro override froze calories at maintenance and ignored the selected plan\'s deficit'
   ]},
   {version:'1.19.0',date:'Jun 2026',title:'Store-Readiness & Hardening',blurb:'Under-the-hood release preparing for the App Store and Google Play: you can now permanently delete your account and data from Settings, and several small reliability fixes landed.',items:[
-    '🗑 Delete Account — Settings → Danger Zone permanently erases your account, logs, and leaderboard entry (App Store requirement)',
-    '🔒 Fixed a text-escaping issue that could break note fields containing quotes',
-    '🧹 Final pre-store audit pass across the codebase'
+    'Delete Account — Settings → Danger Zone permanently erases your account, logs, and leaderboard entry (App Store requirement)',
+    'Fixed a text-escaping issue that could break note fields containing quotes',
+    'Final pre-store audit pass across the codebase'
   ]},
   {version:'1.18.0',date:'Jun 2026',title:'Smart Notes',blurb:'You can now jot a quick note on any exercise while you train ("knee felt off on set 2") and the app will bring it back the next time that exercise comes up — injury notes come back highlighted so you ease in instead of guessing. You can also add notes to past workouts and leave a summary note when finishing a session.',items:[
-    '📝 Tap the note icon on any exercise to jot how it went — it resurfaces next session right under your last numbers',
-    '⚠️ Notes mentioning pain or tweaks come back highlighted with a reminder to warm up and ease in',
-    '🗒️ Optional session note when you finish a Session Mode workout',
-    '📔 Add or edit notes on already-logged workouts from the Logs tab (📝 button)',
-    '🏆 All notes now count toward The Bard achievement'
+    'Tap the note icon on any exercise to jot how it went — it resurfaces next session right under your last numbers',
+    'Notes mentioning pain or tweaks come back highlighted with a reminder to warm up and ease in',
+    'Optional session note when you finish a Session Mode workout',
+    'Add or edit notes on already-logged workouts from the Logs tab (button)',
+    'All notes now count toward The Bard achievement'
   ]},
   {version:'1.17.0',date:'Jun 2026',title:'Smarter Home & Training Hints',blurb:'Your Home screen now tracks your progress over time, your workouts suggest what weight to try next, and achievements got their own page under Ranks → Badges.',items:[
-    '📊 Progress tracker on Home — weekly volume, bodyweight trend, and monthly sessions, always framed around your goal',
-    '📈 Progressive overload hints — every exercise shows your last numbers and what to aim for today',
-    '🏅 Achievements moved to Ranks → Badges (Home stays focused on today)',
-    '📰 This Updates page is now a quick summary — tap "What changed" for details'
+    'Progress tracker on Home — weekly volume, bodyweight trend, and monthly sessions, always framed around your goal',
+    'Progressive overload hints — every exercise shows your last numbers and what to aim for today',
+    'Achievements moved to Ranks → Badges (Home stays focused on today)',
+    'This Updates page is now a quick summary — tap "What changed" for details'
   ]},
   {version:'1.16.0',date:'Jun 2026',title:'Home Screen, Sign-in Fix & Honest Tips',blurb:'The app now opens to a new Home screen built around your day, Google sign-in got fixed up, and the AI Coach was renamed to Tips.',items:[
-    '🏠 NEW: Home — the app now opens to a Today screen: greeting, weekly streak, sessions vs goal, missions, calories, and quick-start buttons, with your daily missions right below',
-    '🧭 Nav reordered: Home is the first tab (your missions live there now)',
-    '🔑 Google sign-in overhauled — clear error messages instead of "something went wrong", plus automatic redirect fallback for installed apps',
-    '📖 "AI Coach" is now "Tips" — same quick answers on training, nutrition & recovery, honest new name. A real AI coach is on the roadmap',
-    '⚔️ All v1.15.0 content (Fable achievements, recaps, celebrations) continues rolling out'
+    'NEW: Home — the app now opens to a Today screen: greeting, weekly streak, sessions vs goal, missions, calories, and quick-start buttons, with your daily missions right below',
+    'Nav reordered: Home is the first tab (your missions live there now)',
+    'Google sign-in overhauled — clear error messages instead of "something went wrong", plus automatic redirect fallback for installed apps',
+    '"AI Coach" is now "Tips" — same quick answers on training, nutrition & recovery, honest new name. A real AI coach is on the roadmap',
+    'All v1.15.0 content (Fable achievements, recaps, celebrations) continues rolling out'
   ]},
   {version:'1.15.0',date:'Jun 2026',title:'The Fable Update — Content, Celebrations & Recaps',blurb:'30 new achievements, new missions and events, unlock celebrations, a weekly recap every Monday, and workout sessions that survive closing the app.',items:[
-    '✨ 30 NEW ACHIEVEMENTS including the legend-themed Fable Set: Phoenix, Atlas, Sisyphus, Odyssey, Pantheon, and 3 new secrets. 155 total to hunt',
-    '🎯 8 new daily missions, 2 new missions per class, and 8 new event missions',
-    '🏆 Achievements now CELEBRATE — animated unlock cards with haptics instead of silent unlocks',
-    '⬆️ Level-ups get a proper burst animation',
-    '📜 NEW: Weekly Recap — first open of each week shows your sessions, volume, minutes, and whether the week was perfect. Locked forever, just like your history',
-    '⏱️ Session Mode now SURVIVES closing the app — reopen and your timer + typed sets resume right where you left them',
-    '🛠️ Leaderboard now shows your true rank (trial-gated ranks displayed correctly everywhere)',
-    '🛠️ Profile XP bar now points at your real next step — the trial, not a far-away rank',
-    '🎨 UI: level merged into the XP pill, calmer trial banner with real mission XP values, labeled nutrition buttons, "Badges" stat card'
+    '30 NEW ACHIEVEMENTS including the legend-themed Fable Set: Phoenix, Atlas, Sisyphus, Odyssey, Pantheon, and 3 new secrets. 155 total to hunt',
+    '8 new daily missions, 2 new missions per class, and 8 new event missions',
+    'Achievements now CELEBRATE — animated unlock cards with haptics instead of silent unlocks',
+    'Level-ups get a proper burst animation',
+    'NEW: Weekly Recap — first open of each week shows your sessions, volume, minutes, and whether the week was perfect. Locked forever, just like your history',
+    'Session Mode now SURVIVES closing the app — reopen and your timer + typed sets resume right where you left them',
+    'Leaderboard now shows your true rank (trial-gated ranks displayed correctly everywhere)',
+    'Profile XP bar now points at your real next step — the trial, not a far-away rank',
+    'UI: level merged into the XP pill, calmer trial banner with real mission XP values, labeled nutrition buttons, "Badges" stat card'
   ]},
   {version:'1.14.1',date:'Jun 2026',title:'Tracker Alignment & Delete Fixes',items:[
-    '🔧 Iron Gate perfect weeks now count cardio & active rest as sessions — same as the weekly streak (at least 3 days must still be lifts)',
-    '🔓 One-time fix: past weeks wrongly scored as failed (because rest days didn\'t count) are upgraded to PERFECT. Earned weeks are never downgraded',
-    '🔧 Fixed deleting cardio/rest entries logged in the same session — they were saved without an ID, so deletes silently failed or misbehaved',
-    '🔧 Deleting an old log entry no longer wipes the values you\'ve typed for today\'s workout',
-    '🧹 Internal cleanup: removed dead code paths from the XP and streak systems'
+    'Iron Gate perfect weeks now count cardio & active rest as sessions — same as the weekly streak (at least 3 days must still be lifts)',
+    'One-time fix: past weeks wrongly scored as failed (because rest days didn\'t count) are upgraded to PERFECT. Earned weeks are never downgraded',
+    'Fixed deleting cardio/rest entries logged in the same session — they were saved without an ID, so deletes silently failed or misbehaved',
+    'Deleting an old log entry no longer wipes the values you\'ve typed for today\'s workout',
+    'Internal cleanup: removed dead code paths from the XP and streak systems'
   ]},
   {version:'1.14.0',date:'Apr 2026',title:'Personal Training Goals + Locked Past Weeks',items:[
-    '🎯 NEW: Set your weekly training goal (3-7 lift sessions/week). Iron Gate "perfect weeks" now scales to YOUR commitment',
-    '📅 First-time prompt: existing users will be asked their training goal on next app open',
-    '🔒 Past weeks are LOCKED once scored — changing your goal only affects current and future weeks. Your history is permanent',
+    'NEW: Set your weekly training goal (3-7 lift sessions/week). Iron Gate "perfect weeks" now scales to YOUR commitment',
+    'First-time prompt: existing users will be asked their training goal on next app open',
+    'Past weeks are LOCKED once scored — changing your goal only affects current and future weeks. Your history is permanent',
     '✓ Stricter "perfect" definition: each session must have at least one filled+done set, every filled set must be checked',
-    '⚙️ Edit your training goal anytime in Profile → Settings → Workouts per week'
+    'Edit your training goal anytime in Profile → Settings → Workouts per week'
   ]},
   {version:'1.13.1',date:'Apr 2026',title:'HOTFIX: Perfect Weeks Calculation',items:[
-    '🔧 Iron Gate "perfect weeks" was requiring 4 unique workout days per week — now counts 4+ sessions regardless of which day was repeated',
-    '🔧 Empty unfilled sets no longer break a perfect week — only sets with data must be checked off ✓',
-    '👁️ NEW: Tap the perfect-weeks task on the trial banner to see your last 8 weeks broken down (perfect, missing sessions, or unchecked sets)',
-    '📝 Updated trial description to explain what counts'
+    'Iron Gate "perfect weeks" was requiring 4 unique workout days per week — now counts 4+ sessions regardless of which day was repeated',
+    'Empty unfilled sets no longer break a perfect week — only sets with data must be checked off ✓',
+    'NEW: Tap the perfect-weeks task on the trial banner to see your last 8 weeks broken down (perfect, missing sessions, or unchecked sets)',
+    'Updated trial description to explain what counts'
   ]},
   {version:'1.13.0',date:'Apr 2026',title:'Reorder Workouts & Edit Logged Foods',items:[
-    '↕️ Reorder workouts in your program — Workout Settings ⚙️ → Reorder Workouts → tap arrows to move up/down',
-    '✏️ Edit any logged food — tap the pencil icon next to a food entry to change name, weight, calories, or macros',
-    '⚖️ Auto-scale macros: change "100g" to "150g" then tap auto-scale to recalculate everything proportionally',
-    '🕰️ Works on past meals too (any day in your nutrition history)'
+    '↕️ Reorder workouts in your program — Workout Settings → Reorder Workouts → tap arrows to move up/down',
+    'Edit any logged food — tap the pencil icon next to a food entry to change name, weight, calories, or macros',
+    'Auto-scale macros: change "100g" to "150g" then tap auto-scale to recalculate everything proportionally',
+    'Works on past meals too (any day in your nutrition history)'
   ]},
   {version:'1.12.3',date:'Apr 2026',title:'HOTFIX: Hide Start Session Button During Session',items:[
-    '🔧 Start Session button now hides once a session is in progress (was redundant with the timer overlay)'
+    'Start Session button now hides once a session is in progress (was redundant with the timer overlay)'
   ]},
   {version:'1.12.2',date:'Apr 2026',title:'HOTFIX: Session Save & Bleed-Through',items:[
-    '🔧 Fixed Session Mode "Finish Workout" failing to save (DOM ID collision — session and day view had duplicate input IDs)',
-    '🧹 Fixed deleted entry values bleeding into the next workout (savedInputs not cleared on delete)',
-    '⚔️ Session Mode is now an overlay on the workout view, not a separate page — single source of truth for inputs',
-    '🛡️ All Save / Log Day / Cardio / Rest buttons now work correctly during AND after a session'
+    'Fixed Session Mode "Finish Workout" failing to save (DOM ID collision — session and day view had duplicate input IDs)',
+    'Fixed deleted entry values bleeding into the next workout (savedInputs not cleared on delete)',
+    'Session Mode is now an overlay on the workout view, not a separate page — single source of truth for inputs',
+    'All Save / Log Day / Cardio / Rest buttons now work correctly during AND after a session'
   ]},
   {version:'1.12.1',date:'Apr 2026',title:'HOTFIX: Missions Blank & Workout Menu',items:[
-    '🚨 Fixed Missions/Achievements page going completely blank (stale variable ref after v1.12.0)',
-    '🏋️ Workout tab now opens a program picker menu — tap a workout to open it',
+    'Fixed Missions/Achievements page going completely blank (stale variable ref after v1.12.0)',
+    'Workout tab now opens a program picker menu — tap a workout to open it',
     '‹ New "All Workouts" back button appears when viewing a specific day',
-    '⚔️ Fixed Session Mode screen staying blank after Start — now renders correctly on first call',
-    '🏃 Cardio/Rest/Backdate buttons moved to the workout menu (easier to find)'
+    'Fixed Session Mode screen staying blank after Start — now renders correctly on first call',
+    'Cardio/Rest/Backdate buttons moved to the workout menu (easier to find)'
   ]},
   {version:'1.12.0',date:'Apr 2026',title:'Internal Levels, Soft Cap & Trial Bonuses',items:[
-    '📊 NEW: Internal levels inside each rank. E-Rank has 10 levels, S-Rank has 100. Small wins on the way to rank-ups',
-    '⚠️ Hard XP cap replaced with 25% SOFT cap — you still earn XP toward trials, just slower. No more "frozen" feeling',
-    '⚔️ Trial bonuses: Iron Gate +250 XP · Gauntlet +500 XP · Awakening +1,000 XP',
-    '📈 Rank Info screen now shows your current level, a progress bar, and XP to next level',
-    '🎯 Level-up toasts when you progress inside your rank',
-    '🏅 Level badge shown next to XP in the top bar'
+    'NEW: Internal levels inside each rank. E-Rank has 10 levels, S-Rank has 100. Small wins on the way to rank-ups',
+    'Hard XP cap replaced with 25% SOFT cap — you still earn XP toward trials, just slower. No more "frozen" feeling',
+    'Trial bonuses: Iron Gate +250 XP · Gauntlet +500 XP · Awakening +1,000 XP',
+    'Rank Info screen now shows your current level, a progress bar, and XP to next level',
+    'Level-up toasts when you progress inside your rank',
+    'Level badge shown next to XP in the top bar'
   ]},
   {version:'1.11.1',date:'Apr 2026',title:'Backdate XP Exploit Closed',items:[
-    '🔒 Backdated entries now award ZERO XP (was 50%). Anti-exploit measure.',
-    '💡 Backdating still saves streaks and fills in the log — just no XP or achievements',
-    '📝 Updated all backdate prompts to reflect "no XP" policy'
+    'Backdated entries now award ZERO XP (was 50%). Anti-exploit measure.',
+    'Backdating still saves streaks and fills in the log — just no XP or achievements',
+    'Updated all backdate prompts to reflect "no XP" policy'
   ]},
   {version:'1.11.0',date:'Apr 2026',title:'Session Mode, Timer & Backdating',items:[
-    '⚔️ NEW: Session Mode — tap "▶ START SESSION" on any workout day. Session clock tracks duration, auto-rest timer between sets, finish to log it all',
-    '📖 Train tab reorganized: Workout / Learn / Logs. New Learn tab now includes training principles, progressive overload, deload, recovery, and the existing exercise library',
-    '📅 Backdate logs up to 7 days. Use "📅 Log for Earlier Day" on the Workout tab. No XP awarded. Backdated entries save streaks but don\'t unlock achievements',
-    '⏱️ Workout duration now shown in the Log with the ⏱ icon',
-    '✏️ Recent Foods: edit the default serving size — tap ✏️ to update weight/macros',
-    '👋 Poke buttons now appear on the Friends leaderboard too'
+    'NEW: Session Mode — tap "▶ START SESSION" on any workout day. Session clock tracks duration, auto-rest timer between sets, finish to log it all',
+    'Train tab reorganized: Workout / Learn / Logs. New Learn tab now includes training principles, progressive overload, deload, recovery, and the existing exercise library',
+    'Backdate logs up to 7 days. Use "Log for Earlier Day" on the Workout tab. No XP awarded. Backdated entries save streaks but don\'t unlock achievements',
+    'Workout duration now shown in the Log with the icon',
+    'Recent Foods: edit the default serving size — tap to update weight/macros',
+    'Poke buttons now appear on the Friends leaderboard too'
   ]},
   {version:'1.10.6',date:'Apr 2026',title:'HOTFIX: App Spinner Fix',items:[
-    '🚨 Fixed the app hanging on the loading spinner after v1.10.5 deploy',
-    '⏱️ Added a 20-second safety timeout — spinner will never hang forever again',
-    '🛡️ All heavy init tasks (achievement checks, notifications) now run in background — app page renders first',
-    '🔧 Added guards to prevent crashes on entries with missing exercises array',
-    '🧯 Every init function wrapped in try/catch — one failure no longer takes down the whole app'
+    'Fixed the app hanging on the loading spinner after v1.10.5 deploy',
+    'Added a 20-second safety timeout — spinner will never hang forever again',
+    'All heavy init tasks (achievement checks, notifications) now run in background — app page renders first',
+    'Added guards to prevent crashes on entries with missing exercises array',
+    'Every init function wrapped in try/catch — one failure no longer takes down the whole app'
   ]},
   {version:'1.10.5',date:'Apr 2026',title:'Log Display Fix',items:[
-    '🔧 Exercise Log was silently crashing on activity entries (bowling/cardio) which made whole weeks "disappear"',
-    '🏃 Activities now render nicely in the Log with duration, calories, steps, and notes',
-    '😴 Rest days now show in the Log with notes if provided',
-    '⚠️ Failed-to-render entries show a clear error row instead of killing the whole week',
-    '📊 Bumped log history limit from 200 to 500 entries (~70 weeks of heavy use)'
+    'Exercise Log was silently crashing on activity entries (bowling/cardio) which made whole weeks "disappear"',
+    'Activities now render nicely in the Log with duration, calories, steps, and notes',
+    'Rest days now show in the Log with notes if provided',
+    'Failed-to-render entries show a clear error row instead of killing the whole week',
+    'Bumped log history limit from 200 to 500 entries (~70 weeks of heavy use)'
   ]},
   {version:'1.10.4',date:'Apr 2026',title:'Bug Fixes: Mission XP & Poke Streaks',items:[
-    '🔧 Mission XP toast was lying — showed base XP (+10) instead of multiplied XP (+15 on weekends). Now shows actual gained',
-    '🔧 Poke streaks now only advance when BOTH users poke same day (true mutual). Miss a day of reciprocation = streak dies',
-    '🔥 At-risk streak indicator — streak flame pulses orange if the other person hasn\'t poked back yet today',
-    '💡 Poke toast now tells you if you\'re waiting for a reply vs streak counted'
+    'Mission XP toast was lying — showed base XP (+10) instead of multiplied XP (+15 on weekends). Now shows actual gained',
+    'Poke streaks now only advance when BOTH users poke same day (true mutual). Miss a day of reciprocation = streak dies',
+    'At-risk streak indicator — streak flame pulses orange if the other person hasn\'t poked back yet today',
+    'Poke toast now tells you if you\'re waiting for a reply vs streak counted'
   ]},
   {version:'1.10.3',date:'Apr 2026',title:'Real Push Notifications',items:[
-    '🔔 Real OS notifications for new messages, friend requests, pokes, and event missions',
-    '⚙️ New Notifications settings panel — toggle each type on/off',
-    '📱 iPhone users: tap Share → Add to Home Screen in Safari to enable push notifications',
-    '💬 Messages list now tracks last-message metadata for instant alerts',
-    '🔗 Notification clicks deep-link directly to the right page',
-    '🎯 Daily event mission ping — never miss a 30-50 XP bonus again'
+    'Real OS notifications for new messages, friend requests, pokes, and event missions',
+    'New Notifications settings panel — toggle each type on/off',
+    'iPhone users: tap Share → Add to Home Screen in Safari to enable push notifications',
+    'Messages list now tracks last-message metadata for instant alerts',
+    'Notification clicks deep-link directly to the right page',
+    'Daily event mission ping — never miss a 30-50 XP bonus again'
   ]},
   {version:'1.10.2',date:'Apr 2026',title:'Pokes, Better Trainer View & Permission Fixes',items:[
-    '👋 Poke your friends! Daily limit, 5 XP per poke, build poke streaks 🔥 (like Snap streaks). 4 new achievements',
-    '📊 Trainer client view now shows XP, rank, PRs, 30-day activity averages, body stats, weight trend, last 10 logs + check-ins',
-    '🔧 Fixed Trainer Dashboard button (was using switchPage instead of sub-tab navigation)',
-    '🔒 Firestore rules updated — dev can now repair/create trainer codes for other users, and new poke writes permitted',
-    '🏆 +4 poke achievements'
+    'Poke your friends! Daily limit, 5 XP per poke, build poke streaks (like Snap streaks). 4 new achievements',
+    'Trainer client view now shows XP, rank, PRs, 30-day activity averages, body stats, weight trend, last 10 logs + check-ins',
+    'Fixed Trainer Dashboard button (was using switchPage instead of sub-tab navigation)',
+    'Firestore rules updated — dev can now repair/create trainer codes for other users, and new poke writes permitted',
+    '+4 poke achievements'
   ]},
   {version:'1.10.1',date:'Apr 2026',title:'Progress Photos & Cleaner Train Page',items:[
-    '📸 Progress Photos — device-only (IndexedDB), never uploaded, auto-resized to 1200px. Compare First vs Latest at a glance',
-    '⚙️ Workout Settings button — Train page decluttered; Rename/Remove/Notes/Add Day/Change Program all live in one menu now',
-    '🔧 Trainer promotion bug fixed (was silently failing due to empty arrayUnion)',
-    '🔧 New dev tool: Repair Trainer Code — regenerates codes for trainers with missing code docs',
-    '🏆 3 new progress-photo achievements'
+    'Progress Photos — device-only (IndexedDB), never uploaded, auto-resized to 1200px. Compare First vs Latest at a glance',
+    'Workout Settings button — Train page decluttered; Rename/Remove/Notes/Add Day/Change Program all live in one menu now',
+    'Trainer promotion bug fixed (was silently failing due to empty arrayUnion)',
+    'New dev tool: Repair Trainer Code — regenerates codes for trainers with missing code docs',
+    '3 new progress-photo achievements'
   ]},
   {version:'1.10.0',date:'Apr 2026',title:'Rest Days, Check-ins & Trainer Mode',items:[
-    '😴 Rest Day logging — Active Rest (counts for streak) vs Full Rest',
-    '📏 Weekly Check-in system — track weight, body fat, and progress over time',
-    '👨‍🏫 Trainer Mode — connect with a trainer via 6-char code so they can monitor your progress',
-    '🔒 Photo privacy disclosure — transparent handling of profile pics and progress photos',
-    '🏆 35+ new achievements — class-specific PRs, goal-based (5 down/10 down), behavioral (Dawn Patrol, Clockwork), and more secrets',
-    '🎯 11 new daily missions — cold plunge, meditation, PR hunt, tech detox, gallon challenge, and more',
-    '🎪 5 new event missions — PR Day (50 XP), Bullseye protein target, Double Move, Early Grind, Check-in day',
-    '🔧 Fixed activity entries breaking streak/PR calculations',
-    '🔧 Workout vs activity counts now tracked separately on profile + leaderboard'
+    'Rest Day logging — Active Rest (counts for streak) vs Full Rest',
+    'Weekly Check-in system — track weight, body fat, and progress over time',
+    'Trainer Mode — connect with a trainer via 6-char code so they can monitor your progress',
+    'Photo privacy disclosure — transparent handling of profile pics and progress photos',
+    '35+ new achievements — class-specific PRs, goal-based (5 down/10 down), behavioral (Dawn Patrol, Clockwork), and more secrets',
+    '11 new daily missions — cold plunge, meditation, PR hunt, tech detox, gallon challenge, and more',
+    '5 new event missions — PR Day (50 XP), Bullseye protein target, Double Move, Early Grind, Check-in day',
+    'Fixed activity entries breaking streak/PR calculations',
+    'Workout vs activity counts now tracked separately on profile + leaderboard'
   ]},
   {version:'1.9.2',date:'Apr 2026',title:'Activity Logging & Fixes',items:[
-    '🏃 Cardio / Activity logging — walking, running, bowling, and 13 more activities with auto calorie estimates',
-    '📊 XP bar now shows remaining XP to next rank (not total threshold)',
-    '🎪 Event missions fixed — proper 30% daily distribution',
-    '🔥 Weekend/Holiday XP banner now properly displays',
-    '✏️ Edit past food logs — add or remove items from any date',
-    '🔔 Notification timing improved (fires on app open, wider window)',
-    '🏆 New cardio achievements'
+    'Cardio / Activity logging — walking, running, bowling, and 13 more activities with auto calorie estimates',
+    'XP bar now shows remaining XP to next rank (not total threshold)',
+    'Event missions fixed — proper 30% daily distribution',
+    'Weekend/Holiday XP banner now properly displays',
+    'Edit past food logs — add or remove items from any date',
+    'Notification timing improved (fires on app open, wider window)',
+    'New cardio achievements'
   ]},
   {version:'1.9.0',date:'Apr 2026',title:'Polish & Community',items:[
-    '⚙️ Full TDEE editor on Nutrition page — height, weight, sex, steps, all in one place',
-    '👋 Welcome message for all new users from the founder',
-    '🏆 Achievement filtering — toggle locked/unlocked, collapsible sections',
-    '🤫 Secret achievements — hidden until unlocked',
-    '📧 Welcome email on signup'
+    'Full TDEE editor on Nutrition page — height, weight, sex, steps, all in one place',
+    'Welcome message for all new users from the founder',
+    'Achievement filtering — toggle locked/unlocked, collapsible sections',
+    'Secret achievements — hidden until unlocked',
+    'Welcome email on signup'
   ]},
   {version:'1.8.0',date:'Apr 2026',title:'Progression System',items:[
-    '🎮 CoD-style progression tracks — 3 tiers per class',
-    '🎪 Random event missions — bonus XP with ~30% daily chance',
-    '🔥 Weekend 1.5x XP + First of Month 2x XP',
-    '📅 Weekly streak system (3+ sessions/week = streak continues)',
-    '🏆 65+ achievements rebalanced with sane XP values',
-    '🔔 Smart notifications (push if installed, badges if not)',
-    '📊 XP milestone achievements (1K, 5K, 10K)',
-    '📝 New achievements: bio, profile pic, barcode pro, chatty, and more'
+    'CoD-style progression tracks — 3 tiers per class',
+    'Random event missions — bonus XP with ~30% daily chance',
+    'Weekend 1.5x XP + First of Month 2x XP',
+    'Weekly streak system (3+ sessions/week = streak continues)',
+    '65+ achievements rebalanced with sane XP values',
+    'Smart notifications (push if installed, badges if not)',
+    'XP milestone achievements (1K, 5K, 10K)',
+    'New achievements: bio, profile pic, barcode pro, chatty, and more'
   ]},
   {version:'1.7.0',date:'Apr 2026',title:'Nutrition Overhaul',items:[
-    '🍽️ Meal-based food logging — Meal 1, Meal 2, etc. with per-meal macro tracking',
-    '⚙️ TDEE Setup Wizard — configure everything right on the Nutrition page',
-    '🚶 Daily steps estimation factored into calorie calculations',
-    '🎯 Nutrition goals — Cut, Lean Bulk, Recomp, Maintenance & more',
-    '📊 Per-meal mini progress bars and remaining macro hints',
-    '🗺️ Improved onboarding tour covering all features',
-    '🅰️ Full Body ABC program template (shared across all classes)'
+    'Meal-based food logging — Meal 1, Meal 2, etc. with per-meal macro tracking',
+    'TDEE Setup Wizard — configure everything right on the Nutrition page',
+    'Daily steps estimation factored into calorie calculations',
+    'Nutrition goals — Cut, Lean Bulk, Recomp, Maintenance & more',
+    'Per-meal mini progress bars and remaining macro hints',
+    'Improved onboarding tour covering all features',
+    'Full Body ABC program template (shared across all classes)'
   ]},
   {version:'1.6.0',date:'Apr 2026',title:'Class Missions & Social',items:[
-    '🎯 Class-specific daily missions — tailored to your class',
-    '👤 Tap leaderboard users to view profile & add friend',
-    '📝 Bio / About Me — show off your story',
-    '📋 Copy friend code with one tap',
-    '🛡️ XP exploit fix — no more double-logging',
-    '📋 "Log All Days" — log multiple workout days at once',
-    '📋 Log button now shows which day you\'re logging'
+    'Class-specific daily missions — tailored to your class',
+    'Tap leaderboard users to view profile & add friend',
+    'Bio / About Me — show off your story',
+    'Copy friend code with one tap',
+    'XP exploit fix — no more double-logging',
+    '"Log All Days" — log multiple workout days at once',
+    'Log button now shows which day you\'re logging'
   ]},
   {version:'1.5.0',date:'Apr 2026',title:'Social & QoL Update',items:[
-    '💬 Chat unread badge — see new messages at a glance',
-    '🗺️ Onboarding tour — new users get a guided walkthrough',
-    '🔥 Streak warnings — alerts when your streak is at risk',
-    '⚙️ TDEE fix — added biological sex for accurate calorie calculations',
-    '🏆 15 new achievements — more dopamine, more grind',
-    '🔒 Tightened Firestore security rules'
+    'Chat unread badge — see new messages at a glance',
+    'Onboarding tour — new users get a guided walkthrough',
+    'Streak warnings — alerts when your streak is at risk',
+    'TDEE fix — added biological sex for accurate calorie calculations',
+    '15 new achievements — more dopamine, more grind',
+    'Tightened Firestore security rules'
   ]},
   {version:'1.4.0',date:'Mar 2026',title:'Chat & AI Coach',items:[
-    '💬 Friend-to-friend messaging',
-    '🤖 AI Coach with personalized advice',
-    '📸 Barcode scanner for food logging',
-    '🍽️ Serving size selector with unit conversion'
+    'Friend-to-friend messaging',
+    'AI Coach with personalized advice',
+    'Barcode scanner for food logging',
+    'Serving size selector with unit conversion'
   ]},
   {version:'1.3.0',date:'Feb 2026',title:'Nutrition Tracker',items:[
-    '🍽️ Full nutrition tracking with TDEE/macro calculator',
-    '🔍 Food search via Open Food Facts',
-    '✏️ Manual food entry',
-    '📊 Daily macro progress bars'
+    'Full nutrition tracking with TDEE/macro calculator',
+    'Food search via Open Food Facts',
+    'Manual food entry',
+    'Daily macro progress bars'
   ]},
   {version:'1.2.0',date:'Feb 2026',title:'Social Features',items:[
-    '👥 Friends system with 6-character codes',
-    '🏅 Leaderboard (global + friends)',
-    '📋 Daily missions with streak tracking',
-    '⚔️ Rank-up trials (Iron Gate, Gauntlet, Awakening)'
+    'Friends system with 6-character codes',
+    'Leaderboard (global + friends)',
+    'Daily missions with streak tracking',
+    'Rank-up trials (Iron Gate, Gauntlet, Awakening)'
   ]},
   {version:'1.0.0',date:'Jan 2026',title:'Launch',items:[
-    '🚀 LexenFitness goes live',
-    '🏋️ Class-based workout programs',
-    '📈 XP & ranking system (E through S rank)',
-    '📋 Workout logging with weekly progression'
+    'LexenFitness goes live',
+    'Class-based workout programs',
+    'XP & ranking system (E through S rank)',
+    'Workout logging with weekly progression'
   ]}
 ];
 const RANKS=[
@@ -1143,10 +1160,55 @@ const COSMETICS=[
 
 // ═══════════ v1.28.0 — Feed + cosmetic types ═══════════
 // Feed event types friends can see. Anything else is ignored on render.
-const FEED_TYPES=['workout','cardio','rank','gate','perfect','ach'];
+const FEED_TYPES=['workout','cardio','rank','gate','bgate','perfect','ach'];
 // Each cosmetic type gets its own Wardrobe section. Add a type here (plus items in
 // COSMETICS and a .cos-<id> CSS class) and it appears automatically.
 const COSMETIC_TYPES=[
   {id:'frame',label:'Profile Frames',icon:'🖼️'},
   {id:'name',label:'Name Colors',icon:'🎨'}
+];
+
+
+// ═══════════ v1.30.0 — NEW ERA BEGINS ═══════════
+// Blue Gates: the weekly challenge for E to A-Rank (S-Rank keeps the Red Gate).
+// Everyone below S gets the same gate each week; the target is scaled to the hunter.
+// m = the Red Gate measure it reuses, so progress is counted exactly the same way.
+SHARD_REWARDS.blueGate=30;
+const BLUE_GATE_XP=200;
+const BLUE_GATE_POOL=[
+  {id:'iron_tide',m:'volume_siege',name:'Iron Tide',unit:'lb'},
+  {id:'clean_sweep',m:'flawless_five',name:'Clean Sweep',unit:'sessions'},
+  {id:'heavier_hand',m:'double_breach',name:'Heavier Hand',unit:'lift'},
+  {id:'quest_line',m:'iron_discipline',name:'Quest Line',unit:'days'},
+  {id:'fuel_run',m:'fuel_the_hunt',name:'Fuel Run',unit:'days'},
+  {id:'long_road',m:'cardio_raid',name:'Long Road',unit:'min'},
+  {id:'time_under_iron',m:'endurance_gate',name:'Time Under Iron',unit:'min'}
+];
+ACHIEVEMENTS.push(
+  {id:'blue_gate_1',icon:'🔷',name:'First Breach',desc:'Clear your first Blue Gate',xp:30},
+  {id:'blue_gate_10',icon:'🌀',name:'Gate Regular',desc:'Clear 10 Blue Gates',xp:120}
+);
+// Titles: earned, never bought. One can be worn at a time; it shows under your name
+// on Home, your Status window, the leaderboard, the Hall of Fame and your profile card.
+// The database rules hold the same ID list (firestore-rules.md) — add new IDs there too.
+const TITLES=[
+  {id:'first_blood',name:'First Blood',how:'Log your first workout'},
+  {id:'quest_keeper',name:'Quest Keeper',how:'Hold a 30-day quest streak'},
+  {id:'centurion',name:'Centurion',how:'Log 100 workouts'},
+  {id:'the_unbroken',name:'The Unbroken',how:'Hold a 12-week streak'},
+  {id:'thousand_club',name:'Thousand Club',how:'Log a 1,000 lb big three total'},
+  {id:'gatebreaker',name:'Gatebreaker',how:'Clear 5 Blue Gates'},
+  {id:'iron_will',name:'Iron Will',how:'Pass the Iron Gate'},
+  {id:'gauntlet_survivor',name:'Gauntlet Survivor',how:'Survive the Gauntlet'},
+  {id:'crimson_hunter',name:'Crimson Hunter',how:'Clear 5 Red Gates'},
+  {id:'record_holder',name:'Record Holder',how:'Hold a first place in the Hall of Fame'},
+  {id:'shadow_monarch',name:'Shadow Monarch',how:'Reach S-Rank',gold:true}
+];
+// Hall of Fame categories. lift: published from logged sets. Caps match the database
+// rules: anything past roughly the raw world records is refused.
+const HOF_LIFTS=[
+  {k:'deadlift',name:'Deadlift',cap:1100},
+  {k:'bench',name:'Bench press',cap:800},
+  {k:'squat',name:'Squat',cap:1100},
+  {k:'ohp',name:'Overhead press',cap:550}
 ];

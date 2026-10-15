@@ -3,6 +3,7 @@
 // ═══════════════════════════════════════════
 firebase.initializeApp({apiKey:"AIzaSyCbH-A7pp1xrtwHSaVUKlPA0hR2skHu9iY",authDomain:"lexenfitness.firebaseapp.com",projectId:"lexenfitness",storageBucket:"lexenfitness.firebasestorage.app",messagingSenderId:"570672585202",appId:"1:570672585202:web:ce329745b0282ee86c736b"});
 const auth=firebase.auth(),db=firebase.firestore();
+const SHARD_SVG='<svg class="shard-i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.5l6 6.5-6 12.5L6 9z"/><path d="M6 9h12"/></svg>';
 const DEV_EMAIL='gabinglee11@gmail.com';
 let U=null,userData={},workoutLog=[],savedInputs={},isDev=false;
 let currentDay='day1',currentPage='profile',logFilter='all',lbMode='all';
@@ -16,7 +17,7 @@ let sessionDayId=null;
 // Backdate state for the next log action (null = today)
 let pendingBackdateISO=null;
 // Workout view state: 'menu' (program picker) or 'day' (logging a specific day)
-let workoutView='menu';
+let workoutView='day';
 const $=id=>document.getElementById(id);
 
 // XSS protection: escape HTML in user/API-sourced strings
@@ -26,7 +27,7 @@ function esc(s){if(!s)return'';const d=document.createElement('div');d.textConte
 // canvas data URLs (profile uploads) or plain https URLs (Google photos). Anything
 // else — quotes, javascript:, attribute break-outs — renders as the fallback.
 function safeImgSrc(u){u=String(u||'');return /^(data:image\/(png|jpe?g|webp|gif);base64,[A-Za-z0-9+\/=]+|https:\/\/[^\s"'<>]+)$/.test(u)?u:''}
-function avatarHtml(u,fallback){const s=safeImgSrc(u);return s?'<img src="'+esc(s)+'" alt="">':(fallback==null?'👤':fallback)}
+function avatarHtml(u,fallback){const s=safeImgSrc(u);return s?'<img src="'+esc(s)+'" alt="">':(fallback==null?'<svg class="av-fallback" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="9" r="3.6"/><path d="M5.5 19.5c.9-3.4 3.5-5.2 6.5-5.2s5.6 1.8 6.5 5.2"/></svg>':fallback)}
 // Numbers from other users' docs could be strings carrying HTML — coerce before rendering
 function num(n){n=Number(n);return isFinite(n)?n:0}
 // Inside onclick="fn('…')" the browser decodes &#39; back to a quote BEFORE running JS,
@@ -120,7 +121,7 @@ async function resetPassword(){
   try{
     await auth.sendPasswordResetEmail(e);
     $('loginError').style.color='var(--green)';
-    $('loginError').innerHTML=`✅ Reset link sent to <strong>${esc(e)}</strong><br><span style="color:var(--muted);font-size:.65rem;line-height:1.5;display:block;margin-top:4px">• Check <strong>spam folder</strong> if not in inbox in 2 min<br>• Link expires in <strong>1 hour</strong><br>• Click it <strong>only once</strong> — it's single-use<br>• Open it on the <strong>same device</strong> if possible</span>`;
+    $('loginError').innerHTML=`Reset link sent to <strong>${esc(e)}</strong><br><span style="color:var(--muted);font-size:.65rem;line-height:1.5;display:block;margin-top:4px">• Check <strong>spam folder</strong> if not in inbox in 2 min<br>• Link expires in <strong>1 hour</strong><br>• Click it <strong>only once</strong> — it's single-use<br>• Open it on the <strong>same device</strong> if possible</span>`;
     setTimeout(()=>{$('loginError').style.color='';$('loginError').textContent=''},20000);
   }catch(err){
     $('loginError').style.color='';
@@ -151,7 +152,7 @@ auth.getRedirectResult().catch(err=>{
 const doLogout=()=>auth.signOut();
 // ═══════════ ACCOUNT DELETION (App Store requirement) ═══════════
 async function deleteAccount(){
-  if(!confirm('⚠️ DELETE YOUR ACCOUNT?\n\nThis permanently erases your account, all workout history, nutrition logs, achievements, and leaderboard entry.\n\nThis CANNOT be undone.'))return;
+  if(!confirm('DELETE YOUR ACCOUNT?\n\nThis permanently erases your account, all workout history, nutrition logs, achievements, and leaderboard entry.\n\nThis CANNOT be undone.'))return;
   const typed=prompt('Type DELETE to confirm:');
   if(typed!=='DELETE'){toast('Deletion cancelled');return}
   const user=auth.currentUser;
@@ -185,7 +186,7 @@ async function deleteAccount(){
     await db.collection('users').doc(uid).delete();
     await user.delete();
     try{localStorage.clear()}catch(e){}
-    alert('Your account and data have been deleted. Take care, hunter. ⚔️');
+    alert('Your account and data have been deleted. Take care, hunter. ');
     location.reload();
   }catch(e){
     console.error('[deleteAccount]',e);
@@ -282,12 +283,14 @@ async function saveUser(f){await db.collection('users').doc(U.uid).update(f);Obj
 async function saveLeaderboard(){
   // Never throw: a failed leaderboard write must not abort the action that triggered it
   try{
+    try{await checkTitles(true)}catch(e){}
     const r=getEffectiveRank(),c=getCos();
     await db.collection('leaderboard').doc(U.uid).set({
       username:userData.username||'hunter',xp:userData.xp||0,class:userData.class||'',subclass:userData.subclass||'',
       rank:r.name,profilePic:safeImgSrc(userData.profilePic),bio:String(userData.bio||'').slice(0,200),
       workouts:getLiftLogs().length,activities:getActivityLogs().length,achCount:(userData.achievements||[]).length,
       frame:c.frame,nameColor:c.name,gatesCleared:userData.redGatesCleared||0,recent:publicFeedEvents(),
+      titleId:myTitleId(),blueGates:userData.blueGatesCleared||0,bests:hofPublicBests(),weekStreak:Math.min(520,bestWeekStreak()),hof:hofOptedIn(),
       updatedAt:firebase.firestore.FieldValue.serverTimestamp()});
   }catch(e){console.warn('[saveLeaderboard]',e.code||e.message)}
 }
@@ -312,7 +315,7 @@ function checkRankUp(){
 function showLevelUpBurst(lvl){
   let b=$('levelBurst');
   if(!b){b=document.createElement('div');b.id='levelBurst';b.className='level-burst';document.body.appendChild(b)}
-  b.innerHTML=`<div class="lb-arrow">⬆</div><div class="lb-text">LEVEL UP</div><div class="lb-num">Lv ${lvl.level}<span class="lb-max">/${lvl.maxLevel}</span></div>`;
+  b.innerHTML=`<div class="lb-arrow"></div><div class="lb-text">Level up</div><div class="lb-num">Lv ${lvl.level}<span class="lb-max">/${lvl.maxLevel}</span></div>`;
   b.classList.remove('show');void b.offsetWidth; // restart animation
   b.classList.add('show');
   try{if(navigator.vibrate)navigator.vibrate(80)}catch(e){}
@@ -340,7 +343,7 @@ function showSRankAscension(rank){
       <div class="sr-rays"></div>
       <div class="sr-shards">${shards}</div>
       <div class="sr-eye">👁️</div>
-      <div class="sr-pre">THE SYSTEM ACKNOWLEDGES YOU</div>
+      <div class="sr-pre">The system acknowledges you</div>
       <div class="sr-rank">S-RANK</div>
       <div class="sr-title">${esc(title)}</div>
       <div class="sr-rule"></div>
@@ -383,7 +386,7 @@ function getXpBarInfo(){
   const gateRank=RANKS[ri+1];
   if(gateRank&&!gateRank.auto&&gateRank.trial&&!userData.trialsCompleted.includes(gateRank.trial)&&userData.xp>=gateRank.min){
     const t=RANK_TRIALS[gateRank.trial];
-    return {pct:100,label:`${userData.xp} XP`,sublabel:`⚔️ Pass ${t?t.name:'the trial'} to claim ${gateRank.name}`,color:r.color};
+    return {pct:100,label:`${userData.xp} XP`,sublabel:`Pass ${t?t.name:'the trial'} to claim ${gateRank.name}`,color:r.color};
   }
   if(!nr) return {pct:100,label:`${userData.xp} XP`,sublabel:'MAX RANK',color:r.color};
   const rangeXp=nr.min-r.min, progress=userData.xp-r.min;
@@ -394,7 +397,7 @@ function getXpBarInfo(){
 
 // ═══════════ CLASS & PROGRAM SELECT ═══════════
 function buildClassSelect(){
-  $('classGrid').innerHTML=CLASSES.map(c=>`<div class="class-card" data-cls="${c.id}" onclick="pickClass('${c.id}')"><div class="cc-icon">${c.icon}</div><div class="cc-name">${c.id.toUpperCase()}</div><div class="cc-desc">${c.desc}</div><div class="cc-bonus">${c.bonus}</div></div>`).join('');
+  $('classGrid').innerHTML=CLASSES.map(c=>`<div class="class-card" data-cls="${c.id}" onclick="pickClass('${c.id}')"><div class="cc-icon">${c.icon}</div><div class="cc-name">${c.id}</div><div class="cc-desc">${c.desc}</div><div class="cc-bonus">${c.bonus}</div></div>`).join('');
 }
 function pickClass(id){
   selectedClass=id;selectedSub=null;selectedProg=null;
@@ -404,7 +407,7 @@ function pickClass(id){
   if(cls.subclasses){sa.classList.add('show');$('subOptions').innerHTML=cls.subclasses.map(s=>`<div class="sub-opt" onclick="pickSub(this,'${s}')">${s}</div>`).join('')}else{sa.classList.remove('show')}
   const progs=CLASS_PROGRAMS[id]||[];
   const pa=$('programArea');pa.classList.add('show');
-  $('programGrid').innerHTML=progs.map(p=>`<div class="prog-card" data-prog="${p.key}" onclick="pickProg('${p.key}')"><span class="prog-icon">${p.icon}</span><div class="prog-name">${p.name}</div><div class="prog-desc">${p.desc}</div></div>`).join('')+`<div class="prog-card" data-prog="blank" onclick="pickProg('blank')"><span class="prog-icon">📝</span><div class="prog-name">Build Your Own</div><div class="prog-desc">Start blank — add exercises</div></div>`;
+  $('programGrid').innerHTML=progs.map(p=>`<div class="prog-card" data-prog="${p.key}" onclick="pickProg('${p.key}')"><span class="prog-icon">${p.icon}</span><div class="prog-name">${p.name}</div><div class="prog-desc">${p.desc}</div></div>`).join('')+`<div class="prog-card" data-prog="blank" onclick="pickProg('blank')"><span class="prog-icon"></span><div class="prog-name">Build Your Own</div><div class="prog-desc">Start blank — add exercises</div></div>`;
   updateConfirmBtn();
 }
 function pickSub(el,s){selectedSub=s;document.querySelectorAll('.sub-opt').forEach(e=>e.classList.remove('active'));el.classList.add('active');updateConfirmBtn()}
@@ -421,8 +424,8 @@ async function confirmClass(){
 // ═══════════ INIT ═══════════
 function initApp(){
   let tapCount=0,tapTimer=null;
-  const logo=document.querySelector('.top-bar h1');
-  if(logo)logo.addEventListener('click',()=>{tapCount++;clearTimeout(tapTimer);tapTimer=setTimeout(()=>tapCount=0,2000);if(tapCount>=10){unlockAch('secret_founder');toast('🔑 You found it...');tapCount=0}});
+  const logo=$('missionsContent');
+  if(logo)logo.addEventListener('click',e=>{if(!e.target.closest('.hh-rank'))return;tapCount++;clearTimeout(tapTimer);tapTimer=setTimeout(()=>tapCount=0,2000);if(tapCount>=10){unlockAch('secret_founder');toast('You found it...');tapCount=0}});
   document.querySelectorAll('.nav-item').forEach(n=>n.addEventListener('click',()=>switchPage(n.dataset.page)));
   updateTopBar();
   // Defer non-critical init so the app page renders immediately
@@ -441,6 +444,8 @@ function initApp(){
     try{checkWeeklyRecap()}catch(e){console.warn(e)}
     checkAwakeningExam().catch(e=>console.warn(e));
     ensureRedGate().catch(e=>console.warn(e));
+    ensureBlueGate().then(g=>{if(g&&currentPage==='missions')renderMissions()}).catch(e=>console.warn(e));
+    checkTitles(true).catch(e=>console.warn(e));
     // First-time training goal prompt — for users who haven't set it yet
     if(userData.weeklyTrainingGoal===undefined||userData.weeklyTrainingGoal===null){
       setTimeout(()=>openTrainingGoalPrompt(true),1200);
@@ -456,7 +461,8 @@ function initApp(){
   let resumed=false;
   try{resumed=restoreSession()}catch(e){console.warn(e)}
   if(resumed){switchPage('train');return}
-  switchPage(startPage&&['train','missions','nutrition','chat','ranks','profile'].includes(startPage)?startPage:'missions');
+  if(startPage==='chat'||startPage==='ranks')startPage='guild';
+  switchPage(startPage&&['train','missions','nutrition','guild','profile'].includes(startPage)?startPage:'missions');
 }
 // ═══════════ WEEKLY RECAP ═══════════
 // Shown once per week, on first open of a new week — summarizes LAST week.
@@ -491,11 +497,11 @@ function showWeeklyRecap(lastMon,wk,prev){
   const lw=userData.xpLastWeekStart;
   const xpGained=lw&&lw.monday===lastMon?Math.max(0,(userData.xpWeekStart?userData.xpWeekStart.xp:userData.xp)-lw.xp):null;
   const delta=wk.sessions-prev.sessions;
-  const deltaTxt=prev.sessions===0?'':delta>0?`<span style="color:var(--green)">▲ ${delta} more than the week before</span>`:delta<0?`<span style="color:var(--gold)">▼ ${Math.abs(delta)} fewer than the week before</span>`:`<span style="color:var(--muted)">same as the week before</span>`;
+  const deltaTxt=prev.sessions===0?'':delta>0?`<span style="color:var(--green)">▲ ${delta} more than the week before</span>`:delta<0?`<span style="color:var(--gold)">▼ ${Math.abs(delta)} fewer than the week before</span>`:`<span style="color:var(--muted)">Same as the week before</span>`;
   const dateLabel=new Date(lastMon+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'});
-  let h=`<h2>📜 Your Week in Review</h2>
-    <p style="color:var(--muted);font-size:.7rem;margin-bottom:.7rem">Week of ${dateLabel} — it's in the books. Permanently.</p>
-    <div class="recap-hero ${wk.perfect?'perfect':''}">${wk.perfect?'⚔️ PERFECT WEEK':wk.sessions+' / '+wk.target+' SESSIONS'}</div>
+  let h=`<h2>Your week in review</h2>
+    <p style="color:var(--muted);font-size:.7rem;margin-bottom:.7rem">Week of ${dateLabel}. It's in the books.</p>
+    <div class="recap-hero ${wk.perfect?'perfect':''}">${wk.perfect?'Perfect week':wk.sessions+' of '+wk.target+' sessions'}</div>
     <div class="recap-grid">
       <div class="recap-stat"><div class="rv">${wk.sessions}</div><div class="rl">Sessions</div></div>
       <div class="recap-stat"><div class="rv">${wk.lifts}</div><div class="rl">Lifts</div></div>
@@ -504,7 +510,7 @@ function showWeeklyRecap(lastMon,wk,prev){
     </div>
     ${xpGained!==null?`<div class="recap-xp">+${xpGained} XP earned</div>`:''}
     ${deltaTxt?`<div class="recap-delta">${deltaTxt}</div>`:''}
-    <div class="m-actions" style="margin-top:.8rem"><button class="m-save-btn" onclick="$('weeklyRecapModal').classList.remove('open')" style="width:100%">⚔️ NEW WEEK. LET'S GO.</button></div>`;
+    <div class="m-actions" style="margin-top:.8rem"><button class="m-save-btn" onclick="$('weeklyRecapModal').classList.remove('open')" style="width:100%">Start the new week</button></div>`;
   modal.querySelector('.modal').innerHTML=h;
   modal.classList.add('open');
 }
@@ -513,8 +519,8 @@ function openTrainingGoalPrompt(firstTime){
   const modal=$('trainingGoalModal');if(!modal)return;
   const current=userData.weeklyTrainingGoal||4;
   let h=firstTime
-    ?`<h2>⚔️ Quick Setup</h2><p style="color:var(--muted);font-size:.78rem;line-height:1.5;margin-bottom:.7rem">How many days per week do you intend to train? Lifts, cardio, and active rest all count — but at least 3 days must be lifts.</p><p style="color:var(--gold);font-size:.7rem;line-height:1.45;margin-bottom:.8rem">This sets your <strong>perfect-week</strong> target for the Iron Gate trial. Pick honestly — past weeks will be locked under this number, future weeks will count against whatever you have set at the time.</p>`
-    :`<h2>📅 Workouts per Week</h2><p style="color:var(--muted);font-size:.78rem;line-height:1.5;margin-bottom:.7rem">How many lift sessions do you intend to do per week?</p><p style="color:var(--gold);font-size:.7rem;line-height:1.45;margin-bottom:.8rem"><strong>⚠️ Past weeks won't change.</strong> They're already locked under your previous goal. This only affects the current and future weeks.</p>`;
+    ?`<h2>Quick Setup</h2><p style="color:var(--muted);font-size:.78rem;line-height:1.5;margin-bottom:.7rem">How many days per week do you intend to train? Lifts, cardio, and active rest all count — but at least 3 days must be lifts.</p><p style="color:var(--gold);font-size:.7rem;line-height:1.45;margin-bottom:.8rem">This sets your <strong>perfect-week</strong> target for the Iron Gate trial. Pick honestly — past weeks will be locked under this number, future weeks will count against whatever you have set at the time.</p>`
+    :`<h2>Workouts per Week</h2><p style="color:var(--muted);font-size:.78rem;line-height:1.5;margin-bottom:.7rem">How many lift sessions do you intend to do per week?</p><p style="color:var(--gold);font-size:.7rem;line-height:1.45;margin-bottom:.8rem"><strong>Past weeks won't change.</strong> They're already locked under your previous goal. This only affects the current and future weeks.</p>`;
   h+=`<div class="tg-options">`;
   for(let n=3;n<=7;n++){
     h+=`<button class="tg-opt${n===current?' selected':''}" data-n="${n}" onclick="pickTrainingGoal(${n})">${n}<span class="tg-opt-sub">/week</span></button>`;
@@ -537,7 +543,7 @@ async function pickTrainingGoal(n){
   if(firstTime){
     // First-time setup: lock all past weeks under this goal
     const changes=await lockHistoricalWeeks(n);
-    if(changes>0)toast(`🔒 ${changes} past week${changes!==1?'s':''} locked. Future weeks count against ${n}/wk.`);
+    if(changes>0)toast(`${changes} past week${changes!==1?'s':''} locked. Future weeks count against ${n}/wk.`);
     else toast(`Goal set: ${n} workouts/week`);
   }else{
     if(old!==n)toast(`Goal updated: ${n}/week. Past weeks unchanged.`);
@@ -545,18 +551,7 @@ async function pickTrainingGoal(n){
   closeTrainingGoalModal();
 }
 function updateTopBar(){
-  const r=getEffectiveRank(),info=getXpBarInfo(),cap=getXpCap();
-  const softCapped=cap.softCap<1;
-  const lvlInfo=getLevelInfo();
-  // Merged pill: "Lv 12 · 4846 XP" (level + XP in one, less crowding)
-  $('tbXp').textContent='Lv '+lvlInfo.level+' · '+userData.xp+' XP'+(softCapped?' ⚠':'');
-  $('tbXp').style.color=softCapped?'var(--gold)':'';
-  const oldLb=$('tbLevel');if(oldLb)oldLb.remove(); // retire the separate badge
-  const rb=$('tbRank');rb.textContent=r.name;
-  // XP Multiplier banner
-  let mb=$('xpMultBanner');if(!mb){mb=document.createElement('div');mb.id='xpMultBanner';mb.className='xp-mult-banner';const tb=document.querySelector('.top-bar');if(tb)tb.after(mb)}
-  const xm=getXpMultiplier();mb.style.display=xm.label?'block':'none';mb.textContent=xm.label||'';rb.style.color=r.color;rb.style.background=r.color+'22';rb.style.border='1px solid '+r.color+'44';
-  const bar=$('tbXpBar');if(bar){bar.style.transition='width .5s ease';bar.style.width=info.pct+'%';bar.style.background=softCapped?'var(--gold)':`linear-gradient(90deg,${r.color},${r.color}cc)`}
+  const el=$('homeHeader');if(el)el.outerHTML=renderHomeHeader();
 }
 function getEffectiveRank(){
   for(let i=RANKS.length-1;i>=0;i--){
@@ -612,21 +607,33 @@ function addXP(amount){
   userData.xp+=boosted;
   return boosted;
 }
-function switchPage(p){currentPage=p;document.querySelectorAll('.nav-item').forEach(n=>n.classList.toggle('active',n.dataset.page===p));document.querySelectorAll('.page').forEach(pg=>pg.classList.remove('active'));$('page-'+p).classList.add('active');
-  if(p==='train')buildWorkout();if(p==='profile'){updateTrainerTab();renderProfile();renderFriendsPage()}if(p==='missions')renderMissions();
-  if(p==='nutrition')renderNutritionPage();if(p==='ranks')renderLeaderboard();if(p==='chat')renderChatPage()}
+function switchPage(p){
+  currentPage=p;
+  const navP=p==='ranks'?'profile':p;
+  document.querySelectorAll('.nav-item').forEach(n=>n.classList.toggle('active',n.dataset.page===navP));
+  document.querySelectorAll('.page').forEach(pg=>pg.classList.remove('active'));
+  $('page-'+p).classList.add('active');
+  try{window.scrollTo(0,0)}catch(e){}
+  if(p==='train')buildWorkout();
+  if(p==='profile'){updateTrainerTab();renderProfile()}
+  if(p==='missions')renderMissions();
+  if(p==='nutrition')renderNutritionPage();
+  if(p==='guild')renderGuild();
+}
 function switchSubTab(page,tab){
-  const container=$('page-'+page);if(!container)return;
-  container.querySelectorAll('.stab').forEach(t=>t.classList.toggle('active',t.dataset.st===tab));
-  container.querySelectorAll('.sub-page').forEach(p=>p.classList.remove('active'));
+  const container=page==='chat'?$('chatPageContent'):$('page-'+page);if(!container)return;
+  container.querySelectorAll(':scope > .sub-tabs > .stab').forEach(t=>t.classList.toggle('active',t.dataset.st===tab));
+  container.querySelectorAll(':scope > .sub-page').forEach(p=>p.classList.remove('active'));
   const sp=$('sp-'+tab);if(sp)sp.classList.add('active');
-  // When switching back into Train → Workout from another sub-tab, rebuild the menu/day view
+  // When switching back into Train → Workout from another sub-tab, rebuild the day view
   if(page==='train'&&tab==='workout'&&!sessionActive){buildWorkout()}
   if(tab==='log')renderLog();if(tab==='rankinfo')$('rankInfoContent').innerHTML=renderRankInfo();if(tab==='leaderboard')renderLeaderboard();
   if(tab==='aicoach')renderAICoach();if(tab==='friendchat')renderChatList();
-  if(tab==='friends'){renderFriendsPage();pendingFriendReqs=0;updateFriendBadge()};if(tab==='mystats')renderProfile();
+  if(tab==='friends'){renderFriendsPage();pendingFriendReqs=0;updateFriendBadge()}
+  if(tab==='mystats')renderProfile();
   if(tab==='updates')renderUpdatesTab();if(tab==='library')renderLibrary();if(tab==='badges')renderAchievements();if(tab==='shop')renderShop();
   if(tab==='trainer')renderTrainerDashboard();
+  if(tab==='activity')renderGuildActivity();if(tab==='messages')renderChatPage();
 }
 function updateTrainerTab(){
   const tab=$('trainerTab');if(tab)tab.style.display=userData.role==='trainer'?'':'none';
@@ -645,105 +652,100 @@ function renderProgressStrip(){
   });
   const fmtV=v=>v>=1000?(v/1000).toFixed(1)+'k':Math.round(v);
   const volDelta=volLast>0?Math.round((volThis-volLast)/volLast*100):null;
-  const volTrend=volDelta===null?'':volDelta>0?`<span class="ps-up">▲ ${volDelta}%</span>`:volDelta<0?`<span class="ps-flat">▼ ${Math.abs(volDelta)}%</span>`:`<span class="ps-flat">—</span>`;
+  const trend=(cls,txt)=>`<span class="ps-t ${cls}">${txt}</span>`;
+  const volTrend=volDelta===null?'':volDelta>0?trend('up',`▲ ${volDelta}%`):volDelta<0?trend('flat',`▼ ${Math.abs(volDelta)}%`):trend('flat','Same as last week');
   // 2. Bodyweight trend — colored toward the user's goal, never red
   const wi=userData.weighIns||[];
   let weightTile;
   if(wi.length>=1){
     const latest=parseFloat(wi[wi.length-1].weight)||0;
-    let trend='';
+    let t='';
     if(wi.length>=2){
       const prev=parseFloat(wi[wi.length-2].weight)||0;
       const d=Math.round((latest-prev)*10)/10;
-      if(d!==0){
-        const goal=(userData.goal||'').toLowerCase();
-        const towardGoal=(d<0&&(goal.includes('fat')||goal.includes('recomp')))||(d>0&&(goal.includes('muscle')||goal.includes('strength')));
-        trend=`<span class="${towardGoal?'ps-up':'ps-flat'}">${d>0?'▲':'▼'} ${Math.abs(d)} lb</span>`;
-      }else trend=`<span class="ps-flat">—</span>`;
+      const goal=(userData.goal||'').toLowerCase();
+      const toward=(d<0&&(goal.includes('fat')||goal.includes('recomp')))||(d>0&&(goal.includes('muscle')||goal.includes('strength')));
+      t=d!==0?trend(toward?'up':'flat',`${d>0?'▲':'▼'} ${Math.abs(d)} lb`):trend('flat','No change');
     }
-    weightTile=`<div class="ps-tile"><div class="ps-v">${latest}</div><div class="ps-l">Bodyweight</div><div class="ps-t">${trend}</div></div>`;
+    weightTile=`<div class="ps-tile"><div class="num ps-v">${latest}</div><div class="ps-l">Bodyweight</div>${t}</div>`;
   }else{
-    weightTile=`<div class="ps-tile tap" onclick="openWeighIn()"><div class="ps-v">📏</div><div class="ps-l">Log a weigh-in</div><div class="ps-t"><span class="ps-flat">start tracking</span></div></div>`;
+    weightTile=`<button class="ps-tile tap" onclick="openWeighIn()"><div class="ps-v lilac">${icon('scale',20)}</div><div class="ps-l">Log a weigh-in</div></button>`;
   }
   // 3. Sessions: last 30 days vs the 30 before
   const now=Date.now();
   let s30=0,sPrev=0;
   workoutLog.forEach(e=>{if(e.isRest&&e.restType!=='active')return;const t=new Date(e.date).getTime();
     if(now-t<=30*86400000)s30++;else if(now-t<=60*86400000)sPrev++;});
-  const sTrend=sPrev>0?(s30>sPrev?`<span class="ps-up">▲ ${s30-sPrev}</span>`:s30<sPrev?`<span class="ps-flat">▼ ${sPrev-s30}</span>`:`<span class="ps-flat">—</span>`):'';
+  const sTrend=sPrev>0?(s30>sPrev?trend('up',`▲ ${s30-sPrev}`):s30<sPrev?trend('flat',`▼ ${sPrev-s30}`):trend('flat','Steady')):'';
   return `<div class="progress-strip">
-    <div class="ps-header">PROGRESS</div>
-    <div class="ps-grid">
-      <div class="ps-tile"><div class="ps-v">${fmtV(volThis)}</div><div class="ps-l">lbs this week</div><div class="ps-t">${volTrend}</div></div>
+      <div class="ps-tile"><div class="num ps-v">${fmtV(volThis)}</div><div class="ps-l">lb lifted this week</div>${volTrend}</div>
       ${weightTile}
-      <div class="ps-tile"><div class="ps-v">${s30}</div><div class="ps-l">Sessions / 30d</div><div class="ps-t">${sTrend}</div></div>
-    </div>
+      <div class="ps-tile"><div class="num ps-v">${s30}</div><div class="ps-l">Sessions in 30 days</div>${sTrend}</div>
   </div>`;
 }
 // ═══════════ DAILY MISSIONS ═══════════
-// Today hero — the "home" header: greeting, streak, week progress, quick actions
-function renderTodayHero(missionsDone,missionsTotal){
-  const hr=new Date().getHours();
-  const greet=hr<5?'Still grinding':hr<12?'Good morning':hr<18?'Good afternoon':'Good evening';
-  const name=userData.username?'@'+userData.username:'hunter';
-  const wkStreak=calcWeeklyStreak();
-  const goal=getWeeklyGoal();
-  const currentMon=getMonday(new Date()).toISOString().slice(0,10);
-  const wk=evaluateWeek(currentMon,goal);
-  // Today's calories (from food log)
-  let kcal=0;
-  try{const d=(userData.foodLog||{})[getTodayStr()];if(d&&d.meals)Object.values(d.meals).forEach(m=>(m||[]).forEach(f=>kcal+=f.cal||0))}catch(e){}
-  // Did they train today?
-  const todayStr=new Date().toDateString();
-  const trainedToday=workoutLog.some(e=>!e.isRest&&new Date(e.date).toDateString()===todayStr);
-  const dateLabel=new Date().toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'});
-  let h=`<div class="today-hero">
-    <div class="th-date">${dateLabel}</div>
-    <div class="th-greet">${greet}, <span class="th-name">${esc(name)}</span></div>
-    <div class="th-stats">
-      <div class="th-stat"><div class="th-v">${wkStreak>0?'🔥'+wkStreak+'w':'—'}</div><div class="th-l">Streak</div></div>
-      <div class="th-stat ${wk.perfect?'th-perfect':''}"><div class="th-v">${wk.sessions}/${wk.target}</div><div class="th-l">This week</div></div>
-      <div class="th-stat"><div class="th-v">${missionsDone}/${missionsTotal}</div><div class="th-l">Missions</div></div>
-      <div class="th-stat"><div class="th-v">${kcal>0?kcal:'—'}</div><div class="th-l">Cal today</div></div>
-    </div>
-    <div class="th-actions">
-      <button class="th-btn primary" onclick="switchPage('train')">${trainedToday?'✓ Trained · Go again':'▶ Start Training'}</button>
-      <button class="th-btn" onclick="switchPage('nutrition')">🍽️ Log Food</button>
-    </div>
-  </div>`;
-  return h;
-}
 function renderMissions(){
   const today=getTodayStr();const missions=getDailyMissions(today,userData.class);
   const completed=userData.missionsCompleted[today]||[];
   const allDone=missions.every(m=>completed.includes(m.id));
   const cap=getXpCap();const softCapped=cap.softCap<1;
-  const {mult,label:multLabel}=getXpMultiplier();
-  let h=renderTodayHero(completed.length,missions.length);
-  h+=renderWeekRisk();
-  h+=renderProgressStrip();
-  h+=friendFeedSlot();
-  h+=`<div class="page-title" style="font-size:1.1rem;margin-top:1rem">DAILY MISSIONS</div><div class="page-sub">${completed.length}/${missions.length} complete · Streak: ${userData.missionStreak} days</div>`;
-  if(multLabel)h+=`<div class="xp-mult-badge">${multLabel}</div>`;
-  if(softCapped){const trial=getAvailableTrial();h+=`<div class="trial-active-banner">⚔️ TRIAL ACTIVE · XP at 25% — break through ${trial?trial.trial.name:'the trial'} below for full XP + bonus</div>`}
-  const trialInfo=getAvailableTrial();
-  if(trialInfo)h+=renderTrialBanner(trialInfo);
-  else if(isSRank())h+=renderRedGateCard();
-  else if(getEffectiveRank().name==='A-RANK')h+=`<div class="rg-teaser">⛩️ <strong>Red Gates</strong> open at S-Rank — a new boss challenge every week, scaled to you.</div>`;
-  // ── Event Mission ──
+  const {mult}=getXpMultiplier();
+  const xpOf=x=>Math.round(x*mult*(softCapped?0.25:1));
+  let h=renderHomeHeader();
+  // ── Daily Quest window ──
+  const midnight=new Date();midnight.setHours(24,0,0,0);
+  const left=midnight-Date.now(),hh=Math.floor(left/3600000),mm=Math.floor(left%3600000/60000);
+  let q=`<div class="sys-title lg">[ Daily Quest ]</div><div class="hq-reset">Resets in ${hh}h ${mm}m</div><div class="wline"></div>`;
   const evt=getEventMission(today);
   if(evt){
     const evtDone=(userData.eventsCompleted||{})[today];
-    if(evtDone)h+=`<div class="event-card done"><div class="event-label">⚡ EVENT</div><div class="mission-icon">${evt.icon}</div><div class="mission-info"><div class="mission-name">${evt.name}</div><div class="mission-desc">${evt.desc}</div></div><div class="mission-xp locked">DONE</div></div>`;
-    else h+=`<div class="event-card" onclick="completeEvent()"><div class="event-label">⚡ EVENT</div><div class="mission-icon">${evt.icon}</div><div class="mission-info"><div class="mission-name">${evt.name}</div><div class="mission-desc">${evt.desc}</div></div><div class="mission-xp">${'+'+Math.round(evt.xp*mult*(softCapped?0.25:1))+' XP'+(softCapped?' ⚠':'')}</div></div>`;
+    q+=`<button class="hq-event${evtDone?' done':''}" ${evtDone?'disabled':'onclick="completeEvent()"'}>
+      <span class="hq-ev-i">${evtDone?icon('check',18):icon('bolt',18)}</span>
+      <span class="hq-txt"><span class="hq-name">Event: ${esc(evt.name)}</span><span class="hq-desc">${esc(evt.desc)}</span></span>
+      <span class="hq-xp gold">${evtDone?'Done':'+'+xpOf(evt.xp)}</span></button>`;
   }
-  // ── Daily Missions ──
-  h+=missions.map(m=>{const done=completed.includes(m.id);
-    if(done)return`<div class="mission-card done"><div class="mission-check">✅</div><div class="mission-icon">${m.icon}</div><div class="mission-info"><div class="mission-name">${m.name}</div><div class="mission-desc">${m.desc}</div></div><div class="mission-xp locked">DONE</div></div>`;
-    return`<div class="mission-card" onclick="completeMission('${m.id}')"><div class="mission-check">⬜</div><div class="mission-icon">${m.icon}</div><div class="mission-info"><div class="mission-name">${m.name}</div><div class="mission-desc">${m.desc}</div></div><div class="mission-xp">${'+'+Math.round(m.xp*mult*(softCapped?0.25:1))+' XP'+(softCapped?' ⚠':'')}</div></div>`;
-  }).join('');
-  if(allDone)h+=`<div class="mission-bonus">🌟 ALL MISSIONS COMPLETE! +${Math.round(50*(softCapped?0.25:1))} BONUS XP 🌟</div>`;
-  // ── Progression Track ──
+  q+=`<div class="hq-list">`+missions.map(m=>{
+    const done=completed.includes(m.id);
+    return questRow(done,esc(m.name),esc(m.desc),done?'Done':'+'+xpOf(m.xp),`completeMission('${m.id}')`);
+  }).join('')+`</div><div class="wline"></div>`;
+  const streak=userData.missionStreak||0;
+  q+=`<div class="hq-foot"><span>${completed.length} of ${missions.length} done${streak>1?`, ${streak}-day quest streak`:''}</span>
+    <span class="gold">${allDone?`Bonus earned: +${xpOf(50)} XP`:`All ${missions.length}: +${xpOf(50)} XP`}</span></div>`;
+  if(softCapped){const t=getAvailableTrial();q+=`<div class="hq-cap">Trial active. XP is at 25% until you pass ${esc(t?dayLabel(t.trial.name):'your trial')}.</div>`}
+  h+=sysWin(q,'hq');
+  // ── Start the next workout ──
+  const nd=nextProgramDay();
+  const sesDay=sessionActive?(userData.program||[]).find(d=>d.id===sessionDayId):null;
+  const typedDay=!sessionActive?(userData.program||[]).find(d=>dayHasTypedInputs(d.id)):null;
+  if(sesDay){
+    h+=`<button class="btn-p hh-start" onclick="switchPage('train')">${icon('play',14)} Resume ${esc(dayLabel(sesDay.title))}</button>
+      <div class="hh-start-sub"><span>Session in progress, ${sessionMinutes()} min on the clock.</span></div>`;
+  }else if(typedDay){
+    h+=`<button class="btn-p hh-start" onclick="currentDay='${safeId(typedDay.id)}';switchPage('train');startLogMode()">${icon('play',14)} Continue ${esc(dayLabel(typedDay.title))}</button>
+      <div class="hh-start-sub"><span>You have sets typed in but not logged yet.</span><button class="link" onclick="currentDay='${safeId(typedDay.id)}';switchPage('train')">See workout</button></div>`;
+  }else if(nd){
+    const trainedToday=workoutLog.some(e=>!e.isRest&&new Date(e.date).toDateString()===new Date().toDateString());
+    h+=`<button class="btn-p hh-start" onclick="homeStart('${safeId(nd.id)}')">${icon('play',14)} Start ${esc(dayLabel(nd.title))}</button>
+      <div class="hh-start-sub"><span>${trainedToday?'You trained today. Anything more is bonus.':'Next in your program.'}</span><button class="link" onclick="switchPage('train')">Pick another</button></div>`;
+  }else{
+    h+=`<button class="btn-p hh-start" onclick="switchPage('train')">Set up your program</button>`;
+  }
+  // ── This week ──
+  h+=renderWeekStrip();
+  h+=renderProgressStrip();
+  // ── Gate / trial ──
+  const trialInfo=getAvailableTrial();
+  if(trialInfo)h+=renderTrialRow(trialInfo);
+  if(isSRank()){
+    if(!trialInfo)h+=`<div class="home-gate">${renderRedGateCard()}</div>`;
+    // Reached S mid-week with this week's Blue Gate already beaten: still let them claim it
+    const bg=userData.blueGate;
+    if(bg&&bg.week===gateWeekKey()&&!bg.cleared&&getBlueGateProgress(bg).done)h+=`<div class="home-gate">${renderBlueGateCard()}</div>`;
+  }else h+=`<div class="home-gate">${renderBlueGateCard()}</div>`;
+  if(getEffectiveRank().name==='A-RANK')h+=`<div class="li home-teaser"><span class="ico sys">${icon('gate',18)}</span><span class="t">Red Gates<small>A new boss challenge every week, once you reach S-Rank.</small></span></div>`;
+  // ── Guild activity ──
+  h+=friendFeedSlot();
+  // ── Class track ──
   h+=renderProgressionTrack();
   $('missionsContent').innerHTML=h;
 }
@@ -752,14 +754,14 @@ async function completeMission(mid){
   let completed=userData.missionsCompleted[today]||[];
   if(completed.includes(mid))return;
   const m=missions.find(x=>x.id===mid);if(!m)return;
-  if(!confirm(`✅ Complete "${m.name}"?\n\n${m.desc}\n\nThis locks in for today.`))return;
+  if(!confirm(`Complete "${m.name}"?\n\n${m.desc}\n\nThis locks in for today.`))return;
   completed.push(mid);
   let gained=addXP(m.xp);
   let bonusMsg='';
   if(missions.every(x=>completed.includes(x.id))){
     const bonusGained=addXP(50);
     gained+=bonusGained;
-    bonusMsg=` (+${bonusGained} ALL-MISSIONS BONUS · 💠${SHARD_REWARDS.allMissionsDay})`;
+    bonusMsg=` (+${bonusGained} all-quests bonus, +${SHARD_REWARDS.allMissionsDay} shards)`;
     userData.shards=(userData.shards||0)+SHARD_REWARDS.allMissionsDay;
     unlockAch('missions_all');
   }
@@ -808,14 +810,14 @@ async function spendShards(n){
 function renderShop(){
   const el=$('shopContent');if(!el)return;
   const bal=getShards();
-  let h=`<div class="page-title">SYSTEM SHOP</div><div class="page-sub">Shards are earned, not bought.</div>
-  <div class="shard-balance"><span class="sb-icon">💠</span><span class="sb-num">${bal}</span><span class="sb-label">SHARDS</span></div>
+  let h=`<div class="page-title">System shop</div><div class="page-sub">Shards are earned, not bought.</div>
+  <div class="shard-balance"><span class="sb-icon">${SHARD_SVG}</span><span class="sb-num">${bal}</span><span class="sb-label">Shards</span></div>
   <div class="shard-earn">Earn shards: <strong>+${SHARD_REWARDS.achievement}</strong> per achievement · <strong>+${SHARD_REWARDS.allMissionsDay}</strong> per all-missions day · <strong>+${SHARD_REWARDS.perfectWeek}</strong> per perfect week · <strong>+${SHARD_REWARDS.trial}</strong> per trial passed</div>`;
   // Active XP surge indicator
   const surge=userData.xpSurgeUntil||0;
   if(surge>Date.now()){
     const hrsLeft=Math.ceil((surge-Date.now())/3600000);
-    h+=`<div class="surge-active">⚡ XP SURGE ACTIVE — 1.5× for ${hrsLeft} more hour${hrsLeft!==1?'s':''}</div>`;
+    h+=`<div class="surge-active">XP SURGE ACTIVE — 1.5× for ${hrsLeft} more hour${hrsLeft!==1?'s':''}</div>`;
   }
   SHOP_ITEMS.forEach(item=>{
     const afford=bal>=item.cost;
@@ -827,11 +829,11 @@ function renderShop(){
     }
     if(item.id==='xp_boost'&&surge>Date.now())lockNote='Surge already active';
     h+=`<div class="shop-item${afford&&!lockNote?'':' dim'}">
-      <div class="si-top"><span class="si-icon">${item.icon}</span><span class="si-name">${item.name}</span><span class="si-cost">💠 ${item.cost}</span></div>
+      <div class="si-top"><span class="si-icon">${item.icon}</span><span class="si-name">${item.name}</span><span class="si-cost">${SHARD_SVG} ${item.cost}</span></div>
       <div class="si-desc">${item.desc}</div>
       <div class="si-detail">${item.detail}</div>
       ${item.id==='week_buyback'?`<div class="si-rules">Requires ALL of: short by exactly 1 session · every logged set checked off · 3+ lift sessions · no blank sessions</div>`:''}
-      ${lockNote?`<div class="si-lock">🔒 ${lockNote}</div>`:`<button class="si-buy" ${afford?'':'disabled'} onclick="buyShopItem('${item.id}')">${afford?'Redeem':'Need '+(item.cost-bal)+' more'}</button>`}
+      ${lockNote?`<div class="si-lock">${lockNote}</div>`:`<button class="si-buy" ${afford?'':'disabled'} onclick="buyShopItem('${item.id}')">${afford?'Redeem':'Need '+(item.cost-bal)+' more'}</button>`}
     </div>`;
   });
   h+=renderCosmeticsShop();
@@ -850,12 +852,12 @@ async function buyStreakRestore(item){
   const prev=userData.prevWeeklyStreak||0;
   const cur=calcWeeklyStreak();
   if(prev<=cur){toast('Nothing to restore — your streak is intact');return}
-  if(!confirm(`Restore your weekly streak from ${cur} to ${prev} for 💠${item.cost}?`))return;
+  if(!confirm(`Restore your weekly streak from ${cur} to ${prev} for ${item.cost} shards?`))return;
   if(!await spendShards(item.cost))return;
   userData.streakRestoreTo=prev;
   userData.lastStreakRestore=Date.now();
   await saveUser({streakRestoreTo:prev,lastStreakRestore:userData.lastStreakRestore,shards:userData.shards});
-  toast(`🔥 Streak restored to ${prev} weeks`);
+  toast(`Streak restored to ${prev} weeks`);
   renderShop();updateTopBar();
 }
 async function buyWeekBuyback(item){
@@ -880,15 +882,15 @@ async function buyWeekBuyback(item){
   });
   if(!candidates.length){
     const m=$('buybackInfoModal');
-    let h=`<h2>🗓️ No Eligible Weeks</h2>
+    let h=`<h2>No Eligible Weeks</h2>
       <p style="color:var(--muted);font-size:.78rem;line-height:1.55;margin-bottom:.7rem">A week can only be bought back if <strong style="color:var(--text)">all</strong> of these are true:</p>
-      <div class="bb-rule">✅ You were short by <strong>exactly one session</strong></div>
-      <div class="bb-rule">✅ Every set you logged was <strong>checked off</strong></div>
-      <div class="bb-rule">✅ You still hit <strong>3+ lift sessions</strong></div>
-      <div class="bb-rule">✅ No logged session was left blank</div>
+      <div class="bb-rule">You were short by <strong>exactly one session</strong></div>
+      <div class="bb-rule">Every set you logged was <strong>checked off</strong></div>
+      <div class="bb-rule">You still hit <strong>3+ lift sessions</strong></div>
+      <div class="bb-rule">No logged session was left blank</div>
       <p style="color:var(--gold);font-size:.7rem;line-height:1.5;margin:.7rem 0">Missing two or more days can't be bought back. One missed day is life — two is a choice.</p>`;
     if(denied.length){
-      h+=`<div style="font-family:var(--font-mono);font-size:.62rem;color:var(--muted);letter-spacing:1px;margin:.6rem 0 .3rem">YOUR RECENT WEEKS</div>`;
+      h+=`<div style="font-family:var(--font-mono);font-size:.62rem;color:var(--muted);letter-spacing:1px;margin:.6rem 0 .3rem">Your recent weeks</div>`;
       denied.sort((a,b)=>b.label.localeCompare(a.label)).slice(0,8).forEach(d=>{
         h+=`<div class="bb-denied"><span>Week of ${d.label}</span><span class="bb-why">${d.why}</span></div>`;
       });
@@ -900,22 +902,22 @@ async function buyWeekBuyback(item){
   }
   candidates.sort((a,b)=>b.wk.localeCompare(a.wk));
   const c=candidates[0];
-  if(!confirm(`Buy back the week of ${c.label}?\n\nYou logged ${c.r.sessions}/${c.r.target} sessions — exactly one short, and every set you logged was checked off.\n\nThis permanently marks it a PERFECT WEEK.\n\nCost: 💠${item.cost}`))return;
+  if(!confirm(`Buy back the week of ${c.label}?\n\nYou logged ${c.r.sessions}/${c.r.target} sessions — exactly one short, and every set you logged was checked off.\n\nThis permanently marks it a PERFECT WEEK.\n\nCost: ${item.cost} shards`))return;
   if(!await spendShards(item.cost))return;
   locked[c.wk]=true;
   userData.perfectWeeksLocked=locked;
   userData.boughtWeeks=[...(userData.boughtWeeks||[]),c.wk];
   await saveUser({perfectWeeksLocked:locked,boughtWeeks:userData.boughtWeeks,shards:userData.shards});
-  toast(`🗓️ Week of ${c.label} claimed as PERFECT`);
+  toast(`Week of ${c.label} claimed as PERFECT`);
   renderShop();updateTopBar();checkRankUp();
 }
 async function buyXpSurge(item){
   if((userData.xpSurgeUntil||0)>Date.now()){toast('Surge already active');return}
-  if(!confirm(`Activate 1.5× XP for 24 hours for 💠${item.cost}?`))return;
+  if(!confirm(`Activate 1.5× XP for 24 hours for ${item.cost} shards?`))return;
   if(!await spendShards(item.cost))return;
   userData.xpSurgeUntil=Date.now()+24*3600000;
   await saveUser({xpSurgeUntil:userData.xpSurgeUntil,shards:userData.shards});
-  toast('⚡ XP SURGE ACTIVE — 1.5× for 24 hours');
+  toast('XP SURGE ACTIVE — 1.5× for 24 hours');
   renderShop();updateTopBar();
 }
 // ═══════════ RED GATES (S-Rank weekly boss) ═══════════
@@ -1017,7 +1019,7 @@ function renderRedGateCard(){
   const g=userData.redGate;
   if(!g||g.week!==gateWeekKey()){
     ensureRedGate().then(()=>{if(currentPage==='missions')renderMissions()});
-    return `<div class="red-gate opening"><div class="rg-label">⛩️ A RED GATE IS OPENING…</div></div>`;
+    return sysWin(`<div class="sys-title">[ Red Gate ]</div><div class="mist" style="text-align:center;margin-top:8px">A gate is opening…</div>`,'red-gate');
   }
   const type=RED_GATE_POOL.find(t=>t.id===g.type)||RED_GATE_POOL[0];
   const p=getGateProgress(g);
@@ -1026,20 +1028,16 @@ function renderRedGateCard(){
   const dLeft=Math.floor(msLeft/86400000),hLeft=Math.floor((msLeft%86400000)/3600000);
   const weekLabel=new Date(g.week+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'});
   let action='';
-  if(g.cleared)action=`<div class="rg-cleared">✓ GATE CLEARED</div>`;
-  else if(p.done)action=`<button class="rg-claim" onclick="claimRedGate()">⛩️ CLAIM · +${SHARD_REWARDS.redGate} 💠 · +${RED_GATE_XP} XP</button>`;
-  return `<div class="red-gate${g.cleared?' cleared':''}">
-    <div class="rg-head"><div class="rg-sigil">⛩️</div>
-      <div class="rg-titles"><div class="rg-label">RED GATE · WEEK OF ${weekLabel.toUpperCase()}</div><div class="rg-name">${type.icon} ${type.name}</div></div>
-      ${g.cleared?'':`<div class="rg-timer">${dLeft}d ${hLeft}h</div>`}
-    </div>
-    <div class="rg-desc">${type.desc}</div>
-    <div class="rg-bar"><div class="rg-fill" style="width:${pct}%"></div></div>
-    <div class="rg-nums"><span>${fmtGateNum(p.val,type.unit)} / ${fmtGateNum(p.target,type.unit)} ${type.unit}</span><span>${Math.round(pct)}%</span></div>
-    ${p.blocker&&!g.cleared?`<div class="rg-blocker">⚠️ ${p.blocker}</div>`:''}
+  if(g.cleared)action=`<div class="rg-cleared">Gate cleared</div>`;
+  else if(p.done)action=`<button class="btn-p rg-claim" onclick="claimRedGate()">Claim: +${SHARD_REWARDS.redGate} shards, +${RED_GATE_XP} XP</button>`;
+  return sysWin(`<div class="sys-title">[ Red Gate ]</div>
+    <div class="rg-head"><div><div class="rg-name">${esc(type.name)}</div><div class="mist sm">Week of ${weekLabel}</div></div>${g.cleared?'':`<div class="num rg-timer">${dLeft}d ${hLeft}h</div>`}</div>
+    <div class="rg-desc">${esc(type.desc)}</div>
+    <div class="track rg-track"><div class="fill" style="width:${pct}%"></div></div>
+    <div class="rg-nums"><span>${fmtGateNum(p.val,type.unit)} / ${fmtGateNum(p.target,type.unit)} ${esc(type.unit)}</span><span>${Math.round(pct)}%</span></div>
+    ${p.blocker&&!g.cleared?`<div class="rg-blocker">${esc(p.blocker)}</div>`:''}
     ${action}
-    <div class="rg-foot">Cleared ${userData.redGatesCleared||0} · Gate streak ${calcGateStreak()} · Every S-Rank faces the same gate · Resets Monday</div>
-  </div>`;
+    <div class="rg-foot">${userData.redGatesCleared||0} cleared, gate streak ${calcGateStreak()}. Every S-Rank faces the same gate. It resets Monday.</div>`,'red-gate'+(g.cleared?' cleared':''));
 }
 async function claimRedGate(){
   const g=userData.redGate;if(!g||g.cleared)return;
@@ -1059,13 +1057,15 @@ async function claimRedGate(){
   if(calcGateStreak()>=4)unlockAch('red_gate_streak_4');
   if(currentPage==='missions')renderMissions();
 }
-function showGateCleared(type,gained){
+function showGateCleared(type,gained,opts){
+  opts=opts||{};
   let ov=$('gateCleared');
   if(!ov){ov=document.createElement('div');ov.id='gateCleared';ov.className='gate-cleared';document.body.appendChild(ov)}
-  ov.innerHTML=`<div class="gc-core"><div class="gc-sigil">⛩️</div><div class="gc-pre">RED GATE CLEARED</div>
-    <div class="gc-name">${type.icon||''} ${esc(type.name||'')}</div>
-    <div class="gc-rewards"><span>+${gained} XP</span><span>+${SHARD_REWARDS.redGate} 💠</span></div>
-    <div class="gc-count">Gate #${userData.redGatesCleared}</div><div class="gc-tap">tap to continue</div></div>`;
+  ov.classList.toggle('blue',!!opts.blue);
+  ov.innerHTML=`<div class="gc-core"><div class="gc-sigil">${opts.blue?icon('gate',44):'⛩️'}</div><div class="gc-pre">${opts.blue?'Blue':'Red'} gate cleared</div>
+    <div class="gc-name">${opts.blue?'':(type.icon||'')+' '}${esc(opts.blue?type.name||'':dayLabel(type.name||''))}</div>
+    <div class="gc-rewards"><span>+${gained} XP</span><span>+${opts.shards||SHARD_REWARDS.redGate} shards</span></div>
+    <div class="gc-count">Gate #${opts.count||userData.redGatesCleared}</div><div class="gc-tap">tap to continue</div></div>`;
   ov.onclick=()=>ov.classList.remove('show');
   requestAnimationFrame(()=>ov.classList.add('show'));
   try{if(navigator.vibrate)navigator.vibrate([90,40,90,40,200])}catch(e){}
@@ -1088,36 +1088,36 @@ function nameClass(id){return COSMETICS.some(c=>c.type==='name'&&c.id===id)?' co
 async function saveCosmetics(c){userData.cosmetics=c;await saveUser({cosmetics:c});await saveLeaderboard()}
 async function buyCosmetic(id){
   const item=COSMETICS.find(x=>x.id===id);if(!item)return;
-  const lock=cosmeticLockReason(item);if(lock){toast('🔒 '+lock);return}
+  const lock=cosmeticLockReason(item);if(lock){toast(''+lock);return}
   if(cosmeticOwned(item)){toast('Already yours');return}
   if(getShards()<item.cost){toast(`Need ${item.cost-getShards()} more shards`);return}
-  if(!confirm(`Buy ${item.name} for 💠${item.cost}?\n\n${item.desc}`))return;
+  if(!confirm(`Buy ${item.name} for ${item.cost} shards?\n\n${item.desc}`))return;
   const c=getCos();c.owned=[...c.owned,id];c[item.type]=id; // auto-equip on purchase
   // Payment and ownership must land in the same write — the database rules check both together
   const newShards=getShards()-item.cost;
   await saveUser({shards:newShards,cosmetics:c});
   await saveLeaderboard();
-  toast(`✨ ${item.name} equipped`);renderShop();
+  toast(`${item.name} equipped`);renderShop();
 }
 async function equipCosmetic(id){
   const item=COSMETICS.find(x=>x.id===id);if(!item||!cosmeticOwned(item))return;
   const c=getCos();c[item.type]=c[item.type]===id?'':id;
   await saveCosmetics(c);
-  toast(c[item.type]?`✨ ${item.name} equipped`:`${item.name} removed`);renderShop();
+  toast(c[item.type]?`${item.name} equipped`:`${item.name} removed`);renderShop();
 }
 function renderCosmeticsShop(){
   const c=getCos();
-  let h=`<div class="shop-section">COSMETICS <span class="ss-sub">shown on your profile and the leaderboard</span></div>`;
+  let h=`<div class="shop-section">Cosmetics <span class="ss-sub">shown on your profile and the leaderboard</span></div>`;
   COSMETICS.forEach(item=>{
     const owned=cosmeticOwned(item),lock=cosmeticLockReason(item),equipped=c[item.type]===item.id;
     const preview=item.type==='frame'
-      ?`<div class="cos-preview-frame${frameClass(item.id)}">${avatarHtml(userData.profilePic,'👤')}</div>`
+      ?`<div class="cos-preview-frame${frameClass(item.id)}">${avatarHtml(userData.profilePic)}</div>`
       :`<div class="cos-preview-name${nameClass(item.id)}">@${esc(userData.username||'hunter')}</div>`;
     let btn;
     if(owned)btn=`<button class="cos-btn${equipped?' on':''}" onclick="equipCosmetic('${item.id}')">${equipped?'✓ Equipped':'Equip'}</button>`;
-    else if(lock)btn=`<div class="si-lock">🔒 ${lock}</div>`;
-    else btn=`<button class="cos-btn buy" ${getShards()>=item.cost?'':'disabled'} onclick="buyCosmetic('${item.id}')">💠 ${item.cost}</button>`;
-    h+=`<div class="cos-item${lock&&!owned?' dim':''}">${preview}<div class="cos-info"><div class="cos-name">${item.name}${item.lock==='S'?' <span class="cos-tag">S</span>':''}${item.lock&&item.lock.gates?' <span class="cos-tag red">EARNED</span>':''}</div><div class="cos-desc">${item.desc}</div></div>${btn}</div>`;
+    else if(lock)btn=`<div class="si-lock">${lock}</div>`;
+    else btn=`<button class="cos-btn buy" ${getShards()>=item.cost?'':'disabled'} onclick="buyCosmetic('${item.id}')">${SHARD_SVG} ${item.cost}</button>`;
+    h+=`<div class="cos-item${lock&&!owned?' dim':''}">${preview}<div class="cos-info"><div class="cos-name">${item.name}${item.lock==='S'?' <span class="cos-tag">S</span>':''}${item.lock&&item.lock.gates?' <span class="cos-tag red">Earned</span>':''}</div><div class="cos-desc">${item.desc}</div></div>${btn}</div>`;
   });
   return h;
 }
@@ -1161,14 +1161,15 @@ function feedEventText(ev){
   const d=(ev&&ev.d)||{};
   switch(ev&&ev.t){
     case 'workout':
-      if(d.pr)return{icon:'🎉',text:`hit a PR · <strong>${esc(d.pr.ex)}</strong>${d.pr.w?` ${num(d.pr.w)} lbs`:''}`,sub:esc(d.title||'')};
-      return{icon:'🏋️',text:`logged <strong>${esc(d.title||'a workout')}</strong>`,sub:d.min?num(d.min)+' min':''};
-    case 'cardio':return{icon:'🏃',text:`did <strong>${esc(d.type||'cardio')}</strong>`,sub:d.min?num(d.min)+' min':''};
-    case 'rank':{const r=RANKS.find(x=>x.name===d.rank);if(!r)return null;return{icon:'⬆️',text:`ranked up to <strong style="color:${r.color}">${r.name}</strong>`,sub:''}}
-    case 'gate':return{icon:'⛩️',text:`cleared the Red Gate · <strong>${esc(d.name||'')}</strong>`,sub:''};
-    case 'perfect':return{icon:'🗓️',text:'banked a <strong>perfect week</strong>',sub:''};
+      if(d.pr)return{text:`set a best on <strong>${esc(d.pr.ex)}</strong>`,sub:[d.pr.w?num(d.pr.w)+' lb':'',d.title?esc(dayLabel(d.title)):''].filter(Boolean).join(', ')};
+      return{text:`finished <strong>${esc(dayLabel(d.title||'a workout'))}</strong>`,sub:d.min?num(d.min)+' min':''};
+    case 'cardio':return{text:`did <strong>${esc(d.type||'cardio')}</strong>`,sub:d.min?num(d.min)+' min':''};
+    case 'rank':{const r=RANKS.find(x=>x.name===d.rank);if(!r)return null;return{text:`reached <strong class="${r.name==='S-RANK'?'gold':''}">${rankLabel(r.name)}</strong>`,sub:''}}
+    case 'gate':return{text:`cleared the Red Gate, <strong>${esc(dayLabel(d.name||''))}</strong>`,sub:''};
+    case 'bgate':return{text:`cleared the Blue Gate, <strong>${esc(d.name||'')}</strong>`,sub:''};
+    case 'perfect':return{text:'closed out a <strong>perfect week</strong>',sub:''};
     case 'ach':{const a=ACHIEVEMENTS.find(x=>x.id===d.id);if(!a)return null;
-      return a.secret?{icon:'🤫',text:'unlocked a <strong>secret achievement</strong>',sub:''}:{icon:a.icon,text:`unlocked <strong>${esc(a.name)}</strong>`,sub:''}}
+      return a.secret?{text:'earned a <strong>secret badge</strong>',sub:''}:{text:`earned <strong>${esc(a.name)}</strong>`,sub:''}}
   }
   return null;
 }
@@ -1179,10 +1180,10 @@ async function loadFriendFeed(force){
   const fids=(userData.friends||[]).filter(f=>safeId(f)).slice(0,40);
   feedCache.loading=(async()=>{
     const docs=await Promise.all(fids.map(fid=>db.collection('leaderboard').doc(fid).get().catch(()=>null)));
-    const items=[];const now=Date.now(),cutoff=now-7*86400000;
+    const items=[],keep=[];const now=Date.now(),cutoff=now-7*86400000;
     docs.forEach((doc,i)=>{
       if(!doc||!doc.exists)return;
-      const u=doc.data();
+      const u=doc.data();keep.push({uid:fids[i],u});
       (Array.isArray(u.recent)?u.recent:[]).slice(-FEED_MAX).forEach(ev=>{
         const t=new Date(ev&&ev.at).getTime();
         if(!t||t<cutoff||t>now+3600000)return;
@@ -1190,29 +1191,18 @@ async function loadFriendFeed(force){
       });
     });
     items.sort((a,b)=>b.t-a.t);
-    feedCache={at:Date.now(),items,loading:null};
+    feedCache={at:Date.now(),items,docs:keep,loading:null};
     return items;
   })().catch(e=>{feedCache.loading=null;console.warn('feed load:',e);return[]});
   return feedCache.loading;
 }
 function renderFriendFeedHtml(items){
   const friends=(userData.friends||[]).length;
-  let h=`<div class="ff-head"><span>FRIEND ACTIVITY</span>${friends?`<button class="ff-refresh" onclick="refreshFriendFeed()" title="Refresh">↻</button>`:''}</div>`;
-  if(!friends)return h+`<div class="ff-empty">Your friends' workouts, PRs and Red Gates show up here.<br><button class="ff-cta" onclick="switchPage('profile');switchSubTab('profile','friends')">🤝 Add friends</button></div>`;
-  if(items==null)return h+`<div class="ff-empty">Loading…</div>`;
-  if(!items.length)return h+`<div class="ff-empty">Quiet week so far. Be the first to log something. ⚔️</div>`;
-  const shown=items.slice(0,feedExpanded?25:4);
-  shown.forEach(({uid,u,ev,t})=>{
-    const x=feedEventText(ev);if(!x)return;
-    h+=`<div class="ff-row" onclick="openProfileCard('${safeId(uid)}')">
-      <div class="ff-pic${frameClass(u.frame)}">${avatarHtml(u.profilePic)}</div>
-      <div class="ff-body"><div class="ff-line"><span class="ff-name${nameClass(u.nameColor)}">@${esc(u.username||'hunter')}</span> ${x.text}</div>
-      ${x.sub?`<div class="ff-sub">${x.sub}</div>`:''}</div>
-      <div class="ff-meta"><span class="ff-icon">${x.icon}</span><span class="ff-time">${timeAgo(t)}</span></div>
-    </div>`;
-  });
-  if(items.length>4)h+=`<button class="ff-more" onclick="feedExpanded=!feedExpanded;paintFriendFeed()">${feedExpanded?'Show less':'Show more ('+(Math.min(items.length,25)-4)+')'}</button>`;
-  return h;
+  let h=`<div class="sec-row"><span class="sec">Guild activity</span>${friends?`<button class="link" onclick="switchPage('guild');switchSubTab('guild','activity')">See all</button>`:''}</div>`;
+  if(!friends)return h+`<div class="empty-note">Your friends' workouts, bests and Red Gates show up here. <button class="link" onclick="switchPage('guild');switchSubTab('guild','friends')">Add friends</button></div>`;
+  if(items==null)return h+`<div class="empty-note">Loading…</div>`;
+  if(!items.length)return h+`<div class="empty-note">Quiet week so far. Be the first to log something.</div>`;
+  return h+`<div class="ff-list">${feedRowsHtml(items,3)}</div>`;
 }
 function paintFriendFeed(){const el=$('friendFeedCard');if(el)el.innerHTML=renderFriendFeedHtml(feedCache.items)}
 function friendFeedSlot(){
@@ -1227,39 +1217,46 @@ function refreshFriendFeed(){feedCache.at=0;feedCache.items=null;paintFriendFeed
 function renderWeekRisk(){
   const goal=getWeeklyGoal();
   const r=evaluateWeek(getMonday(new Date()).toISOString().slice(0,10),goal);
-  if(r.perfect)return `<div class="week-risk done">✓ Perfect week secured · ${r.sessions}/${r.target}. Anything more is bonus.</div>`;
-  if(r.failedSets>0||r.sessionsWithDone<r.lifts)return ''; // quality miss — more sessions can't fix it, so don't nag
-  const daysLeft=7-((new Date().getDay()+6)%7); // Mon=7 … Sun=1, today included
+  const streak=calcWeeklyStreak();
+  if(r.perfect)return `<div class="week-note done">Perfect week secured. Anything more is bonus.</div>`;
+  if(r.failedSets>0||r.sessionsWithDone<r.lifts)return '';
+  const daysLeft=7-((new Date().getDay()+6)%7);
   const needSessions=Math.max(0,r.target-r.sessions);
   const needLifts=Math.max(0,Math.min(3,r.target)-r.lifts);
   const need=Math.max(needSessions,needLifts);
   if(need===0||need>daysLeft)return '';
-  const liftNote=needLifts>=need?(needLifts===1?' (it must be a lift)':` (all ${needLifts} must be lifts)`):needLifts>0?(needLifts===1?' · 1 must be a lift':` · ${needLifts} must be lifts`):'';
   const s=n=>n!==1?'s':'';
-  let level='calm',msg;
-  if(need===daysLeft){level='urgent';msg=`⚠️ ${need} session${s(need)} in ${daysLeft} day${s(daysLeft)} — every day left counts for a perfect week${liftNote}`}
-  else if(daysLeft-need<=1){level='warn';msg=`⏳ ${need} more session${s(need)} · ${daysLeft} days left for a perfect week${liftNote}`}
-  else msg=`📅 ${need} session${s(need)} to go this week · ${daysLeft} days left${liftNote}`;
-  return `<div class="week-risk ${level}" onclick="switchPage('train')">${msg}</div>`;
+  const liftNote=needLifts>=need?(needLifts===1?' It has to be a lift.':` All ${needLifts} have to be lifts.`):needLifts>0?` ${needLifts} of them have to be lifts.`:'';
+  const keep=streak>0?` keeps your ${streak}-week streak`:' for a perfect week';
+  const level=need===daysLeft?'urgent':daysLeft-need<=1?'warn':'calm';
+  const msg=need===daysLeft?`${need} session${s(need)} in ${daysLeft} day${s(daysLeft)}. Every day left counts.${liftNote}`
+    :`${need===1?'One':need} more by Sunday${keep}.${liftNote}`;
+  return `<div class="week-note ${level}" onclick="switchPage('train')">${msg}</div>`;
 }
 
 // ═══════════ WARDROBE (equip cosmetics) ═══════════
 // Driven by COSMETIC_TYPES: adding a new type there + items in COSMETICS is all a
 // future cosmetic needs to appear here.
-function openWardrobe(){
+function openWardrobe(tab){
   const m=$('wardrobeModal');if(!m)return;
+  if(tab)wardrobeTab=tab;
+  const tabs=[{id:'title',label:'Titles'},...COSMETIC_TYPES.map(t=>({id:t.id,label:t.id==='frame'?'Frames':t.id==='name'?'Name colors':t.label}))];
+  if(!tabs.some(t=>t.id===wardrobeTab))wardrobeTab='title';
   const c=getCos();
-  let h=`<h2>✨ Wardrobe</h2><p class="wd-sub">Equip what you've earned or bought. Friends see it on the leaderboard, their feed, and your profile card.</p>`;
-  COSMETIC_TYPES.forEach(t=>{
+  let h=`<h2>Wardrobe</h2><div class="sub-tabs wd-tabs" role="tablist">${tabs.map(t=>`<button class="stab${t.id===wardrobeTab?' active':''}" role="tab" aria-selected="${t.id===wardrobeTab}" onclick="openWardrobe('${t.id}')">${esc(t.label)}</button>`).join('')}</div>`;
+  if(wardrobeTab==='title'){
+    h+=titleRowsHtml();
+  }else{
+    const t=COSMETIC_TYPES.find(x=>x.id===wardrobeTab);
     const owned=COSMETICS.filter(x=>x.type===t.id&&cosmeticOwned(x));
-    h+=`<div class="wd-section">${t.icon} ${t.label.toUpperCase()}</div><div class="wd-grid">`;
+    h+=`<p class="wd-sub">Equip what you've earned or bought. Friends see it on the leaderboard, their feed, and your profile card.</p><div class="wd-grid">`;
     h+=wardrobeTile(t.id,'',!c[t.id],null);
     owned.forEach(x=>{h+=wardrobeTile(t.id,x.id,c[t.id]===x.id,x)});
     h+=`</div>`;
-    if(!owned.length)h+=`<div class="wd-empty">Nothing here yet — find these in the Shop.</div>`;
-  });
-  h+=`<button class="edit-stats-btn" style="width:100%;margin-top:.7rem" onclick="closeWardrobe();switchPage('ranks');switchSubTab('ranks','shop')">💠 Browse the Shop</button>
-    <div class="m-actions" style="margin-top:.4rem"><button class="m-cancel" onclick="closeWardrobe()">Done</button></div>`;
+    if(!owned.length)h+=`<div class="wd-empty">Nothing here yet. Find these in the Shop.</div>`;
+    h+=`<button class="btn-s" style="width:100%;margin-top:14px" onclick="closeWardrobe();openProfileView('shop')">Browse the Shop</button>`;
+  }
+  h+=`<div class="m-actions" style="margin-top:12px"><button class="m-cancel" onclick="closeWardrobe()">Done</button></div>`;
   m.querySelector('.modal').innerHTML=h;
   m.classList.add('open');
 }
@@ -1268,19 +1265,19 @@ function wardrobeTile(type,id,on,item){
   let preview;
   if(type==='frame')preview=`<div class="cos-preview-frame${frameClass(id)}">${avatarHtml(userData.profilePic)}</div>`;
   else if(type==='name')preview=`<div class="cos-preview-name${nameClass(id)}">@${esc(userData.username||'hunter')}</div>`;
-  else preview=`<div class="wd-generic">${id?'✨':'—'}</div>`;
-  return `<button class="wd-tile${on?' on':''}" onclick="wardrobeEquip('${safeId(type)}','${safeId(id)}')">${preview}<div class="wd-name">${item?esc(item.name):'None'}</div>${on?'<div class="wd-on">EQUIPPED</div>':''}</button>`;
+  else preview=`<div class="wd-generic">${id?'':'—'}</div>`;
+  return `<button class="wd-tile${on?' on':''}" onclick="wardrobeEquip('${safeId(type)}','${safeId(id)}')">${preview}<div class="wd-name">${item?esc(item.name):'None'}</div>${on?'<div class="wd-on">Equipped</div>':''}</button>`;
 }
 async function wardrobeEquip(type,id){
   if(!COSMETIC_TYPES.some(t=>t.id===type))return;
   if(id){const item=COSMETICS.find(x=>x.id===id&&x.type===type);if(!item||!cosmeticOwned(item)){toast('You don\'t own that yet');return}}
   const c=getCos();
-  if(c[type]===id){openWardrobe();return}
+  if(c[type]===id){openWardrobe(type);return}
   c[type]=id;
   await saveCosmetics(c);
-  openWardrobe();
+  openWardrobe(type);
   if(currentPage==='profile')renderProfile();
-  toast(id?'✨ Equipped':'Removed');
+  toast(id?'Equipped':'Removed');
 }
 
 // ═══════════ INVITE-ONLY SIGNUP ═══════════
@@ -1325,7 +1322,7 @@ async function submitInviteCode(){
 }
 function shareInvite(){
   const fc=userData.friendCode||'';if(!fc)return;
-  const text=`Join me on LexenFitness ⚔️ — sign up at https://lexen13.github.io/lexenfitness and use my invite code: ${fc}`;
+  const text=`Join me on LexenFitness. Sign up at https://lexen13.github.io/lexenfitness and use my invite code: ${fc}`;
   if(navigator.share){navigator.share({title:'LexenFitness invite',text}).catch(()=>{})}
   else if(navigator.clipboard){navigator.clipboard.writeText(text).then(()=>toast('Invite copied — paste it to your friend')).catch(()=>fallbackCopy(text))}
   else fallbackCopy(text);
@@ -1352,7 +1349,7 @@ async function devGrantToUser(){
   if(!Object.keys(upd).length){toast('Nothing to grant');return}
   if(!confirm(`Apply to @${un}?\n\n${JSON.stringify(upd,null,1)}\n\nTheir leaderboard updates on their next app open.`))return;
   await db.collection('users').doc(uid).update(upd);
-  toast(`🎁 Granted to @${un}`);
+  toast(`Granted to @${un}`);
 }
 // ═══════════ ASSIGNED PLANS (force-accept) ═══════════
 // A pushed plan cannot be dismissed — the only way out of the modal is Accept.
@@ -1369,8 +1366,8 @@ function checkAssignedPlan(){
 }
 function showPlanOffer(planId,plan){
   const modal=$('planOfferModal');if(!modal)return;
-  let h=`<div class="po-sigil">⚔️</div>
-    <h2 style="text-align:center;margin-bottom:.2rem">THE SYSTEM HAS A NEW PLAN FOR YOU</h2>
+  let h=`<div class="po-sigil"></div>
+    <h2 style="text-align:center;margin-bottom:.2rem">The system has a new plan for you</h2>
     <p style="text-align:center;color:var(--accent2);font-family:var(--font-mono);font-size:.72rem;letter-spacing:1px;margin-bottom:.7rem">${esc(plan.name)}</p>
     <p style="color:var(--muted);font-size:.76rem;line-height:1.5;margin-bottom:.8rem">${esc(plan.desc)}</p>`;
   plan.days.forEach(d=>{
@@ -1378,8 +1375,8 @@ function showPlanOffer(planId,plan){
     d.exercises.forEach(ex=>{h+=`<div class="po-ex">${esc(ex.name)} <span class="po-ex-sr">${ex.sets}×${esc(ex.reps)}</span></div>`});
     h+=`</div>`;
   });
-  h+=`<p style="color:var(--gold);font-size:.68rem;line-height:1.45;margin:.7rem 0 .5rem">⚠️ This will replace your current workout days. Your logged history is kept — nothing you've already recorded is deleted.</p>
-    <button class="m-save-btn" style="width:100%" onclick="acceptAssignedPlan('${planId}')">⚔️ ACCEPT THE PLAN</button>`;
+  h+=`<p style="color:var(--gold);font-size:.68rem;line-height:1.45;margin:.7rem 0 .5rem">This will replace your current workout days. Your logged history is kept — nothing you've already recorded is deleted.</p>
+    <button class="m-save-btn" style="width:100%" onclick="acceptAssignedPlan('${planId}')">Accept the plan</button>`;
   modal.querySelector('.modal').innerHTML=h;
   modal.classList.add('open');
   modal.dataset.locked='1'; // no backdrop dismiss
@@ -1391,7 +1388,7 @@ async function acceptAssignedPlan(planId){
   await saveUser({program:userData.program,acceptedPlans:userData.acceptedPlans});
   const modal=$('planOfferModal');
   if(modal){modal.classList.remove('open');modal.dataset.locked=''}
-  toast('⚔️ Plan accepted. Your new days are in Train.');
+  toast('Plan accepted. Your new days are in Train.');
   currentDay=null;workoutView='menu';
   try{buildWorkout()}catch(e){console.warn(e)}
 }
@@ -1401,7 +1398,7 @@ async function grantStartingShards(){
   userData.shards=(userData.shards||0)+STARTING_SHARDS;
   userData.startingShardsGranted=true;
   await saveUser({shards:userData.shards,startingShardsGranted:true});
-  setTimeout(()=>toast(`💠 +${STARTING_SHARDS} SHARDS — welcome gift from The System`),1800);
+  setTimeout(()=>toast(`+${STARTING_SHARDS} SHARDS — welcome gift from The System`),1800);
 }
 // ═══════════ RANK TRIALS ═══════════
 // ═══════════ THE AWAKENING · PHASE II ═══════════
@@ -1433,7 +1430,7 @@ async function startAwakeningExam(){
   const ex=userData.awakeningExam;
   if(ex&&ex.status==='active'){toast('Your exam is already running');return}
   const attempt=(userData.awakeningAttempts||0)+1;
-  const msg=`👁️ BEGIN THE AWAKENING?\n\nYou have 14 days to:\n• Hit your weekly training goal both weeks\n• Log food every single day\n• Beat one of your own logged lifts\n\nThe clock starts the moment you accept. If you fall short, your Phase I progress is untouched — you simply try again.\n\nAttempt #${attempt}. Begin?`;
+  const msg=`BEGIN THE AWAKENING?\n\nYou have 14 days to:\n• Hit your weekly training goal both weeks\n• Log food every single day\n• Beat one of your own logged lifts\n\nThe clock starts the moment you accept. If you fall short, your Phase I progress is untouched — you simply try again.\n\nAttempt #${attempt}. Begin?`;
   if(!confirm(msg))return;
   userData.awakeningExam={
     status:'active',
@@ -1443,7 +1440,7 @@ async function startAwakeningExam(){
   };
   userData.awakeningAttempts=attempt;
   await saveUser({awakeningExam:userData.awakeningExam,awakeningAttempts:attempt});
-  toast('👁️ THE AWAKENING HAS BEGUN — 14 days');
+  toast('THE AWAKENING HAS BEGUN — 14 days');
   renderMissions();
 }
 // Live evaluation of the running exam
@@ -1510,7 +1507,7 @@ async function checkAwakeningExam(){
     userData.awakeningExam=ex;
     await saveUser({awakeningExam:ex,awakeningExamPassed:true});
     setTimeout(()=>{
-      alert('👁️ THE AWAKENING IS COMPLETE.\n\nYou hit your goal both weeks, logged every day, and broke your own record.\n\nClaim S-RANK from the trial card.');
+      alert('THE AWAKENING IS COMPLETE.\n\nYou hit your goal both weeks, logged every day, and broke your own record.\n\nClaim S-RANK from the trial card.');
       renderMissions();
     },1200);
   }else{
@@ -1534,22 +1531,22 @@ function renderAwakeningExam(){
   const ex=userData.awakeningExam;
   const attempts=userData.awakeningAttempts||0;
   if(userData.awakeningExamPassed){
-    return `<div class="exam-card passed"><div class="exam-title">👁️ PHASE II COMPLETE</div><div class="exam-sub">The Awakening has been passed. Claim your rank.</div></div>`;
+    return `<div class="exam-card passed"><div class="exam-title">Phase II complete</div><div class="exam-sub">The Awakening has been passed. Claim your rank.</div></div>`;
   }
   if(!st){
     if(!awakeningPhase1Done()){
-      return `<div class="exam-card locked"><div class="exam-title">🔒 PHASE II — THE AWAKENING</div><div class="exam-sub">A 14-day final exam. Unlocks when Phase I is complete.</div></div>`;
+      return `<div class="exam-card locked"><div class="exam-title">Phase II — the awakening</div><div class="exam-sub">A 14-day final exam. Unlocks when Phase I is complete.</div></div>`;
     }
     const failedNote=ex&&ex.status==='failed'?`<div class="exam-fail">Attempt #${ex.attempt} fell short: ${(ex.failReasons||[]).join(' · ')}</div>`:'';
-    return `<div class="exam-card ready"><div class="exam-title">👁️ PHASE II UNLOCKED</div>
+    return `<div class="exam-card ready"><div class="exam-title">Phase II unlocked</div>
       <div class="exam-sub">14 days. Hit your weekly goal twice, log food every day, and beat one of your own lifts.</div>
       ${failedNote}
-      <button class="exam-start" onclick="startAwakeningExam()">⚔️ BEGIN THE AWAKENING${attempts?` · ATTEMPT #${attempts+1}`:''}</button></div>`;
+      <button class="exam-start" onclick="startAwakeningExam()">BEGIN THE AWAKENING${attempts?` · ATTEMPT #${attempts+1}`:''}</button></div>`;
   }
   // Active exam
-  const row=(ok,label,detail)=>`<div class="exam-req ${ok?'ok':''}"><span class="er-mark">${ok?'✅':'○'}</span><span class="er-label">${label}</span><span class="er-detail">${detail}</span></div>`;
+  const row=(ok,label,detail)=>`<div class="exam-req ${ok?'ok':''}"><span class="er-mark">${ok?'':'○'}</span><span class="er-label">${label}</span><span class="er-detail">${detail}</span></div>`;
   return `<div class="exam-card active">
-    <div class="exam-title">👁️ THE AWAKENING · ACTIVE</div>
+    <div class="exam-title">The awakening · active</div>
     <div class="exam-countdown">${st.daysLeft} day${st.daysLeft!==1?'s':''} remaining</div>
     ${row(st.week1>=st.goal&&st.week2>=st.goal,'Weekly goal, both weeks',`${st.week1} / ${st.goal} · ${st.week2} / ${st.goal}`)}
     ${row(st.foodOk,'Food logged every day',st.foodMissed?`${st.foodMissed} missed`:`${st.foodDays} day${st.foodDays!==1?'s':''} clean`)}
@@ -1560,8 +1557,8 @@ function renderAwakeningExam(){
 function getAvailableTrial(){for(let i=RANKS.length-1;i>=0;i--){if(userData.xp>=RANKS[i].min&&!RANKS[i].auto&&RANKS[i].trial&&!userData.trialsCompleted.includes(RANKS[i].trial)){return{rank:RANKS[i],trial:RANK_TRIALS[RANKS[i].trial]}}}return null}
 function renderTrialBanner(info){
   const t=info.trial;const progress=getTrialProgress(t);
-  let h=`<div class="trial-banner"><div class="trial-header"><span class="trial-icon">${t.icon}</span><div><div class="trial-name">${t.name}</div><div class="trial-desc">${t.desc}</div></div></div>`;
-  if(t.twoPhase)h+=`<div class="phase-label">PHASE I · THE LONG ROAD <span class="pl-sub">cumulative — never lost</span></div>`;
+  let h=`<div class="trial-banner"><div class="trial-header"><div><div class="trial-name">${dayLabel(t.name)}</div><div class="trial-desc">${t.desc}</div></div></div>`;
+  if(t.twoPhase)h+=`<div class="phase-label">Phase I: the long road <span class="pl-sub">Progress here is never lost</span></div>`;
   t.tasks.forEach((task,i)=>{
     const p=progress[i];const pct=Math.min(100,(p/task.target)*100);
     if(task.id==='awaken_final'){h+=renderAwakeningExam();return}
@@ -1574,7 +1571,7 @@ function renderTrialBanner(info){
     </div>`;
   });
   const allDone=t.tasks.every((task,i)=>progress[i]>=task.target);
-  if(allDone)h+=`<button class="trial-claim" onclick="claimTrial('${info.rank.trial}')">⚔️ CLAIM ${info.rank.name}</button>`;
+  if(allDone)h+=`<button class="trial-claim" onclick="claimTrial('${info.rank.trial}')">CLAIM ${info.rank.name}</button>`;
   h+=`</div>`;return h;
 }
 function togglePerfectWeeksDetail(el){
@@ -1604,11 +1601,11 @@ function renderPerfectWeeksBreakdown(){
     let status='';
     if(isLocked){
       status=locked[wk]
-        ?'<span style="color:var(--green)">✓ PERFECT 🔒</span>'
+        ?'<span style="color:var(--green)">✓ Perfect </span>'
         :'<span style="color:var(--dim)">— locked</span>';
     }else{
       const r=evaluateWeek(wk,goal);
-      if(r.perfect)status='<span style="color:var(--green)">✓ PERFECT</span>';
+      if(r.perfect)status='<span style="color:var(--green)">✓ Perfect</span>';
       else{
         const color=r.sessions===0?'var(--dim)':r.sessions<r.target?'var(--gold)':'var(--red)';
         status=`<span style="color:${color}">${r.reason}</span>`;
@@ -1617,7 +1614,7 @@ function renderPerfectWeeksBreakdown(){
     const tag=isCurrent?' <span style="color:var(--accent2)">(current)</span>':'';
     h+=`<div style="display:flex;justify-content:space-between;padding:2px 0">Week of ${date}${tag}: ${status}</div>`;
   });
-  h+=`<div style="font-size:.58rem;color:var(--dim);margin-top:6px;font-style:italic">🔒 Past weeks are locked — they don't change when you adjust your goal</div>`;
+  h+=`<div style="font-size:.58rem;color:var(--dim);margin-top:6px;font-style:italic">Past weeks are locked — they don't change when you adjust your goal</div>`;
   h+='</div>';
   return h;
 }
@@ -1743,7 +1740,7 @@ async function lockLastWeekIfNeeded(){
   userData.perfectWeeksLocked=locked;
   if(r.perfect){userData.shards=(userData.shards||0)+SHARD_REWARDS.perfectWeek;queueFeedEvent('perfect',{})}
   try{await saveUser({perfectWeeksLocked:locked,shards:userData.shards||0,feedEvents:userData.feedEvents||[]});if(r.perfect)await saveLeaderboard()}catch(e){console.warn('lockLastWeek failed:',e)}
-  if(r.perfect)toast(`💠 +${SHARD_REWARDS.perfectWeek} shards — perfect week banked`);
+  if(r.perfect)toast(`+${SHARD_REWARDS.perfectWeek} shards — perfect week banked`);
 }
 // One-time migration (v1.14.1): weeks locked before the active-rest fix were scored
 // without counting cardio/active-rest sessions. Re-check and upgrade false→true only.
@@ -1756,7 +1753,7 @@ async function migratePerfectWeekLocks(){
     Object.keys(locked).forEach(wk=>{
       if(locked[wk]===false&&evaluateWeek(wk,goal).perfect){locked[wk]=true;upgraded++}
     });
-    if(upgraded>0)toast(`🔓 ${upgraded} past week${upgraded!==1?'s':''} upgraded to PERFECT (rest-day fix)`);
+    if(upgraded>0)toast(`${upgraded} past week${upgraded!==1?'s':''} upgraded to PERFECT (rest-day fix)`);
   }
   userData.pwLockVersion=2;
   try{await saveUser({perfectWeeksLocked:locked||{},pwLockVersion:2})}catch(e){console.warn('pw migration failed:',e)}
@@ -1776,7 +1773,7 @@ async function claimTrial(trialId){
   if(bonus>0)userData.xp+=bonus;
   await saveUser({trialsCompleted:userData.trialsCompleted,xp:userData.xp});await saveLeaderboard();updateTopBar();checkRankUp();
   const trialName=rank?rank.name:'TRIAL';
-  toast(bonus>0?`⚔️ ${trialName} ACHIEVED! +${bonus} XP BONUS`:`⚔️ ${trialName} ACHIEVED!`);
+  toast(bonus>0?`${trialName} ACHIEVED! +${bonus} XP BONUS`:`${trialName} ACHIEVED!`);
   switchPage('missions');
 }
 
@@ -1788,9 +1785,9 @@ function renderDevTools(){
   const er=getEffectiveRank();const trial=getAvailableTrial();const cap=getXpCap();
   const capMsg=cap.softCap<1?'soft-cap 25% (trial pending)':'no cap';
   return`<div class="dev-panel">
-    <div class="section-title" style="color:var(--red)">🔧 DEV TOOLS</div>
+    <div class="section-title" style="color:var(--red)">Dev tools</div>
     <div style="font-size:.68rem;color:var(--muted);margin:.3rem 0">Current: ${er.name} · XP: ${userData.xp} · ${capMsg} · Trials: [${userData.trialsCompleted.join(', ')||'none'}]</div>
-    <div style="font-size:.68rem;color:${trial?'var(--gold)':'var(--green)'};margin-bottom:.4rem">${trial?'⚠️ SOFT-CAP — '+trial.trial.name+' pending':'✅ No gate blocking'}</div>
+    <div style="font-size:.68rem;color:${trial?'var(--gold)':'var(--green)'};margin-bottom:.4rem">${trial?'SOFT-CAP — '+trial.trial.name+' pending':'No gate blocking'}</div>
     <div class="dev-row">
       <button class="dev-btn" onclick="devSetXP(400)">400 (E)</button>
       <button class="dev-btn" onclick="devSetXP(1400)">1400 (D)</button>
@@ -1801,7 +1798,7 @@ function renderDevTools(){
       <button class="dev-btn" onclick="devSetXP(3600)">3600 (→B)</button>
       <button class="dev-btn" onclick="devSetXP(7100)">7100 (→A)</button>
       <button class="dev-btn" onclick="devSetXP(15100)">15100 (→S)</button>
-      <button class="dev-btn" style="color:var(--red)" onclick="devForceXP(parseInt(prompt('Force XP to:')||'0'))">Force XP ⚡</button>
+      <button class="dev-btn" style="color:var(--red)" onclick="devForceXP(parseInt(prompt('Force XP to:')||'0'))">Force XP </button>
     </div>
     <div class="dev-row" style="margin-top:.3rem;border-top:1px dashed var(--border);padding-top:.4rem">
       <button class="dev-btn" style="color:var(--gold)" onclick="devFakeIronGate()">Fake Iron Gate</button>
@@ -1814,17 +1811,21 @@ function renderDevTools(){
       <button class="dev-btn" onclick="devTriggerSplash()">Test Splash</button>
     </div>
     <div class="dev-row">
+      <button class="dev-btn" style="color:var(--sys)" onclick="devResetBlueGate()">Reopen Blue Gate</button>
+      <button class="dev-btn" style="color:var(--gold)" onclick="devRestoreRecords()">Restore records</button>
+    </div>
+    <div class="dev-row">
       <button class="dev-btn" onclick="devResetTrials()">Reset Trials</button>
       <button class="dev-btn" style="color:var(--red)" onclick="devResetAll()">Full Reset</button>
     </div>
     <div class="dev-row" style="margin-top:.3rem;border-top:1px dashed var(--border);padding-top:.4rem">
       <button class="dev-btn" style="color:var(--green)" onclick="devPushProgram()">Push Program to User</button>
-      <button class="dev-btn" style="color:var(--gold)" onclick="devGrantToUser()">🎁 Grant XP/Shards/Trials to User</button>
+      <button class="dev-btn" style="color:var(--gold)" onclick="devGrantToUser()">Grant XP/Shards/Trials to User</button>
     </div>
     <div class="dev-row" style="margin-top:.3rem;border-top:1px dashed var(--border);padding-top:.4rem">
-      <button class="dev-btn" style="color:var(--gold)" onclick="devPromoteTrainer()">👨‍🏫 Promote User to Trainer</button>
-      <button class="dev-btn" style="color:var(--red)" onclick="devDemoteTrainer()">🚫 Demote Trainer</button>
-      <button class="dev-btn" style="color:var(--cyan)" onclick="devRepairTrainerCode()">🔧 Repair Trainer Code</button>
+      <button class="dev-btn" style="color:var(--gold)" onclick="devPromoteTrainer()">Promote User to Trainer</button>
+      <button class="dev-btn" style="color:var(--red)" onclick="devDemoteTrainer()">Demote Trainer</button>
+      <button class="dev-btn" style="color:var(--cyan)" onclick="devRepairTrainerCode()">Repair Trainer Code</button>
     </div>
   </div>`;
 }
@@ -1949,7 +1950,7 @@ async function devPromoteTrainer(){
       await db.collection('users').doc(uid).update({role:'trainer',trainerCode:code,clients:[]});
       await db.collection('trainerCodes').doc(code).set({uid,createdAt:firebase.firestore.FieldValue.serverTimestamp()});
     }
-    toast('✅ @'+un+' is now a Trainer. Code: '+code);
+    toast('@'+un+' is now a Trainer. Code: '+code);
     alert('@'+un+' promoted to Trainer.\n\nTheir Trainer Code: '+code+'\n\nShare this with them so they can give it to their clients.\n\n(If they\'re already logged in, they need to refresh the app to see the Trainer tab.)');
   }catch(e){
     console.error('Promote error:',e);
@@ -1988,89 +1989,43 @@ async function devRepairTrainerCode(){
     await db.collection('trainerCodes').doc(code).set({uid,createdAt:firebase.firestore.FieldValue.serverTimestamp()});
     // Delete old code if it existed
     if(data?.trainerCode&&data.trainerCode!==code){try{await db.collection('trainerCodes').doc(data.trainerCode).delete()}catch(e){}}
-    toast('🔧 Repaired! New code: '+code);
+    toast('Repaired! New code: '+code);
     alert('@'+un+'\'s trainer code repaired.\n\nNew Code: '+code+'\n\nOld code (if any) invalidated.');
   }catch(e){console.error(e);toast('Repair failed: '+e.message)}
 }
 
 // ═══════════ WORKOUT ═══════════
 function buildWorkout(){
-  // If a session is active, don't rebuild (preserves session page)
   if(sessionActive)return;
   const prog=userData.program||[];
-  $('workoutTitle').textContent=(userData.class||'WORKOUT').toUpperCase();
-  $('workoutSub').textContent=(userData.subclass?userData.subclass+' — ':'')+getEffectiveRank().name;
-  if(workoutView==='menu'||!prog.length){
-    renderWorkoutMenu();
-  }else{
-    renderWorkoutDay();
-  }
-}
-function renderWorkoutMenu(){
-  const prog=userData.program||[];
-  // Hide day-logging UI elements
-  const dayTabs=$('dayTabs');if(dayTabs)dayTabs.innerHTML='';
-  const dayContent=$('dayContent');
-  // Hide workout actions in menu mode
-  document.querySelectorAll('#sp-workout .workout-actions, #sp-workout .alt-log-row').forEach(el=>el.style.display='none');
+  const wa=$('workoutActions');if(wa)wa.style.display='none';
   if(!prog.length){
-    dayContent.innerHTML=`<div class="wk-menu-empty"><p style="color:var(--muted);font-size:.82rem;margin-bottom:1rem">No workouts in your program yet.</p><button class="start-session-btn" onclick="addWorkoutDay()" style="background:var(--green);color:#0a0a14">+ Create Your First Workout</button></div>`;
+    $('dayTabs').innerHTML='';
+    $('dayContent').innerHTML=`<div class="empty-note">No workouts in your program yet.</div>
+      <button class="btn-p" onclick="addWorkoutDay()">${icon('plus',16)} Create your first workout</button>${otherLogsHtml()}`;
     return;
   }
-  let h=`<div class="wk-menu-header"><div class="wk-menu-title">Choose a workout</div><div class="wk-menu-sub">${prog.length} in your program · tap to begin</div></div>`;
-  h+=`<div class="wk-menu-list">`;
-  prog.forEach(d=>{
-    const exCount=(d.exercises||[]).length;
-    // Get last logged date for this day
-    const lastLog=workoutLog.find(e=>e.dayId===d.id&&!e.isRest&&!e.isActivity);
-    const lastDate=lastLog?new Date(lastLog.date).toLocaleDateString('en-US',{month:'short',day:'numeric'}):'Never';
-    h+=`<div class="wk-menu-card" onclick="openWorkoutDay('${d.id}')">
-      <div class="wk-menu-card-title">${esc(d.title)}</div>
-      ${d.subtitle?`<div class="wk-menu-card-sub">${esc(d.subtitle)}</div>`:''}
-      <div class="wk-menu-card-meta">
-        <span>${exCount} exercise${exCount!==1?'s':''}</span>
-        <span>Last: ${lastDate}</span>
-      </div>
-    </div>`;
-  });
-  h+=`</div>`;
-  h+=`<button class="wk-menu-add" onclick="addWorkoutDay()">+ Create New Workout</button>`;
-  h+=`<div class="alt-log-row" style="margin-top:1rem">
-    <button class="alt-log-btn activity" onclick="openActivityLog()">🏃 Cardio / Activity</button>
-    <button class="alt-log-btn rest" onclick="openRestLog()">😴 Rest Day</button>
-  </div>`;
-  h+=`<div class="alt-log-row" style="margin-top:.4rem">
-    <button class="alt-log-btn backdate" onclick="openBackdatePicker()" style="flex:1 1 100%">📅 Log for Earlier Day (no XP)</button>
-  </div>`;
-  dayContent.innerHTML=h;
+  if(!prog.find(d=>d.id===currentDay))currentDay=(nextProgramDay()||prog[0]).id;
+  if(workoutView==='log')renderWorkoutDay();else renderTrainOverview();
 }
-function openWorkoutDay(dayId){
-  currentDay=dayId;
-  workoutView='day';
-  renderWorkoutDay();
-}
-function backToWorkoutMenu(){
-  workoutView='menu';
-  renderWorkoutMenu();
-}
+function renderWorkoutMenu(){workoutView='day';buildWorkout()}
+function openWorkoutDay(dayId){currentDay=dayId;workoutView='day';buildWorkout()}
+function backToWorkoutMenu(){captureInputs();pendingBackdateISO=null;workoutView='day';buildWorkout()}
 function renderWorkoutDay(){
-  const prog=userData.program||[];
-  if(!prog.find(d=>d.id===currentDay))currentDay=prog[0].id;
-  // Build day tabs showing current + switch hint
-  $('dayTabs').innerHTML=`<div class="dtab back-btn" onclick="backToWorkoutMenu()">‹ All Workouts</div>`+
-    prog.map(d=>`<div class="dtab${d.id===currentDay?' active':''}" data-d="${d.id}" onclick="switchDay('${d.id}')">${esc(d.title)}</div>`).join('');
-  // Show workout actions
-  document.querySelectorAll('#sp-workout .workout-actions, #sp-workout .alt-log-row').forEach(el=>el.style.display='');
-  renderDay();updateLogBtn();
+  // Log mode: all inputs, no timer
+  $('dayTabs').innerHTML='';
+  renderDayFull();
+  const wa=$('workoutActions');if(wa)wa.style.display='';
+  updateLogBtn();
 }
 async function addWorkoutDay(){
   const prog=userData.program||[];
   const num=prog.length+1;
-  const title=prompt('Day name (e.g. "PUSH DAY", "DAY 5"):','DAY '+num);
+  const title=prompt('Workout name, like Push or Upper A:','Day '+num);
   if(!title)return;
   const sub=prompt('Subtitle (e.g. "Monday — Chest & Tris"):','');
   captureInputs();
-  prog.push({id:'day'+Date.now(),title:title.toUpperCase(),subtitle:sub||'',exercises:[]});
+  prog.push({id:'day'+Date.now(),title:title.trim(),subtitle:sub||'',exercises:[]});
   await saveUser({program:prog});
   currentDay=prog[prog.length-1].id;
   workoutView='day'; // Jump into the new day so user can add exercises
@@ -2146,7 +2101,7 @@ async function renameWorkoutDay(){
   const day=prog.find(d=>d.id===currentDay);if(!day)return;
   const title=prompt('New day name:',day.title);if(!title)return;
   const sub=prompt('New subtitle:',day.subtitle);
-  day.title=title.toUpperCase();day.subtitle=sub||day.subtitle;
+  day.title=title.trim();day.subtitle=sub||day.subtitle;
   await saveUser({program:prog});
   buildWorkout();toast('Day renamed!');
 }
@@ -2158,46 +2113,8 @@ async function editDayNotes(){
   await saveUser({program:prog});
   renderDay();toast(notes?'Notes saved!':'Notes cleared.');
 }
-function switchDay(id){currentDay=id;document.querySelectorAll('.dtab').forEach(t=>t.classList.toggle('active',t.dataset.d===id));renderDay();updateLogBtn()}
-function renderDay(){const prog=userData.program||[],day=prog.find(d=>d.id===currentDay);if(!day)return;const di=prog.indexOf(day);const lastMap=buildLastSetMap();let h='';
-  if(day.subtitle)h+=`<div class="day-subtitle">${esc(day.subtitle)}</div>`;
-  // Start Session button (prominent, at top) — hidden during active session
-  if(!sessionActive)h+=`<button class="start-session-btn" onclick="startSession()">▶ START SESSION · ${esc(day.title)}</button>`;
-  // Day notes display at top (if set)
-  if(day.notes)h+=`<div class="day-notes day-notes-top"><strong>📝 NOTES</strong><br>${esc(day.notes)}</div>`;
-  day.exercises.forEach((ex,ei)=>{
-    // ── Superset grouping ──
-    const grp=ex.group||'';
-    const grpNum=grp?String(grp).replace(/[A-Za-z]/g,''):'';
-    const prevGrp=ei>0?(day.exercises[ei-1].group||''):'';
-    const prevNum=prevGrp?String(prevGrp).replace(/[A-Za-z]/g,''):'';
-    const nextGrp=ei<day.exercises.length-1?(day.exercises[ei+1].group||''):'';
-    const nextNum=nextGrp?String(nextGrp).replace(/[A-Za-z]/g,''):'';
-    const opensGroup=grpNum&&grpNum!==prevNum;
-    const closesGroup=grpNum&&grpNum!==nextNum;
-    if(opensGroup){
-      const members=day.exercises.filter(x=>x.group&&String(x.group).replace(/[A-Za-z]/g,'')===grpNum).map(x=>x.group);
-      h+=`<div class="superset-block"><div class="ss-header"><span class="ss-tag">⇄ SUPERSET ${members.join(' / ')}</span><span class="ss-hint">back to back · rest after the pair</span></div>`;
-    }
-    const swapKey=day.id+'_e'+ei+'_swap';
-    const swappedName=savedInputs[swapKey]||'';
-    const shownName=swappedName||ex.name;
-    h+=`<div class="exercise${grpNum?' in-superset':''}"><div class="ex-header"><span class="ex-num">${grp?esc(grp):ei+1}</span><span class="ex-name">${esc(shownName)}${swappedName?'<span class="swapped-tag">⇆ swapped</span>':''}</span><button class="ex-edit" onclick="openSwapModal(${di},${ei})" title="Swap exercise">⇆</button><button class="ex-edit" onclick="toggleExNote('${day.id}_e${ei}_note')" title="Session note">📝</button><button class="ex-edit" onclick="openEdit(${di},${ei})">✏️</button></div>`;
-    if(ex.notes)h+=`<div class="ex-notes">${esc(ex.notes)}</div>`;
-    h+=overloadHint(swappedName?{...ex,name:swappedName}:ex,lastMap);
-    const noteId=day.id+'_e'+ei+'_note';
-    const noteDraft=savedInputs[noteId]||'';
-    h+=`<div class="ex-note-row${noteDraft?' open':''}" id="row_${noteId}"><input type="text" class="ex-note-input" id="${noteId}" placeholder="Note for this session (e.g. knee felt off on set 2)" value="${esc(noteDraft)}" maxlength="200"></div>`;
-
-    h+=`<div class="sets-grid">`;
-    for(let s=0;s<ex.sets;s++){const wK=day.id+'_e'+ei+'_s'+s+'_w',rK=day.id+'_e'+ei+'_s'+s+'_r',cK=day.id+'_e'+ei+'_s'+s+'_c';
-      if(ex.isTime)h+=`<div class="set-row"><label>S${s+1}</label><input type="number" id="${rK}" placeholder="sec" value="${savedInputs[rK]||''}"><span class="sep">sec</span><input type="checkbox" id="${cK}" ${savedInputs[cK]?'checked':''}><span class="target">${ex.reps}</span></div>`;
-      else h+=`<div class="set-row"><label>S${s+1}</label><input type="number" id="${wK}" placeholder="lbs" value="${savedInputs[wK]||''}"><span class="sep">×</span><input type="number" id="${rK}" placeholder="reps" value="${savedInputs[rK]||''}"><input type="checkbox" id="${cK}" ${savedInputs[cK]?'checked':''}><span class="target">${ex.reps}</span></div>`}
-    h+='</div></div>';
-    if(closesGroup)h+=`<div class="ss-footer">Gym packed? Doing these straight through is fine — you'll still get the work in.</div></div>`;
-  });
-  h+=`<button class="add-ex" onclick="openAdd(${di})">+ Add Exercise</button>`;
-  $('dayContent').innerHTML=h}
+function switchDay(id){currentDay=id;buildWorkout()}
+function renderDay(){if(sessionActive||workoutView==='log')return renderDayFull();return renderTrainOverview()}
 
 // ═══════════ EXERCISE SWAP ═══════════
 // Equipment taken? Swap to a same-pattern alternative for today, or permanently.
@@ -2210,14 +2127,14 @@ function openSwapModal(di,ei){
   const current=savedInputs[swapKey]||ex.name;
   const groupId=getExerciseGroup(ex.name)||getExerciseGroup(current);
   const modal=$('swapModal');if(!modal)return;
-  let h=`<h2>⇆ Swap Exercise</h2>
+  let h=`<h2>Swap exercise</h2>
     <p style="color:var(--muted);font-size:.74rem;line-height:1.5;margin-bottom:.6rem">Equipment taken? Pick a movement that trains the same pattern. Your sets, reps and history carry over.</p>
     <div class="swap-current">Currently: <strong>${esc(current)}</strong></div>`;
   if(!groupId){
     h+=`<p style="color:var(--gold);font-size:.72rem;line-height:1.5;margin:.6rem 0">No close matches recognized for this exercise. You can type a replacement instead.</p>`;
   }else{
     const g=EXERCISE_GROUPS[groupId];
-    h+=`<div class="swap-group-label">${g.label.toUpperCase()} — SAME PATTERN</div><div class="swap-list">`;
+    h+=`<div class="swap-group-label">${esc(g.label)} variations, same movement pattern</div><div class="swap-list">`;
     g.items.forEach(alt=>{
       const isCur=normalizeExName(alt)===normalizeExName(current);
       h+=`<button class="swap-opt${isCur?' current':''}" ${isCur?'disabled':''} onclick="applySwap('${esc(alt).replace(/'/g,"\\'")}',false)">${esc(alt)}${isCur?' <span style="color:var(--dim);font-size:.6rem">(current)</span>':''}</button>`;
@@ -2226,7 +2143,7 @@ function openSwapModal(di,ei){
   }
   h+=`<div class="m-field" style="margin-top:.6rem"><label>Or type your own</label><input type="text" id="swapCustom" placeholder="e.g. Landmine Press" maxlength="60"></div>
     <button class="m-save-btn" style="width:100%;margin-top:.4rem" onclick="applyCustomSwap(false)">⇆ Swap for today</button>
-    <button class="edit-stats-btn" style="width:100%;margin-top:.4rem" onclick="applyCustomSwap(true)">📌 Replace permanently in my plan</button>
+    <button class="edit-stats-btn" style="width:100%;margin-top:.4rem" onclick="applyCustomSwap(true)">Replace permanently in my plan</button>
     ${savedInputs[swapKey]?`<button class="edit-stats-btn" style="width:100%;margin-top:.4rem;color:var(--gold);border-color:var(--gold)" onclick="clearSwap()">↩ Revert to ${esc(ex.name)}</button>`:''}
     <div class="m-actions" style="margin-top:.5rem"><button class="m-cancel" onclick="closeSwapModal()">Cancel</button></div>`;
   modal.querySelector('.modal').innerHTML=h;
@@ -2242,7 +2159,7 @@ async function applySwap(name,permanent){
     day.exercises[ei].name=name;
     delete savedInputs[day.id+'_e'+ei+'_swap'];
     await saveUser({program:userData.program});
-    toast(`📌 ${name} is now part of your plan`);
+    toast(`${name} is now part of your plan`);
   }else{
     savedInputs[day.id+'_e'+ei+'_swap']=name;
     try{await db.collection('users').doc(U.uid).collection('meta').doc('inputs').set({data:savedInputs})}catch(e){console.warn(e)}
@@ -2283,8 +2200,8 @@ async function editLogNote(id){
   entry.notes=note.trim();
   try{
     await db.collection('users').doc(U.uid).collection('log').doc(id).update({notes:entry.notes});
-    if(INJURY_RX.test(entry.notes))toast('⚠️ Noted. The System will flag this on that exercise\'s next session.');
-    else toast(entry.notes?'📝 Note saved':'Note removed');
+    if(INJURY_RX.test(entry.notes))toast('Noted. The System will flag this on that exercise\'s next session.');
+    else toast(entry.notes?'Note saved':'Note removed');
     renderLog();
   }catch(e){console.error(e);toast('Save failed: '+e.message)}
 }
@@ -2363,21 +2280,21 @@ function overloadHint(ex,lastMap){
     const m=String(ex.reps||'').match(/(\d+)\s*-\s*(\d+)/);
     const upper=m?parseInt(m[2]):parseInt(ex.reps)||0;
     const ago=Math.round((Date.now()-new Date(last.date).getTime())/86400000);
-    const agoTxt=ago<=0?'today':ago===1?'yesterday':ago+'d ago';
+    const agoTxt=ago<=0?'today':ago===1?'yesterday':ago+' days ago';
     if(upper&&last.r>=upper){
-      h+=`<div class="ex-hint up">📈 Last: ${last.w}×${last.r} (${agoTxt}) — rep range topped, try <strong>${last.w+5} lbs</strong>${via}</div>`;
+      h+=`<div class="ex-hint up">Last ${last.w} lb × ${last.r}, ${agoTxt}. Rep range topped, try <strong>${last.w+5} lb</strong>.${via}</div>`;
     }else{
-      h+=`<div class="ex-hint">🎯 Last: ${last.w}×${last.r} (${agoTxt}) — match the weight, beat the reps${via}</div>`;
+      h+=`<div class="ex-hint">Last ${last.w} lb × ${last.r}, ${agoTxt}. Match it, beat the reps.${via}</div>`;
     }
   }
   // Resurface the most recent note — injury notes come back LOUD
   if(rec.note){
     const nAgo=Math.round((Date.now()-new Date(rec.noteDate).getTime())/86400000);
-    const nAgoTxt=nAgo<=0?'today':nAgo===1?'yesterday':nAgo+'d ago';
+    const nAgoTxt=nAgo<=0?'today':nAgo===1?'yesterday':nAgo+' days ago';
     if(INJURY_RX.test(rec.note)){
-      h+=`<div class="ex-hint warn">⚠️ Last time (${nAgoTxt}): "${esc(rec.note)}" — ease in, longer warm-up today</div>`;
+      h+=`<div class="ex-hint warn">Last time, ${nAgoTxt}: "${esc(rec.note)}". Ease in and warm up longer today.</div>`;
     }else{
-      h+=`<div class="ex-hint note">📝 Last time (${nAgoTxt}): "${esc(rec.note)}"</div>`;
+      h+=`<div class="ex-hint note">Last time, ${nAgoTxt}: "${esc(rec.note)}"</div>`;
     }
   }
   return h;
@@ -2387,27 +2304,31 @@ function overloadHint(ex,lastMap){
 // Same input IDs, same captureInputs flow, no DOM duplication.
 function startSession(){
   const prog=userData.program||[],day=prog.find(d=>d.id===currentDay);
-  if(!day){toast('Pick a day first');return}
-  if(!day.exercises||!day.exercises.length){toast('No exercises in this day yet');return}
-  if(!confirm(`▶ Start session for "${day.title}"?\n\nThe timer will start now. You can pause, but the duration will be logged.`))return;
+  if(!day){toast('Pick a workout first');return}
+  if(!day.exercises||!day.exercises.length){toast('Add an exercise first');return}
+  if(!confirm(`Start ${dayLabel(day.title)}?\n\nThe timer starts now. You can pause it, and the time is logged with the workout.`))return;
   sessionActive=true;sessionStartMs=Date.now();sessionPausedMs=0;sessionPauseStartMs=null;sessionDayId=day.id;
+  workoutView='day';
   enterSessionUI();
   persistSession();
 }
 // Shared UI entry — used by startSession and session restore
 function enterSessionUI(){
   captureInputs();
-  renderDay();
+  sesBlock=firstOpenBlock();
+  $('dayTabs').innerHTML='';
   const ov=$('sessionOverlay');if(ov)ov.style.display='';
   const wa=$('workoutActions');if(wa)wa.style.display='none';
-  const a1=$('altLogRow1');if(a1)a1.style.display='none';
-  const a2=$('altLogRow2');if(a2)a2.style.display='none';
   const fb=$('sessionFinishBtn');if(fb)fb.style.display='';
+  const th=$('trainHead');if(th)th.style.display='none';
+  const tt=$('trainTabs');if(tt)tt.style.display='none';
+  document.body.classList.add('in-session');
   const dc=$('dayContent');if(dc)dc.classList.add('in-session');
+  renderDayFull();
+  document.querySelectorAll('.rest-preset').forEach(b=>b.classList.toggle('active',parseInt(b.dataset.sec)===restDefaultSec));
   clearInterval(sessionTimerHandle);
   sessionTimerHandle=setInterval(updateSessionClock,1000);
   updateSessionClock();
-  attachSessionCheckboxHandlers();
 }
 // ── Session persistence (survives app close / page reload) ──
 const SESSION_LS_KEY='lexen_session';
@@ -2440,15 +2361,16 @@ function restoreSession(){
     // Rebuild day tabs + workout view, then layer session UI on top
     renderWorkoutDay();
     enterSessionUI();
-    if(sessionPauseStartMs)$('sessionPauseBtn').textContent='▶ Resume';
+    if(sessionPauseStartMs)$('sessionPauseBtn').textContent='Resume';
     const elapsed=Math.floor((Date.now()-s.startMs-(s.pausedMs||0))/60000);
-    toast(`⚔️ Session resumed — ${elapsed} min on the clock`);
+    toast(`Session resumed — ${elapsed} min on the clock`);
     return true;
   }catch(e){console.warn('restoreSession:',e);clearPersistedSession();return false}
 }
 function attachSessionCheckboxHandlers(){
   document.querySelectorAll('#dayContent input[type=checkbox]').forEach(cb=>{
     cb.addEventListener('change',onSessionSetCheck);
+    cb.addEventListener('change',()=>{captureInputs();applySessionFocus()});
   });
 }
 function onSessionSetCheck(e){
@@ -2472,14 +2394,8 @@ function onSessionSetCheck(e){
 }
 function pauseSession(){
   if(!sessionActive)return;
-  if(sessionPauseStartMs){
-    sessionPausedMs+=Date.now()-sessionPauseStartMs;
-    sessionPauseStartMs=null;
-    $('sessionPauseBtn').textContent='⏸ Pause';
-  }else{
-    sessionPauseStartMs=Date.now();
-    $('sessionPauseBtn').textContent='▶ Resume';
-  }
+  if(sessionPauseStartMs){sessionPausedMs+=Date.now()-sessionPauseStartMs;sessionPauseStartMs=null;$('sessionPauseBtn').textContent='Pause'}
+  else{sessionPauseStartMs=Date.now();$('sessionPauseBtn').textContent='Resume'}
   persistSession();
 }
 function updateSessionClock(){
@@ -2497,7 +2413,7 @@ function updateSessionClock(){
       restEndMs=null;
       try{if(navigator.vibrate)navigator.vibrate([200,100,200])}catch(e){}
       const rrow=$('restRow');if(rrow)rrow.style.display='none';
-      toast('⏰ Rest complete!');
+      toast('Rest complete!');
     }
   }
 }
@@ -2507,14 +2423,13 @@ function startRestTimer(seconds){
   updateSessionClock();
 }
 function skipRest(){restEndMs=null;const rrow=$('restRow');if(rrow)rrow.style.display='none'}
-function setRestDefault(sec){restDefaultSec=sec;const btns=document.querySelectorAll('.rest-preset');btns.forEach(b=>b.classList.toggle('active',parseInt(b.dataset.sec)===sec));toast(sec===0?'Rest timer off':`Rest ${sec}s after set`)}
+function setRestDefault(sec){restDefaultSec=sec;document.querySelectorAll('.rest-preset').forEach(b=>b.classList.toggle('active',parseInt(b.dataset.sec)===sec));persistSession()}
 function exitSessionUI(){
-  // Reset overlays back to normal
   const ov=$('sessionOverlay');if(ov)ov.style.display='none';
-  const wa=$('workoutActions');if(wa)wa.style.display='';
-  const a1=$('altLogRow1');if(a1)a1.style.display='';
-  const a2=$('altLogRow2');if(a2)a2.style.display='';
   const fb=$('sessionFinishBtn');if(fb)fb.style.display='none';
+  const th=$('trainHead');if(th)th.style.display='';
+  const tt=$('trainTabs');if(tt)tt.style.display='';
+  document.body.classList.remove('in-session');
   const dc=$('dayContent');if(dc)dc.classList.remove('in-session');
   const rrow=$('restRow');if(rrow)rrow.style.display='none';
 }
@@ -2534,10 +2449,11 @@ async function finishSession(){
 }
 function cancelSession(){
   if(!sessionActive)return;
-  if(!confirm('Cancel session without logging? Your inputs will be kept but the timer discarded.'))return;
+  if(!confirm('Cancel this session without logging it? What you typed is kept, the timer is discarded.'))return;
   clearInterval(sessionTimerHandle);sessionTimerHandle=null;
+  captureInputs();
   sessionActive=false;clearPersistedSession();sessionStartMs=null;sessionPausedMs=0;sessionPauseStartMs=null;sessionDayId=null;restEndMs=null;
-  exitSessionUI();
+  exitSessionUI();buildWorkout();
   toast('Session cancelled');
 }
 
@@ -2587,7 +2503,12 @@ function closeAdd(){$('addModal').classList.remove('open')}
 async function saveAdd(){if(addDayIdx===null)return;const name=$('addName').value.trim();if(!name){toast('Enter a name');return}captureInputs();userData.program[addDayIdx].exercises.push({name,sets:parseInt($('addSets').value)||3,reps:$('addReps').value.trim()||'8-12',notes:$('addNotes').value.trim(),isTime:/sec|s$/i.test($('addReps').value)});await saveUser({program:userData.program});closeAdd();renderDay();toast('Added!')}
 function captureInputs(){document.querySelectorAll('#dayContent input[type=number]').forEach(el=>{if(el.id)savedInputs[el.id]=el.value});document.querySelectorAll('#dayContent input[type=checkbox]').forEach(el=>{if(el.id)savedInputs[el.id]=el.checked});document.querySelectorAll('#dayContent input.ex-note-input').forEach(el=>{if(el.id)savedInputs[el.id]=el.value})}
 async function saveInputs(){captureInputs();await db.collection('users').doc(U.uid).collection('meta').doc('inputs').set({data:savedInputs});toast('Saved!')}
-function clearInputs(){if(!confirm('Clear inputs?'))return;document.querySelectorAll('#dayContent input[type=number]').forEach(el=>el.value='');document.querySelectorAll('#dayContent input[type=checkbox]').forEach(el=>el.checked=false);toast('Cleared.')}
+function clearInputs(){
+  if(!confirm('Clear what you typed on this page?'))return;
+  document.querySelectorAll('#dayContent input[type=number]').forEach(el=>el.value='');
+  document.querySelectorAll('#dayContent input[type=checkbox]').forEach(el=>el.checked=false);
+  captureInputs();toast('Cleared.');
+}
 
 // ═══════════ LOG WORKOUT ═══════════
 let logLock=false;
@@ -2619,7 +2540,7 @@ async function logWorkoutWithOptions(opts){
   // Notes are per-session: clear drafts for this day after logging
   day.exercises.forEach((ex,ei)=>{const nid=day.id+'_e'+ei+'_note';delete savedInputs[nid];const nEl=$(nid);if(nEl)nEl.value='';delete savedInputs[day.id+'_e'+ei+'_swap']});
   const anyInjury=entry.exercises.some(ex=>ex.note&&INJURY_RX.test(ex.note))||(entry.notes&&INJURY_RX.test(entry.notes));
-  if(anyInjury)toast('⚠️ Injury note saved — The System will flag it next session.');
+  if(anyInjury)toast('Injury note saved — The System will flag it next session.');
   if(isBackdated)unlockAch('the_historian');
   let xp=50;if(allDone)xp+=50;
   if(isBackdated)xp=0;
@@ -2651,25 +2572,26 @@ async function logWorkoutWithOptions(opts){
   if(!isBackdated){const pr=findWorkoutPR(entry);queueFeedEvent('workout',{title:String(day.title||'').slice(0,40),min:opts.durationSec?Math.round(opts.durationSec/60):0,...(pr?{pr}:{})})}
   const gained=addXP(xp);await saveUser({xp:userData.xp,feedEvents:userData.feedEvents||[]});await saveLeaderboard();updateTopBar();checkRankUp();
   let msg;
-  if(isBackdated)msg=day.title+' logged for earlier day (no XP)';
+  if(isBackdated)msg=dayLabel(day.title)+' logged for an earlier day (no XP)';
   else{
-    msg=day.title+' +'+gained+' XP';
+    msg=dayLabel(day.title)+' logged, +'+gained+' XP';
     const cap=getXpCap();
-    if(cap.softCap<1)msg+=' (25% soft cap)';
+    if(cap.softCap<1)msg+=' (trial active: 25%)';
   }
   day.exercises.forEach((ex,ei)=>{for(let s=0;s<ex.sets;s++){delete savedInputs[day.id+'_e'+ei+'_s'+s+'_w'];delete savedInputs[day.id+'_e'+ei+'_s'+s+'_r'];delete savedInputs[day.id+'_e'+ei+'_s'+s+'_c']}});
   try{await db.collection('users').doc(U.uid).collection('meta').doc('inputs').set({data:savedInputs})}catch(e){console.warn(e)}
+  if(!opts.sessionDayId){workoutView='day';pendingBackdateISO=null}
   renderDay();
   toast(msg)}finally{logLock=false}
 }
 function openBackdatePicker(){
   const modal=$('backdateModal');if(!modal)return;
-  let h=`<h2>📅 What did you forget to log?</h2>`;
+  let h=`<h2>What did you forget to log?</h2>`;
   h+=`<p style="color:var(--muted);font-size:.75rem;line-height:1.4;margin-bottom:.6rem">Pick the type of entry you want to add for an earlier day.</p>`;
   h+=`<div class="backdate-days">`;
-  h+=`<button class="backdate-day" onclick="openBackdateModal('workout')">🏋️ Workout</button>`;
-  h+=`<button class="backdate-day" onclick="openBackdateModal('activity')">🏃 Cardio / Activity</button>`;
-  h+=`<button class="backdate-day" onclick="openBackdateModal('rest')">😴 Rest Day</button>`;
+  h+=`<button class="backdate-day" onclick="openBackdateModal('workout')">Workout</button>`;
+  h+=`<button class="backdate-day" onclick="openBackdateModal('activity')">Cardio / Activity</button>`;
+  h+=`<button class="backdate-day" onclick="openBackdateModal('rest')">Rest Day</button>`;
   h+=`</div>`;
   h+=`<div class="m-actions" style="margin-top:.6rem"><button class="m-cancel" onclick="closeBackdateModal()">Cancel</button></div>`;
   modal.querySelector('.modal').innerHTML=h;
@@ -2679,14 +2601,14 @@ function openBackdatePicker(){
 function openBackdateModal(action){
   const modal=$('backdateModal');if(!modal)return;
   const today=new Date();const maxBack=7;
-  let h=`<h2>📅 Backdate ${action==='workout'?'Workout':action==='activity'?'Activity':'Rest Day'}</h2>`;
+  let h=`<h2>Backdate ${action==='workout'?'Workout':action==='activity'?'Activity':'Rest Day'}</h2>`;
   h+=`<p style="color:var(--muted);font-size:.78rem;line-height:1.4;margin-bottom:.6rem">Forgot to log earlier? Pick a day in the past week. <strong style="color:var(--gold)">No XP</strong> is awarded for backdated entries, and achievements won't trigger. Streaks CAN be saved.</p>`;
   h+=`<div class="backdate-days">`;
   for(let i=0;i<=maxBack;i++){
     const d=new Date(today);d.setDate(d.getDate()-i);
     const iso=d.toISOString();
     const label=i===0?'Today':i===1?'Yesterday':d.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
-    const suffix=i>0?' <span style="color:var(--gold);font-size:.6rem">NO XP</span>':'';
+    const suffix=i>0?' <span style="color:var(--gold);font-size:.6rem">No XP</span>':'';
     h+=`<button class="backdate-day" onclick="pickBackdate('${iso}','${action}')">${label}${suffix}</button>`;
   }
   h+=`</div>`;
@@ -2699,22 +2621,16 @@ function pickBackdate(iso,action){
   closeBackdateModal();
   const today=new Date().toISOString().slice(0,10);
   const picked=iso.slice(0,10);
-  if(picked===today){
-    pendingBackdateISO=null;
-    if(action==='workout')logWorkout();
-    else if(action==='activity')openActivityLog();
-    else if(action==='rest')openRestLog();
-    return;
-  }
-  pendingBackdateISO=iso;
+  pendingBackdateISO=picked===today?null:iso;
   if(action==='workout'){
-    if(!confirm(`Log workout for ${new Date(iso).toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'})}?\n\nFill in the sets in the current view, then tap "Log Day" to save. No XP awarded — streak-saving only.`)){pendingBackdateISO=null;return}
-    toast('📅 Fill sets then tap Log Day to save');
+    if(currentPage!=='train')switchPage('train');
+    startLogMode();
+    if(pendingBackdateISO)toast('Fill in your sets, then tap Log for earlier day');
   }
   else if(action==='activity')openActivityLog();
   else if(action==='rest')openRestLog();
 }
-function updateLogBtn(){const prog=userData.program||[];const day=prog.find(d=>d.id===currentDay);const btn=$('logDayBtn');if(btn&&day)btn.textContent='📋 Log '+day.title}
+function updateLogBtn(){const btn=$('logDayBtn');if(btn)btn.textContent=pendingBackdateISO?'Log for earlier day':'Log workout'}
 async function logAllDays(){
   if(logLock)return;logLock=true;
   try{
@@ -2803,7 +2719,7 @@ function showNextAch(){
   achShowing=true;
   let card=$('achCelebration');
   if(!card){card=document.createElement('div');card.id='achCelebration';card.className='ach-celebration';document.body.appendChild(card)}
-  card.innerHTML=`<div class="ach-cel-icon">${a.icon}</div><div class="ach-cel-info"><div class="ach-cel-label">⚔️ ACHIEVEMENT UNLOCKED</div><div class="ach-cel-name">${esc(a.name)}</div>${a.xp>0?`<div class="ach-cel-xp">+${a.xp} XP</div>`:''}</div>`;
+  card.innerHTML=sysWin(`<div class="ach-cel-row"><div class="ach-cel-icon">${a.icon}</div><div class="ach-cel-info"><div class="sys-title sm">[ Badge earned ]</div><div class="ach-cel-name">${esc(a.name)}</div>${a.xp>0?`<div class="ach-cel-xp">+${a.xp} XP</div>`:''}</div></div>`);
   card.classList.add('show');
   try{if(navigator.vibrate)navigator.vibrate([100,50,100])}catch(e){}
   setTimeout(()=>{card.classList.remove('show');setTimeout(showNextAch,350)},3200);
@@ -2860,7 +2776,7 @@ function renderAchievements(){
     h+=`<div class="ach-category"><div class="ach-cat-header" onclick="toggleAchCat(this)"><span>${cat.name} <span class="ach-cat-count">${unlockedInCat}/${items.length}</span></span><span class="ach-cat-toggle">▼</span></div><div class="ach-cat-body ach-grid">`;
     h+=items.map(a=>{
       const u=ul.includes(a.id);
-      if(a.secret&&!u)return`<div class="ach-card secret"><span class="ach-icon">❓</span><div class="ach-info"><div class="ach-name">???</div><div class="ach-desc">Secret achievement</div></div></div>`;
+      if(a.secret&&!u)return`<div class="ach-card secret"><span class="ach-icon"></span><div class="ach-info"><div class="ach-name">???</div><div class="ach-desc">Secret achievement</div></div></div>`;
       return`<div class="ach-card${u?' unlocked':''}"><span class="ach-icon">${a.icon}</span><div class="ach-info"><div class="ach-name">${a.name}</div><div class="ach-desc">${a.desc}</div>${a.xp?'<div class="ach-xp">+'+a.xp+' XP</div>':''}</div></div>`;
     }).join('');
     h+=`</div></div>`;
@@ -2880,33 +2796,58 @@ function toggleAchCat(el){
 
 // ═══════════ PROFILE ═══════════
 function renderProfile(){
-  const r=getEffectiveRank(),info=getXpBarInfo();
-  const title=(r.title&&r.title[userData.class])||r.name;const st=userData.stats||{};const prs=userData.prs||{};
-  const myCos=getCos();
-  let h=`<div class="profile-card"><div class="profile-pic-wrap${frameClass(myCos.frame)}" onclick="checkPhotoPrivacy(()=>document.getElementById('picInput').click())">${avatarHtml(userData.profilePic,'<div class="pp-placeholder">👤</div>')}</div>
-    <div class="profile-name${nameClass(myCos.name)}">@${userData.username||'???'}</div>
-    <div class="profile-realname">${esc(userData.name||'')} <span style="font-size:.6rem;color:var(--dim)">(only you see this)</span></div>
-    <div class="profile-class">${esc(userData.class||'')}${userData.subclass?' — '+esc(userData.subclass):''}</div>
-    <div class="profile-rank-badge" style="color:${r.color};background:${r.color}22;border:1px solid ${r.color}44">${r.name} — ${title}</div>
-    ${(userData.redGatesCleared||0)>0?`<div class="profile-gates">⛩️ ${userData.redGatesCleared} Red Gate${userData.redGatesCleared!==1?'s':''} cleared</div>`:''}
-    ${userData.bio?'<div class="profile-bio">'+esc(userData.bio)+'</div>':''}
-    <div class="xp-bar-wrap"><div class="xp-bar-label"><span>${info.label}</span><span>${info.sublabel}</span></div><div class="xp-bar"><div class="xp-bar-fill" style="width:${info.pct}%;background:linear-gradient(90deg,${r.color},${r.color}cc)"></div></div></div></div>`;
-  // Stats
-  h+=`<div class="stats-grid"><div class="stat-card"><div class="sv">${st.height||'—'}</div><div class="sl">Height</div></div><div class="stat-card"><div class="sv">${st.weight?st.weight+' lbs':'—'}</div><div class="sl">Weight</div></div><div class="stat-card"><div class="sv">${st.age||'—'}</div><div class="sl">Age</div></div></div>`;
-  h+=`<div class="stats-grid"><div class="stat-card"><div class="sv">${prs.bench||'—'}</div><div class="sl">Bench PR</div></div><div class="stat-card"><div class="sv">${prs.squat||'—'}</div><div class="sl">Squat PR</div></div><div class="stat-card"><div class="sv">${prs.deadlift||'—'}</div><div class="sl">Deadlift PR</div></div></div>`;
-  h+=`<div class="stats-grid"><div class="stat-card"><div class="sv">${getLiftLogs().length}</div><div class="sl">Workouts</div></div><div class="stat-card"><div class="sv">${calcWeeklyStreak()}w</div><div class="sl">Wk Streak</div></div><div class="stat-card"><div class="sv">${(userData.achievements||[]).length}</div><div class="sl">Badges</div></div></div>`;
-  const actCount=getActivityLogs().length;const restCount=getRestLogs().length;
-  if(actCount||restCount)h+=`<div class="stats-grid"><div class="stat-card"><div class="sv">${actCount}</div><div class="sl">Activities</div></div><div class="stat-card"><div class="sv">${restCount}</div><div class="sl">Rest Days</div></div><div class="stat-card"><div class="sv">${(userData.weighIns||[]).length}</div><div class="sl">Weigh-ins</div></div></div>`;
-  // Streak warning
-  const wkStreakP=calcWeeklyStreak();const thisWeekCount=workoutLog.filter(e=>{const m=getMonday(new Date(e.date)).toISOString().slice(0,10);return m===getMonday(new Date()).toISOString().slice(0,10)}).length;
-  if(wkStreakP>0&&thisWeekCount<3){const need=3-thisWeekCount;h+=`<div class="streak-warning">🔥 <strong>${wkStreakP}-week streak!</strong> Need ${need} more session${need>1?'s':''} this week to keep it.</div>`}
-  else if(wkStreakP===0&&workoutLog.length>0){h+=`<div class="streak-warning lost">💀 Streak broken. Get 3 sessions this week to start a new one.</div>`}
-  h+=`<button class="edit-stats-btn" onclick="openWeighIn()" style="background:rgba(52,211,153,.08);border-color:var(--green);color:var(--green)">📏 Weekly Check-in</button>`;
-  h+=`<button class="edit-stats-btn" onclick="openProgressPhotos()" style="background:rgba(123,92,255,.08);border-color:var(--accent);color:var(--accent2)">📸 Progress Photos <span style="font-size:.6rem;color:var(--dim);margin-left:4px">device-only</span></button>`;
-  h+=`<button class="edit-stats-btn wardrobe-btn" onclick="openWardrobe()">✨ Wardrobe <span style="font-size:.6rem;color:var(--dim);margin-left:4px">frames · name colors</span></button>`;
-  h+=`<button class="edit-stats-btn" onclick="openSettings()">⚙️ Settings</button>`;
-  if(userData.role==='trainer')h+=`<button class="edit-stats-btn" onclick="switchSubTab('profile','trainer')" style="background:rgba(251,191,36,.08);border-color:var(--gold);color:var(--gold)">👨‍🏫 Trainer Dashboard</button>`;
+  const r=getEffectiveRank(),info=getXpBarInfo(),lv=getLevelInfo(),cap=getXpCap();
+  const title=(r.title&&r.title[userData.class])||rankLabel(r.name);const st=userData.stats||{};const prs=userData.prs||{};
+  const myCos=getCos();const best=bestLoggedLifts();const str=best.bench+best.squat+best.deadlift;
+  const wk=calcWeeklyStreak();
+  const nr=getNextRank(userData.xp);
+  const ri=RANKS.indexOf(r),gate=RANKS[ri+1];
+  let right=nr?`${fmtN(nr.min-userData.xp)} to ${rankLabel(nr.name)}`:'Max rank';
+  if(gate&&!gate.auto&&gate.trial&&!userData.trialsCompleted.includes(gate.trial)&&userData.xp>=gate.min){const t=RANK_TRIALS[gate.trial];right=`Pass ${t?dayLabel(t.name):'the trial'} first`}
+  const initial=esc(String(userData.username||'h')[0].toUpperCase());
+  let w=`<div class="sys-title">[ Status ]</div>
+    <div class="pf-id">
+      <button class="pf-pic${frameClass(myCos.frame)}" aria-label="Change profile photo" onclick="checkPhotoPrivacy(()=>document.getElementById('picInput').click())">${avatarHtml(userData.profilePic,`<span>${initial}</span>`)}</button>
+      <div class="pf-names"><div class="pf-user${nameClass(myCos.name)}">${esc(userData.username||'hunter')}</div>${myTitleId()?`<div class="pf-ttl">${titleLine(myTitleId())}</div>`:''}${userData.name?`<div class="mist sm">${esc(userData.name)}, only you see this</div>`:''}</div>
+      <div class="pf-rank" aria-label="${esc(rankLabel(r.name))}" style="--rk:${esc(r.color)}">${rankLetter(r)}</div></div>
+    ${userData.bio?`<div class="pf-bio">${esc(userData.bio)}</div>`:''}
+    <div class="pf-kv"><span class="mist">Job</span><span>${esc(userData.class||'None')}${userData.subclass?', '+esc(userData.subclass):''}</span></div>
+    <div class="pf-kv"><span class="mist">Class title</span><span>${esc(title)}</span></div>
+    ${(userData.redGatesCleared||0)>0?`<div class="pf-kv"><span class="mist">Red Gates</span><span class="gold">${userData.redGatesCleared} cleared</span></div>`:''}
+    ${(userData.blueGatesCleared||0)>0?`<div class="pf-kv"><span class="mist">Blue Gates</span><span class="sys">${userData.blueGatesCleared} cleared</span></div>`:''}
+    <div class="hh-bar"><span class="lv">Lv ${lv.level}</span><div class="hp"><div class="hp-fill${cap.softCap<1?' capped':''}" style="width:${info.pct}%"></div></div></div>
+    <div class="hh-sub"><span>${fmtN(userData.xp)} XP</span><span>${esc(right)}</span></div>
+    <div class="wline"></div>
+    <div class="pf-stats">
+      <div><span class="pf-k">STR</span><span class="num pf-v">${str?fmtN(str):'—'}</span><span class="mist sm">Best logged bench + squat + deadlift</span></div>
+      <div><span class="pf-k">VIT</span><span class="num pf-v">${fmtN(getLiftLogs().length)}</span><span class="mist sm">Workouts logged</span></div>
+      <div><span class="pf-k">AGI</span><span class="num pf-v">${fmtN(getActivityLogs().length)}</span><span class="mist sm">Cardio sessions</span></div>
+      <div><span class="pf-k">END</span><span class="num pf-v">${wk}</span><span class="mist sm">Week streak</span></div>
+    </div>`;
+  let h=`<div class="pg-head"><h1 class="pg-title">Profile</h1><div class="pg-actions"><button class="icon-btn" aria-label="Settings" onclick="openSettings()">${icon('gear',22)}</button></div></div>`;
+  h+=sysWin(w,'pf-win');
+  // Streak nudge (same rule as before: 3 sessions keeps a weekly streak alive)
+  const thisWeekCount=workoutLog.filter(e=>getMonday(new Date(e.date)).toISOString().slice(0,10)===getMonday(new Date()).toISOString().slice(0,10)).length;
+  if(wk>0&&thisWeekCount<3){const need=3-thisWeekCount;h+=`<div class="pf-streak">${icon('flame',16)}${wk}-week streak. ${need===1?'One more session':need+' more sessions'} this week keeps it.</div>`}
+  else if(wk===0&&workoutLog.length>0)h+=`<div class="pf-streak mist">${icon('flame',16)}Streak broken. Three sessions this week starts a new one.</div>`;
+  const kv=(v,k)=>`<div><div class="num pf-kv-v">${v}</div><div class="mist sm">${k}</div></div>`;
+  h+=`<div class="panel pf-body"><div class="sec-row" style="margin:0"><span class="sec">Body and lifts</span><span class="mist sm">${(userData.privacy||{}).hideStats?'Hidden from others':'Private'}</span></div>
+    <div class="pf-grid">${kv(st.height?esc(st.height):'—','Height')}${kv(st.weight?esc(st.weight)+' lb':'—','Weight')}${kv(st.age?esc(st.age):'—','Age')}
+    ${kv(prs.bench?fmtN(prs.bench):'—','Bench PR')}${kv(prs.squat?fmtN(prs.squat):'—','Squat PR')}${kv(prs.deadlift?fmtN(prs.deadlift):'—','Deadlift PR')}</div>
+    <button class="btn-s" style="width:100%;margin-top:16px" onclick="openWeighIn()">${icon('scale',16)} Weekly check-in</button></div>`;
+  const row=(ic,t,r,on,rc)=>`<button class="li" onclick="${on}"><span class="ico">${icon(ic,18)}</span><span class="t">${t}</span><span class="r${rc?' '+rc:''}">${r}</span><span class="chev">${icon('chev',16)}</span></button>`;
+  const achTotal=ACHIEVEMENTS.length,achHave=(userData.achievements||[]).length;
+  const frame=COSMETICS.find(c=>c.id===myCos.frame);
+  h+=`<div class="li-list pf-list">`+
+    row('badge','Badges',`${achHave} of ${achTotal}`,"openProfileView('badges')")+
+    row('ladder','Rank info',rankLabel(r.name),"openProfileView('rankinfo')")+
+    row('shard','Shop',`${fmtN(userData.shards||0)} shards`,"openProfileView('shop')",'gold')+
+    row('frame','Wardrobe',myTitleId()?esc(titleName(myTitleId())):frame?esc(frame.name):`${titlesEarned().length} title${titlesEarned().length!==1?'s':''} earned`,'openWardrobe()')+
+    row('camera','Progress photos','On this phone only','openProgressPhotos()')+
+    (userData.role==='trainer'?row('whistle','Trainer dashboard','Your clients',"openProfileView('trainer')"):'')+
+    row('gear','Settings','Account, privacy, alerts','openSettings()')+`</div>`;
   h+=renderDevTools();
+  h+=`<div class="pf-ver dim">Version ${APP_VERSION}</div>`;
   $('profileContent').innerHTML=h;
 }
 
@@ -2914,14 +2855,15 @@ function renderProfile(){
 function renderFriendsPage(){
   const fc=userData.friendCode||'------';
   const friends=userData.friends||[];
-  let h=`<div class="page-title">FRIENDS</div>`;
-  h+=`<div class="invite-card"><div class="ic-label">YOUR FRIEND &amp; INVITE CODE</div><div class="ic-code">${esc(fc)}</div>
-    <div class="ic-sub">New hunters need a code like this to sign up. Anyone who joins with yours is sent to you as a friend request.</div>
-    <div class="ic-btns"><button class="copy-code-btn" onclick="copyFriendCode()">📋 Copy code</button><button class="copy-code-btn ic-share" onclick="shareInvite()">📨 Share invite</button></div></div>`;
-  h+=`<div class="friend-add-row" style="margin-bottom:.6rem"><input type="text" id="friendCodeInput" class="auth-input" placeholder="Enter friend code" maxlength="6" style="margin:0;flex:1" autocapitalize="characters"><button class="m-save-btn" style="flex:0 0 auto;padding:10px 14px;border-radius:8px" onclick="sendFriendRequest()">Send Request</button></div>`;
+  let h=`<div class="panel invite-card"><div class="sec">Your invite code</div>
+    <div class="num ic-code">${esc(fc)}</div>
+    <div class="mist sm">New hunters need a code to sign up. Anyone who joins with yours is sent to you as a friend request.</div>
+    <div class="ic-btns"><button class="btn-s" onclick="copyFriendCode()">${icon('copy',16)} Copy</button><button class="btn-p" style="height:44px;font-size:15px" onclick="shareInvite()">${icon('share',16)} Share invite</button></div></div>`;
+  h+=`<div class="sec" style="margin-top:24px">Add a friend</div>
+    <div class="friend-add-row"><input type="text" id="friendCodeInput" class="auth-input invite-input" placeholder="Their 6-character code" maxlength="6" autocapitalize="characters" aria-label="Friend code"><button class="btn-s" onclick="sendFriendRequest()">Send</button></div>`;
   h+=`<div id="friendRequests"></div>`;
-  h+=`<div class="section-title" style="margin:.6rem 0 .3rem">FRIENDS LIST (${friends.length})</div>`;
-  h+=`<div id="friendsList"></div>`;
+  h+=`<div class="sec-row"><span class="sec">Friends</span><span class="mist sm">${friends.length}</span></div>`;
+  h+=`<div id="friendsList" class="li-list"></div>`;
   $('friendsPageContent').innerHTML=h;
   loadFriendsList();
 }
@@ -2940,12 +2882,12 @@ function openSettings(){
   $('setBio').value=userData.bio||'';
   $('setBench').value=prs.bench||'';$('setSquat').value=prs.squat||'';$('setDeadlift').value=prs.deadlift||'';$('setOhp').value=prs.ohp||'';
   $('setGoal').value=userData.goal||'';$('setExperience').value=userData.experience||'';
-  $('setHideName').checked=!!priv.hideName;$('setHideStats').checked=!!priv.hideStats;$('setShareActivity').checked=priv.shareActivity!==false;
+  $('setHideName').checked=!!priv.hideName;$('setHideStats').checked=!!priv.hideStats;$('setShareActivity').checked=priv.shareActivity!==false;if($('setHideHof'))$('setHideHof').checked=priv.hideHof!==true;
   // Training goal button label
   const tgBtn=$('setTrainingGoalBtn');
   if(tgBtn){
     const g=userData.weeklyTrainingGoal;
-    tgBtn.textContent=g?`📅 ${g} workouts/week (tap to change)`:'— /week (tap to set)';
+    tgBtn.textContent=g?`${g} workouts/week (tap to change)`:'— /week (tap to set)';
   }
   // Notification prefs (default all to true)
   const np=userData.notifPrefs||{};
@@ -2959,15 +2901,15 @@ function openSettings(){
   const isStandalone=window.matchMedia('(display-mode: standalone)').matches||window.navigator.standalone;
   const btn=$('enableNotifBtn');
   let statusText='';
-  if(!('Notification' in window)){statusText='❌ This browser doesn\'t support notifications.';if(btn)btn.style.display='none'}
-  else if(isIOS&&!isStandalone){statusText='⚠️ iOS: Install app to home screen first (tap Share → Add to Home Screen in Safari).';if(btn){btn.style.display='';btn.textContent='📱 How to Install'}}
-  else if(notifPermission==='granted'){statusText='✅ Notifications enabled — you\'ll get pings when the app is open or recently closed.';if(btn)btn.style.display='none'}
-  else if(notifPermission==='denied'){statusText='❌ Notifications blocked. Enable in browser/phone settings to receive alerts.';if(btn)btn.style.display='none'}
-  else{statusText='Allow notifications to get alerts for messages, pokes, and event missions.';if(btn){btn.style.display='';btn.textContent='🔔 Enable Notifications'}}
+  if(!('Notification' in window)){statusText='This browser doesn\'t support notifications.';if(btn)btn.style.display='none'}
+  else if(isIOS&&!isStandalone){statusText='iOS: Install app to home screen first (tap Share → Add to Home Screen in Safari).';if(btn){btn.style.display='';btn.textContent='How to Install'}}
+  else if(notifPermission==='granted'){statusText='Notifications enabled — you\'ll get pings when the app is open or recently closed.';if(btn)btn.style.display='none'}
+  else if(notifPermission==='denied'){statusText='Notifications blocked. Enable in browser/phone settings to receive alerts.';if(btn)btn.style.display='none'}
+  else{statusText='Allow notifications to get alerts for messages, pokes, and event missions.';if(btn){btn.style.display='';btn.textContent='Enable Notifications'}}
   $('notifStatus').textContent=statusText;
   // Trainer status
-  if(userData.trainer){$('trainerStatus').innerHTML='✅ <strong style="color:var(--green)">Connected to a trainer</strong><br><button class="copy-code-btn" onclick="disconnectTrainer()" style="margin-top:4px">Disconnect</button>';$('trainerCodeRow').style.display='none'}
-  else if(userData.role==='trainer'){$('trainerStatus').innerHTML='👨‍🏫 <strong style="color:var(--gold)">You are a trainer</strong><br>Share your code from Profile → Trainer tab';$('trainerCodeRow').style.display='none'}
+  if(userData.trainer){$('trainerStatus').innerHTML='<strong style="color:var(--green)">Connected to a trainer</strong><br><button class="copy-code-btn" onclick="disconnectTrainer()" style="margin-top:4px">Disconnect</button>';$('trainerCodeRow').style.display='none'}
+  else if(userData.role==='trainer'){$('trainerStatus').innerHTML='<strong style="color:var(--gold)">You are a trainer</strong><br>Share your code from Profile → Trainer tab';$('trainerCodeRow').style.display='none'}
   else{$('trainerStatus').textContent='Have a trainer? Enter their code to share your progress with them.';$('trainerCodeRow').style.display='';$('setTrainerCode').value=''}
   $('settingsModal').classList.add('open');
 }
@@ -2980,10 +2922,10 @@ async function enableNotifications(){
     const p=await Notification.requestPermission();
     notifPermission=p;
     if(p==='granted'){
-      toast('🔔 Notifications enabled!');
+      toast('Notifications enabled!');
       startRealtimeListeners();
       // Test notification
-      sendNotif('LexenFitness','Notifications working! 🎉',{tag:'test'});
+      sendNotif('LexenFitness','Notifications working! ',{tag:'test'});
       openSettings();
     }else if(p==='denied'){
       toast('Permission denied. Check browser/phone settings to re-enable.');
@@ -3018,7 +2960,7 @@ async function saveSettings(){
   const stats={height:$('setHeight').value.trim(),weight:$('setWeight').value.trim(),age:$('setAge').value.trim(),bodyFat:$('setBodyFat').value.trim(),sex:$('setSex').value};
   const prs={bench:$('setBench').value.trim(),squat:$('setSquat').value.trim(),deadlift:$('setDeadlift').value.trim(),ohp:$('setOhp').value.trim()};
   if(prs.bench&&prs.squat&&prs.deadlift&&prs.ohp)unlockAch('set_prs');
-  const privacy={hideName:$('setHideName').checked,hideStats:$('setHideStats').checked,shareActivity:$('setShareActivity').checked};
+  const privacy={hideName:$('setHideName').checked,hideStats:$('setHideStats').checked,shareActivity:$('setShareActivity').checked,hideHof:$('setHideHof')?!$('setHideHof').checked:false};
   const notifPrefs={
     messages:$('setNotifMessages').checked,
     friendRequests:$('setNotifFriendReqs').checked,
@@ -3088,19 +3030,17 @@ async function loadFriendRequests(){
   try{
     const snap=await db.collection('friendRequests').where('to','==',U.uid).where('status','==','pending').get();
     if(snap.empty){el.innerHTML='';return}
-    let h='<div style="font-size:.72rem;color:var(--gold);margin-bottom:.3rem;font-family:var(--font-mono)">PENDING REQUESTS</div>';
+    let h='<div class="sec" style="margin-top:24px">Requests</div><div class="li-list">';
     for(const doc of snap.docs){
       const req=doc.data();
-      h+=`<div class="friend-request">
-        <div class="lb-pic">${avatarHtml(req.fromPic,'👤')}</div>
-        <div class="lb-info"><div class="lb-name">@${esc(req.fromUsername)}</div><div class="lb-class">wants to be friends</div></div>
-        <button class="fr-accept" onclick="acceptFriendRequest('${safeId(doc.id)}','${safeId(req.from)}')">✓</button>
-        <button class="fr-decline" onclick="declineFriendRequest('${safeId(doc.id)}')">✕</button>
-      </div>`;
+      h+=`<div class="li"><span class="ff-pic">${avatarHtml(req.fromPic,`<span>${esc(String(req.fromUsername||'h')[0].toUpperCase())}</span>`)}</span>
+        <span class="t">${esc(req.fromUsername)}<small>Wants to be friends</small></span>
+        <button class="btn-p sm" onclick="acceptFriendRequest('${safeId(doc.id)}','${safeId(req.from)}')">Accept</button>
+        <button class="ring" aria-label="Decline" onclick="declineFriendRequest('${safeId(doc.id)}')">${icon('x',16)}</button></div>`;
     }
-    el.innerHTML=h;
+    el.innerHTML=h+'</div>';
   }catch(e){
-    el.innerHTML=`<p style="color:var(--red);font-size:.7rem">Request load error: ${e.message}</p>`;
+    el.innerHTML=`<div class="empty-note" style="color:var(--red)">Couldn't load requests: ${esc(e.message||'')}</div>`;
   }
 }
 
@@ -3152,7 +3092,7 @@ async function loadFriendsList(){
   const list=$('friendsList');if(!list)return;
   await loadFriendRequests();
   const friends=userData.friends||[];
-  if(!friends.length){list.innerHTML='<p style="color:var(--muted);font-size:.76rem">No friends yet — share your code!</p>';return}
+  if(!friends.length){list.innerHTML='<div class="empty-note">No friends yet. Share your code to get started.</div>';return}
   const myPokeStreaks=userData.pokeStreaks||{};
   const myLastMutual=userData.pokeLastMutual||{};
   const today=getTodayStr();
@@ -3161,30 +3101,29 @@ async function loadFriendsList(){
   for(const fid of friends.slice(0,20)){
     try{
       const d=await db.collection('leaderboard').doc(fid).get();
-      if(!d.exists){h+=`<div class="friend-row" style="opacity:.4"><div class="lb-pic">👤</div><div class="lb-info"><div class="lb-name">Deleted user</div></div></div>`;continue}
+      if(!d.exists){h+=`<div class="li dim"><span class="ff-pic">${avatarHtml('')}</span><span class="t">Deleted account</span></div>`;continue}
       const f=d.data();const r=(f.rank&&RANKS.find(x=>x.name===f.rank))||getRank(f.xp||0);
       let streak=myPokeStreaks[fid]||0;
       const lastMutualDay=myLastMutual[fid];
       // Display-side decay: if last mutual was 2+ days ago, show 0
       if(streak>0&&lastMutualDay){
         const lastM=new Date(lastMutualDay+'T12:00:00');
-        const daysSinceMutual=Math.floor((Date.now()-lastM.getTime())/86400000);
-        if(daysSinceMutual>=2)streak=0;
+        if(Math.floor((Date.now()-lastM.getTime())/86400000)>=2)streak=0;
       }
       const pokedTodayFlag=pokedToday[fid]===today;
-      // Streak at risk: last mutual was yesterday, no mutual today yet
       const atRisk=streak>0&&lastMutualDay&&lastMutualDay!==today;
-      const streakDisplay=streak>0?`<span class="poke-streak${atRisk?' at-risk':''}" title="${atRisk?'Both poke today to keep streak':'Streak active'}">🔥${streak}${atRisk?'⚠️':''}</span>`:'';
+      const sub=[rankLabel(r.name),f.class?esc(f.class):'',streak>0?`${streak}-day poke streak${atRisk?', poke today to keep it':''}`:''].filter(Boolean).join('. ');
       const pokeBtn=pokedTodayFlag
-        ?`<button class="poke-btn poked" disabled title="Already poked today">✓</button>`
-        :`<button class="poke-btn" onclick="event.stopPropagation();sendPoke('${safeId(fid)}','${safeName(f.username||'hunter')}')">👋</button>`;
-      h+=`<div class="friend-row" onclick="openProfileCard('${safeId(fid)}')"><div class="lb-pic${frameClass(f.frame)}">${avatarHtml(f.profilePic,'👤')}</div><div class="lb-info"><div class="lb-name${nameClass(f.nameColor)}">@${esc(f.username||'hunter')} ${streakDisplay}</div><div class="lb-class">${esc(f.class||'')}</div></div>${pokeBtn}<div class="lb-xp">${num(f.xp)}</div><div class="lb-rank" style="color:${r.color}">${r.name}</div></div>`;
+        ?`<span class="mist sm">Poked</span>`
+        :`<button class="btn-s ghost sm" onclick="event.stopPropagation();sendPoke('${safeId(fid)}','${safeName(f.username||'hunter')}')">Poke</button>`;
+      h+=`<div class="li" role="button" tabindex="0" onclick="openProfileCard('${safeId(fid)}')"><span class="ff-pic${r.name==='S-RANK'?' s':''}${frameClass(f.frame)}">${avatarHtml(f.profilePic,`<span>${esc(String(f.username||'h')[0].toUpperCase())}</span>`)}</span>
+        <span class="t"><span class="${nameClass(f.nameColor).trim()}">${esc(f.username||'hunter')}</span><small${atRisk?' class="lilac"':''}>${sub}</small></span>${pokeBtn}</div>`;
       loaded++;
     }catch(e){
-      h+=`<div class="friend-row" style="opacity:.5"><div class="lb-pic">⚠️</div><div class="lb-info"><div class="lb-name" style="color:var(--red)">Load failed</div><div class="lb-class">${e.message}</div></div></div>`;
+      h+=`<div class="li"><span class="t" style="color:var(--red)">Couldn't load this friend<small>${esc(e.message||'')}</small></span></div>`;
     }
   }
-  if(!loaded&&friends.length)h+=`<p style="color:var(--gold);font-size:.72rem">Friends in your list but can't read their profiles. Update Firestore rules.</p>`;
+  if(!loaded&&friends.length)h+=`<div class="empty-note gold">Friends are in your list but their profiles can't be read. The database rules need updating.</div>`;
   list.innerHTML=h;
 }
 
@@ -3275,11 +3214,11 @@ async function sendPoke(fid,fusername){
     unlockAch('poke_first');
 
     let streakMsg='';
-    if(theyPokedMeToday&&newStreak>0)streakMsg=` · 🔥${newStreak} streak`;
-    else if(newStreak>0)streakMsg=` · 🔥${newStreak} (waiting for reply)`;
+    if(theyPokedMeToday&&newStreak>0)streakMsg=` · ${newStreak} streak`;
+    else if(newStreak>0)streakMsg=` · ${newStreak} (waiting for reply)`;
     else streakMsg=' · waiting for reply to start streak';
 
-    toast(`👋 Poked @${fusername}! +${gained} XP${streakMsg}`);
+    toast(`Poked @${fusername}! +${gained} XP${streakMsg}`);
     loadFriendsList();
   }catch(e){console.error(e);toast(e.code==='permission-denied'?`Can't poke @${fusername} yet — they need to open the app once so your friendship syncs`:'Poke failed: '+e.message)}
 }
@@ -3296,42 +3235,40 @@ async function checkIncomingPokes(){
   if(sessionStorage.getItem('pokesSeen'))return;
   sessionStorage.setItem('pokesSeen','1');
   if(recent.length===1){
-    toast(`👋 @${recent[0].fromName} poked you! Time to train.`);
+    toast(`@${recent[0].fromName} poked you! Time to train.`);
   }else{
-    toast(`👋 You have ${recent.length} pokes waiting!`);
+    toast(`You have ${recent.length} pokes waiting!`);
   }
 }
 
 // ═══════════ LEADERBOARD (username only) ═══════════
 let lbData=[];
-async function renderLeaderboard(){let list=[];if(lbMode==='friends'){const fids=[U.uid,...(userData.friends||[])];for(const fid of fids.slice(0,30)){try{const d=await db.collection('leaderboard').doc(fid).get();if(d.exists)list.push({uid:d.id,...d.data()})}catch(e){}}list.sort((a,b)=>b.xp-a.xp)}else{const snap=await db.collection('leaderboard').orderBy('xp','desc').limit(50).get();snap.forEach(d=>list.push({uid:d.id,...d.data()}))}
+async function renderLeaderboard(){
+  const el=$('lbList');if(!el)return;
+  const sub=$('lbSub');if(sub)sub.textContent=lbMode==='hof'?'Records from logged sets, across every hunter':lbMode==='friends'?'You and your friends, by XP':'Top hunters by XP';
+  if(lbMode==='hof'){await renderHallOfFame(el);return}
+  let list=[];
+  try{
+    if(lbMode==='friends'){const fids=[U.uid,...(userData.friends||[])];for(const fid of fids.slice(0,30)){try{const d=await db.collection('leaderboard').doc(fid).get();if(d.exists)list.push({uid:d.id,...d.data()})}catch(e){}}list.sort((a,b)=>b.xp-a.xp)}
+    else{const snap=await db.collection('leaderboard').orderBy('xp','desc').limit(50).get();snap.forEach(d=>list.push({uid:d.id,...d.data()}))}
+  }catch(e){el.innerHTML=`<div class="empty-note">Couldn't load the leaderboard. ${esc(e.message||'')}</div>`;return}
   lbData=list;
   const myPokedToday=userData.pokedToday||{};const today=getTodayStr();
-  const myStreaks=userData.pokeStreaks||{};const myLastMutual=userData.pokeLastMutual||{};
-  let h=`<div class="log-filters" style="margin-bottom:.7rem"><div class="log-filter ${lbMode==='all'?'active':''}" onclick="lbMode='all';renderLeaderboard()">All Hunters</div><div class="log-filter ${lbMode==='friends'?'active':''}" onclick="lbMode='friends';renderLeaderboard()">Friends</div></div>`;
-  h+=list.length?list.map((u,i)=>{
-    const me=U&&u.uid===U.uid;const r=(u.rank&&RANKS.find(x=>x.name===u.rank))||getRank(u.xp);const pc=i===0?'gold':i===1?'silver':i===2?'bronze':'';
-    // Poke button for friends only (not self, not in All mode)
-    let pokeUI='';
+  let h=hofTabs();
+  h+=list.length?'<div class="li-list">'+list.map((u,i)=>{
+    const me=U&&u.uid===U.uid;const r=(u.rank&&RANKS.find(x=>x.name===u.rank))||getRank(u.xp);
+    let poke='';
     if(!me&&lbMode==='friends'&&(userData.friends||[]).includes(u.uid)){
-      let streak=myStreaks[u.uid]||0;
-      const lastMutual=myLastMutual[u.uid];
-      if(streak>0&&lastMutual){
-        const lastM=new Date(lastMutual+'T12:00:00');
-        const daysSince=Math.floor((Date.now()-lastM.getTime())/86400000);
-        if(daysSince>=2)streak=0;
-      }
-      const atRisk=streak>0&&lastMutual&&lastMutual!==today;
-      const streakTag=streak>0?`<span class="poke-streak${atRisk?' at-risk':''}">🔥${streak}${atRisk?'⚠️':''}</span>`:'';
-      const poked=myPokedToday[u.uid]===today;
-      const pokeBtn=poked
-        ? `<button class="poke-btn poked" disabled>✓</button>`
-        : `<button class="poke-btn" onclick="event.stopPropagation();sendPoke('${safeId(u.uid)}','${safeName(u.username||'hunter')}')">👋</button>`;
-      pokeUI=streakTag+pokeBtn;
+      poke=myPokedToday[u.uid]===today?`<span class="mist sm">Poked</span>`:`<button class="btn-s ghost sm" onclick="event.stopPropagation();sendPoke('${safeId(u.uid)}','${safeName(u.username||'hunter')}')">Poke</button>`;
     }
-    return`<div class="lb-row${me?' me':''}" onclick="openProfileCard('${safeId(u.uid)}')"><span class="lb-pos ${pc}">${i+1}</span><div class="lb-pic${frameClass(u.frame)}">${avatarHtml(u.profilePic,'👤')}</div><div class="lb-info"><div class="lb-name${nameClass(u.nameColor)}">@${esc(u.username||'hunter')}</div><div class="lb-class">${esc(u.class||'')}${u.subclass?' • '+esc(u.subclass):''}</div></div>${pokeUI}<div class="lb-xp">${num(u.xp)}</div><div class="lb-rank" style="color:${r.color}">${r.name}</div></div>`;
-  }).join(''):'<p style="color:var(--muted);font-size:.82rem">No hunters yet.</p>';
-  $('lbList').innerHTML=h}
+    const tn=titleName(u.titleId);
+    const sub=tn?`${rankLabel(r.name)}, <span class="ttl-chip${u.titleId==='shadow_monarch'?' gold':''}">${esc(tn)}</span>`:[rankLabel(r.name),u.class?esc(u.class)+(u.subclass?', '+esc(u.subclass):''):''].filter(Boolean).join('. ');
+    return `<div class="li lb-li${me?' me':''}" role="button" tabindex="0" onclick="openProfileCard('${safeId(u.uid)}')"><span class="num lb-pos${i<3?' top':''}">${i+1}</span>
+      <span class="ff-pic${r.name==='S-RANK'?' s':''}${frameClass(u.frame)}">${avatarHtml(u.profilePic,`<span>${esc(String(u.username||'h')[0].toUpperCase())}</span>`)}</span>
+      <span class="t"><span class="${nameClass(u.nameColor).trim()}">${esc(u.username||'hunter')}${me?' <span class="mist">(you)</span>':''}</span><small>${sub}</small></span>${poke}<span class="num lb-xp">${fmtN(u.xp)}<small>XP</small></span></div>`;
+  }).join('')+'</div>':'<div class="empty-note">No hunters yet.</div>';
+  el.innerHTML=h;
+}
 
 // ═══════════ PROFILE CARD (tap user) ═══════════
 async function openProfileCard(uid){
@@ -3349,23 +3286,24 @@ async function openProfileCard(uid){
     const title=(r.title&&r.title[u.class])||r.name;
     const isFriend=(userData.friends||[]).includes(uid);
     let h=`<div class="pc-header">
-      <div class="pc-pic${frameClass(u.frame||(u.cosmetics&&u.cosmetics.frame))}">${avatarHtml(u.profilePic,'<div class="pp-placeholder" style="width:60px;height:60px;font-size:1.6rem">👤</div>')}</div>
+      <div class="pc-pic${frameClass(u.frame||(u.cosmetics&&u.cosmetics.frame))}">${avatarHtml(u.profilePic)}</div>
       <div class="pc-info">
         <div class="pc-username${nameClass(u.nameColor||(u.cosmetics&&u.cosmetics.name))}">@${esc(u.username||'hunter')}</div>
-        <div class="pc-class">${esc(u.class||'')}${u.subclass?' — '+esc(u.subclass):''}</div>
-        <div class="pc-rank" style="color:${r.color}">${r.name} — ${title}</div>
+        ${titleName(u.titleId)?`<div class="pc-ttl">${titleLine(u.titleId)}</div>`:''}
+        <div class="pc-class">${esc(u.class||'')}${u.subclass?', '+esc(u.subclass):''}</div>
+        <div class="pc-rank${r.name==='S-RANK'?' gold':''}">${rankLabel(r.name)}, ${esc(title)}</div>
       </div>
     </div>`;
     if(u.bio)h+=`<div class="pc-bio">${esc(u.bio)}</div>`;
     h+=`<div class="pc-stats">
-      <div class="pc-stat"><div class="pc-stat-val">${num(u.xp)}</div><div class="pc-stat-label">XP</div></div>
+      <div class="pc-stat"><div class="pc-stat-val">${fmtN(u.xp)}</div><div class="pc-stat-label">XP</div></div>
       <div class="pc-stat"><div class="pc-stat-val">${u.workouts!=null?num(u.workouts):'?'}</div><div class="pc-stat-label">Workouts</div></div>
       <div class="pc-stat"><div class="pc-stat-val">${u.achievements?u.achievements.length:(u.achCount!=null?num(u.achCount):'—')}</div><div class="pc-stat-label">Badges</div></div>
     </div>`;
     if(isFriend){
-      h+=`<div class="pc-friend-status">✅ Friends</div>`;
+      h+=`<div class="pc-friend-status">You're friends</div>`;
     }else{
-      h+=`<button class="pc-add-btn" onclick="addFriendFromCard('${safeId(uid)}')">🤝 Add Friend</button>`;
+      h+=`<button class="pc-add-btn" onclick="addFriendFromCard('${safeId(uid)}')">Add friend</button>`;
     }
     h+=`<div class="m-actions" style="margin-top:.6rem"><button class="m-cancel" onclick="closeProfileCard()">Close</button></div>`;
     modal.querySelector('.modal').innerHTML=h;
@@ -3394,53 +3332,53 @@ function renderLog(){const c=$('logContent');if(!workoutLog.length){c.innerHTML=
   const weeks={};filtered.forEach(e=>{const d=new Date(e.date),m=getMonday(d),k=m.toISOString().slice(0,10);if(!weeks[k])weeks[k]={monday:m,entries:[]};weeks[k].entries.push(e)});
   const sorted=Object.values(weeks).sort((a,b)=>b.monday-a.monday);
   let h='<div class="log-filters"><div class="log-filter'+(logFilter==='all'?' active':'')+'" onclick="setFilter(\'all\')">All</div>';
-  prog.forEach(d=>h+='<div class="log-filter'+(logFilter===d.id?' active':'')+'" onclick="setFilter(\''+d.id+'\')">'+d.title+'</div>');h+='</div>';
+  prog.forEach(d=>h+='<div class="log-filter'+(logFilter===d.id?' active':'')+'" onclick="setFilter(\''+d.id+'\')">'+esc(dayLabel(d.title))+'</div>');h+='</div>';
   sorted.forEach(week=>{const sun=new Date(week.monday);sun.setDate(sun.getDate()+6);const fmt=d=>d.toLocaleDateString('en-US',{month:'short',day:'numeric'});const wn=getWeekNum(week.monday);
     const wkSessions=week.entries.filter(e=>!e.isRest||e.restType==='active').length;
-    h+='<div class="week-group"><div class="week-header" onclick="toggleWk(this)"><span>WEEK '+wn+' <span class="wk-dates">'+fmt(week.monday)+' – '+fmt(sun)+'</span></span><span class="wk-count">'+wkSessions+' session'+(wkSessions!==1?'s':'')+' ▼</span></div><div class="week-body">';
+    h+='<div class="week-group"><div class="week-header" onclick="toggleWk(this)"><span>Week '+wn+' <span class="wk-dates">'+fmt(week.monday)+' – '+fmt(sun)+'</span></span><span class="wk-count">'+wkSessions+' session'+(wkSessions!==1?'s':'')+' ▼</span></div><div class="week-body">';
     week.entries.sort((a,b)=>new Date(a.date)-new Date(b.date));
     week.entries.forEach(entry=>{
       try{
         const d=new Date(entry.date),ds=d.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
-        const dayChip='<span class="log-daychip">'+d.toLocaleDateString('en-US',{weekday:'short'}).toUpperCase()+'<span class="lc-num">'+d.getDate()+'</span></span>';
+        const dayChip='<span class="log-daychip">'+d.toLocaleDateString('en-US',{weekday:'short'})+'<span class="lc-num">'+d.getDate()+'</span></span>';
         // Handle rest days
         if(entry.isRest){
-          const icon=entry.restType==='active'?'🚶':'🛏️';
+          const ic=icon(entry.restType==='active'?'pulse':'moon',16);
           const label=entry.restType==='active'?'Active Rest':'Full Rest';
-          h+='<div class="day-log"><div class="day-log-head"><span class="day-log-title">'+dayChip+icon+' '+esc(label)+'</span><span><span class="day-log-date">'+ds+'</span> <button class="btn-del" onclick="delLog(\''+entry._id+'\')">✕</button></span></div>'+(entry.notes?'<div style="padding:6px 10px;font-size:.72rem;color:var(--muted);font-style:italic">'+esc(entry.notes)+'</div>':'')+'</div>';
+          h+='<div class="day-log"><div class="day-log-head"><span class="day-log-title">'+dayChip+ic+' '+esc(label)+'</span><span><span class="day-log-date">'+ds+'</span> <button class="btn-del" onclick="delLog(\''+entry._id+'\')">✕</button></span></div>'+(entry.notes?'<div style="padding:6px 10px;font-size:.72rem;color:var(--muted);font-style:italic">'+esc(entry.notes)+'</div>':'')+'</div>';
           return;
         }
         // Handle activity/cardio entries
         if(entry.isActivity){
-          const icon='🏃';
+          const ic=icon('pulse',16);
           const detailParts=[];
           if(entry.duration)detailParts.push(entry.duration+' min');
           if(entry.calBurned)detailParts.push(entry.calBurned+' cal');
           if(entry.steps)detailParts.push(entry.steps.toLocaleString()+' steps');
-          h+='<div class="day-log"><div class="day-log-head"><span class="day-log-title">'+dayChip+icon+' '+esc(entry.dayTitle||'Activity')+'</span><span><span class="day-log-date">'+ds+'</span> <button class="btn-del" onclick="delLog(\''+entry._id+'\')">✕</button></span></div>'+(detailParts.length?'<div style="padding:6px 10px;font-size:.72rem;color:var(--muted)">'+detailParts.join(' · ')+'</div>':'')+(entry.notes?'<div style="padding:0 10px 8px;font-size:.7rem;color:var(--dim);font-style:italic">'+esc(entry.notes)+'</div>':'')+'</div>';
+          h+='<div class="day-log"><div class="day-log-head"><span class="day-log-title">'+dayChip+ic+' '+esc(entry.dayTitle||'Activity')+'</span><span><span class="day-log-date">'+ds+'</span> <button class="btn-del" onclick="delLog(\''+entry._id+'\')">✕</button></span></div>'+(detailParts.length?'<div style="padding:6px 10px;font-size:.72rem;color:var(--muted)">'+detailParts.join(' · ')+'</div>':'')+(entry.notes?'<div style="padding:0 10px 8px;font-size:.7rem;color:var(--dim);font-style:italic">'+esc(entry.notes)+'</div>':'')+'</div>';
           return;
         }
         // Regular lift entry — guard against missing/empty exercises
         const exs=(entry.exercises||[]).filter(ex=>Array.isArray(ex.sets));
         if(!exs.length){
-          h+='<div class="day-log"><div class="day-log-head"><span class="day-log-title">'+esc(entry.dayTitle||'Workout')+'</span><span><span class="day-log-date">'+ds+'</span> <button class="btn-del" onclick="delLog(\''+entry._id+'\')">✕</button></span></div><div style="padding:8px 10px;font-size:.7rem;color:var(--dim);font-style:italic">No sets recorded</div></div>';
+          h+='<div class="day-log"><div class="day-log-head"><span class="day-log-title">'+esc(dayLabel(entry.dayTitle||'Workout'))+'</span><span><span class="day-log-date">'+ds+'</span> <button class="btn-del" onclick="delLog(\''+entry._id+'\')">✕</button></span></div><div style="padding:8px 10px;font-size:.7rem;color:var(--dim);font-style:italic">No sets recorded</div></div>';
           return;
         }
         const maxS=Math.max(...exs.map(x=>x.sets.length));
-        const bd=entry.backdated?' <span style="color:var(--gold);font-size:.6rem;font-weight:700;margin-left:4px">📅 BACKDATED</span>':'';
-        const dur=entry.durationSec?' <span style="color:var(--accent);font-size:.62rem;font-weight:700;margin-left:4px">⏱ '+Math.floor(entry.durationSec/60)+'m</span>':'';
-        h+='<div class="day-log"><div class="day-log-head"><span class="day-log-title">'+dayChip+esc(entry.dayTitle||'Workout')+bd+dur+'</span><span><span class="day-log-date">'+ds+'</span> <button class="btn-del" style="margin-right:2px" onclick="editLogNote(\''+entry._id+'\')">📝</button><button class="btn-del" onclick="delLog(\''+entry._id+'\')">✕</button></span></div>'+(entry.notes?'<div class="log-note'+(INJURY_RX.test(entry.notes)?' warn':'')+'">'+(INJURY_RX.test(entry.notes)?'⚠️ ':'📝 ')+esc(entry.notes)+'</div>':'')+'<div class="log-table-wrap"><table class="log-table"><thead><tr><th>Exercise</th>';
+        const bd=entry.backdated?' <span style="color:var(--gold);font-size:.6rem;font-weight:700;margin-left:4px">Backdated</span>':'';
+        const dur=entry.durationSec?' <span style="color:var(--accent);font-size:.62rem;font-weight:700;margin-left:4px">'+Math.floor(entry.durationSec/60)+' min</span>':'';
+        h+='<div class="day-log"><div class="day-log-head"><span class="day-log-title">'+dayChip+esc(dayLabel(entry.dayTitle||'Workout'))+bd+dur+'</span><span><span class="day-log-date">'+ds+'</span> <button class="btn-del" style="margin-right:2px" onclick="editLogNote(\''+entry._id+'\')" aria-label="Edit note">'+icon('note',16)+'</button><button class="btn-del" onclick="delLog(\''+entry._id+'\')">✕</button></span></div>'+(entry.notes?'<div class="log-note'+(INJURY_RX.test(entry.notes)?' warn':'')+'">'+(INJURY_RX.test(entry.notes)?'':'')+esc(entry.notes)+'</div>':'')+'<div class="log-table-wrap"><table class="log-table"><thead><tr><th>Exercise</th>';
         for(let i=0;i<maxS;i++)h+='<th>S'+(i+1)+'</th>';h+='</tr></thead><tbody>';
         exs.forEach(ex=>{
           if(!ex.sets.some(s=>s&&(s.reps||s.weight)))return;
-          h+='<tr><td style="font-weight:600;font-size:.74rem;max-width:120px;overflow:hidden;text-overflow:ellipsis">'+esc(ex.name)+(ex.note?'<div class="log-ex-note'+(INJURY_RX.test(ex.note)?' warn':'')+'">'+(INJURY_RX.test(ex.note)?'⚠️ ':'📝 ')+esc(ex.note)+'</div>':'')+'</td>';
+          h+='<tr><td style="font-weight:600;font-size:.74rem;max-width:120px;overflow:hidden;text-overflow:ellipsis">'+esc(ex.name)+(ex.note?'<div class="log-ex-note'+(INJURY_RX.test(ex.note)?' warn':'')+'">'+esc(ex.note)+'</div>':'')+'</td>';
           for(let i=0;i<maxS;i++){const s=ex.sets[i];if(!s||(!s.reps&&!s.weight)){h+='<td class="c-empty">—</td>';continue}const cls=s.done?'c-done':'c-miss';h+=s.isTime?'<td class="'+cls+'">'+(s.reps||0)+'s'+(s.done?' ✓':'')+'</td>':'<td class="'+cls+'">'+(s.weight||0)+'×'+(s.reps||0)+(s.done?' ✓':'')+'</td>'}
           h+='</tr>';
         });
         h+='</tbody></table></div></div>';
       }catch(e){
         console.error('Log entry render failed:',e,entry);
-        h+='<div class="day-log" style="opacity:.5"><div class="day-log-head"><span class="day-log-title" style="color:var(--red)">⚠️ Entry render failed</span><span><button class="btn-del" onclick="delLog(\''+(entry._id||'')+'\')">✕</button></span></div></div>';
+        h+='<div class="day-log" style="opacity:.5"><div class="day-log-head"><span class="day-log-title" style="color:var(--red)">Entry render failed</span><span><button class="btn-del" onclick="delLog(\''+(entry._id||'')+'\')">✕</button></span></div></div>';
       }
     });
     h+='</div></div>';
@@ -3468,7 +3406,7 @@ function showWelcomeMessage(){
   let old=$('welcomeOverlay');if(old)old.remove();
   const overlay=document.createElement('div');overlay.id='welcomeOverlay';overlay.className='wn-overlay';
   let h=`<div class="wn-modal welcome-modal">
-    <div class="welcome-header"><div class="welcome-icon">⚔️</div><div class="wn-title">Welcome, Hunter</div></div>
+    <div class="welcome-header"><div class="welcome-icon"></div><div class="wn-title">Welcome, Hunter</div></div>
     <div class="welcome-body">${WELCOME_MESSAGE.replace(/\n/g,'<br>')}</div>
     <button class="wn-btn" id="welcomeDismiss">Enter the System</button>
   </div>`;
@@ -3499,14 +3437,13 @@ function compareVer(a,b){
 function showWhatsNew(entries){
   let old=$('whatsNewOverlay');if(old)old.remove();
   const overlay=document.createElement('div');overlay.id='whatsNewOverlay';overlay.className='wn-overlay';
-  let h=`<div class="wn-modal">`;
-  h+=`<div class="wn-header"><div class="wn-badge">NEW</div><div class="wn-title">What's New</div><div class="wn-ver">v${APP_VERSION}</div></div>`;
-  entries.forEach(e=>{
-    h+=`<div class="wn-section"><div class="wn-section-title">${e.title} <span class="wn-date">${e.date}</span></div>`;
-    h+=`<ul class="wn-list">${e.items.map(i=>`<li>${i}</li>`).join('')}</ul></div>`;
+  let inner=`<div class="sys-title">[ System update ]</div><div class="wn-ver">Version ${APP_VERSION}</div><div class="wline"></div><div class="wn-scroll">`;
+  entries.forEach((e,i)=>{
+    inner+=`<div class="wn-section"><div class="wn-section-title">${esc(e.title)}</div>${i===0&&e.blurb?`<p class="wn-blurb">${esc(e.blurb)}</p>`:''}
+      <ul class="wn-list">${e.items.map(it=>`<li>${esc(it)}</li>`).join('')}</ul></div>`;
   });
-  h+=`<button class="wn-btn" id="wnDismiss">Got it</button></div>`;
-  overlay.innerHTML=h;
+  inner+=`</div><button class="btn-p" id="wnDismiss">Got it</button>`;
+  overlay.innerHTML=`<div class="wn-modal">${sysWin(inner)}</div>`;
   document.body.appendChild(overlay);
   document.getElementById('wnDismiss').addEventListener('click',async()=>{
     overlay.classList.add('closing');
@@ -3518,13 +3455,12 @@ function showWhatsNew(entries){
 
 // ═══════════ ONBOARDING TOUR ═══════════
 const TOUR_STEPS=[
-  {target:'.top-bar',title:'XP & RANK',desc:'Your rank and XP bar are always visible. Every workout, mission, and achievement earns XP. Hit rank gates to unlock trials.',pos:'bottom'},
-  {target:'[data-page="train"]',title:'TRAIN',desc:'Your workout program. Fill in weights & reps, then Log the day. Use "Log All Days" if you trained multiple.',pos:'top'},
-  {target:'[data-page="missions"]',title:'MISSIONS',desc:'5 daily missions — 3 universal + 2 tailored to your class. Complete all 5 for bonus XP. Build streaks!',pos:'top'},
-  {target:'[data-page="nutrition"]',title:'NUTRITION',desc:'TDEE calculator, macro tracking, and meal-based food logging. Search foods, scan barcodes, or add manually.',pos:'top'},
-  {target:'[data-page="chat"]',title:'CHAT',desc:'Message friends, get AI Coach advice, and check patch notes in the Updates tab.',pos:'top'},
-  {target:'[data-page="ranks"]',title:'RANKS',desc:'Leaderboard and rank info. Tap any hunter to view their profile and add them as a friend.',pos:'top'},
-  {target:'[data-page="profile"]',title:'PROFILE',desc:'Your stats, PRs, bio, friends list, and settings. Set your bio so other hunters know who you are.',pos:'top'}
+  {target:'#homeHeader',title:'Your status',desc:'Your rank, level and XP live here. Workouts, quests and badges all earn XP. Reach the next rank and a trial opens.',pos:'bottom'},
+  {target:'[data-page="missions"]',title:'Home',desc:'Your Daily Quest: five small tasks a day. Finish all five for bonus XP and build a streak.',pos:'top'},
+  {target:'[data-page="train"]',title:'Train',desc:'Your program. Start a session for the rest timer, or log a workout afterwards without it. Swap or edit any exercise from its menu.',pos:'top'},
+  {target:'[data-page="nutrition"]',title:'Nutrition',desc:'Calorie and macro targets, with meals you log by search, barcode or by hand.',pos:'top'},
+  {target:'[data-page="guild"]',title:'Guild',desc:'Friend activity, the leaderboard, your friends and chat. Tap any hunter to see their profile.',pos:'top'},
+  {target:'[data-page="profile"]',title:'Profile',desc:'Your Status window, body stats, badges, shop, wardrobe and settings.',pos:'top'}
 ];
 let tourStep=0;
 function checkTour(){
@@ -3549,7 +3485,7 @@ function showTourStep(){
   }
   // Tooltip
   const tip=document.createElement('div');tip.className='tour-tip';
-  tip.innerHTML=`<div class="tour-step-count">${tourStep+1} / ${TOUR_STEPS.length}</div><div class="tour-title">${step.title}</div><div class="tour-desc">${step.desc}</div><div class="tour-actions"><button class="tour-btn" onclick="nextTourStep()">${tourStep<TOUR_STEPS.length-1?'Next →':'Finish ✓'}</button></div>`;
+  tip.innerHTML=`<div class="tour-step-count">${tourStep+1} of ${TOUR_STEPS.length}</div><div class="tour-title">${step.title}</div><div class="tour-desc">${step.desc}</div><div class="tour-actions"><button class="tour-btn" onclick="nextTourStep()">${tourStep<TOUR_STEPS.length-1?'Next':'Done'}</button></div>`;
   if(el){
     const r=el.getBoundingClientRect();
     if(step.pos==='bottom')tip.style.cssText=`top:${r.bottom+12}px;left:50%;transform:translateX(-50%)`;
@@ -3562,7 +3498,7 @@ async function finishTour(){
   let old=$('tourOverlay');if(old)old.remove();
   await saveUser({hasCompletedTour:true});
   unlockAch('tour_done');
-  toast('🗺️ Tour complete! +25 XP');
+  toast('Tour complete! +25 XP');
 }
 
 // ═══════════ UNREAD CHAT BADGE ═══════════
@@ -3588,15 +3524,7 @@ async function checkUnreadChats(){
   }
   updateChatBadge(unread);
 }
-function updateChatBadge(count){
-  unreadChatCount=count;
-  const nav=document.querySelector('[data-page="chat"] .nav-icon');if(!nav)return;
-  let badge=nav.querySelector('.chat-badge');
-  if(count>0){
-    if(!badge){badge=document.createElement('span');badge.className='chat-badge';nav.appendChild(badge)}
-    badge.textContent=count>9?'9+':count;badge.style.display='';
-  }else{if(badge)badge.style.display='none'}
-}
+function updateChatBadge(count){unreadChatCount=count;updateGuildDots()}
 async function markChatRead(friendUid){
   const lastRead=userData.lastReadTimestamps||{};
   lastRead[friendUid]=Date.now();
@@ -3608,14 +3536,14 @@ async function markChatRead(friendUid){
 async function completeEvent(){
   const today=getTodayStr();const evt=getEventMission(today);if(!evt)return;
   if((userData.eventsCompleted||{})[today])return;
-  if(!confirm(`⚡ Complete "${evt.name}"?\n\n${evt.desc}`))return;
+  if(!confirm(`Complete "${evt.name}"?\n\n${evt.desc}`))return;
   const ec=userData.eventsCompleted||{};ec[today]=true;
   const evtCount=Object.keys(ec).length;
   const gained=addXP(evt.xp);
   unlockAch('event_first');if(evtCount>=5)unlockAch('event_5');
   await saveUser({eventsCompleted:ec,xp:userData.xp});await saveLeaderboard();
   updateTopBar();checkRankUp();renderMissions();
-  toast(`⚡ ${evt.name} +${gained} XP`);
+  toast(`${evt.name} +${gained} XP`);
 }
 
 // ═══════════ PROGRESSION TRACKS ═══════════
@@ -3638,27 +3566,26 @@ function renderProgressionTrack(){
   const cls=userData.class;if(!cls||!PROGRESSION_TRACKS[cls])return'';
   const tracks=PROGRESSION_TRACKS[cls];
   const completed=userData.tracksCompleted||[];
-  let h=`<div class="section-title" style="margin:1rem 0 .3rem">CLASS TRACK — ${cls.toUpperCase()}</div>`;
+  let h=`<div class="sec-row"><span class="sec">Class track</span><span class="mist sm">${esc(cls)}</span></div><div class="li-list">`;
   for(const track of tracks){
-    // Check if requires previous track
     if(track.requires&&!completed.includes(track.requires)){
-      h+=`<div class="track-card locked"><div class="track-header"><span class="track-icon">🔒</span><div><div class="track-name">${track.name}</div><div class="track-desc">Complete previous tier to unlock</div></div></div></div>`;
+      h+=`<div class="li track-li locked"><span class="ico">${icon('ladder',18)}</span><span class="t">${esc(track.name)}<small>Finish the tier before it to unlock</small></span></div>`;
       continue;
     }
     if(completed.includes(track.id)){
-      h+=`<div class="track-card completed"><div class="track-header"><span class="track-icon">✅</span><div><div class="track-name">${track.name}</div><div class="track-desc">COMPLETED</div></div></div></div>`;
+      h+=`<div class="li track-li"><span class="ico lilac">${icon('check',18)}</span><span class="t">${esc(track.name)}<small>Complete</small></span></div>`;
       continue;
     }
     const allDone=track.tasks.every(t=>getTrackProgress(t)>=t.target);
-    h+=`<div class="track-card${allDone?' ready':''}"><div class="track-header"><span class="track-icon">${track.icon}</span><div><div class="track-name">${track.name}</div><div class="track-desc">${track.desc}</div></div></div>`;
+    h+=`<div class="li track-li open"><span class="ico sys">${icon('ladder',18)}</span><span class="t">${esc(track.name)}<small>${esc(track.desc)}</small></span></div><div class="track-tasks">`;
     track.tasks.forEach(t=>{
       const p=Math.min(getTrackProgress(t),t.target);const pct=Math.min(100,(p/t.target)*100);
-      h+=`<div class="track-task"><div class="track-task-desc">${t.desc}</div><div class="trial-bar"><div class="trial-bar-fill" style="width:${pct}%"></div></div><div class="trial-task-num">${p}/${t.target} · +${t.xp} XP</div></div>`;
+      h+=`<div class="track-task"><div class="track-task-top"><span>${esc(t.desc)}</span><span class="num mist">${p} / ${t.target}</span></div><div class="track"><div class="fill" style="width:${pct}%"></div></div><div class="gold sm">+${t.xp} XP</div></div>`;
     });
-    if(allDone)h+=`<button class="trial-claim" onclick="claimTrack('${track.id}')">🏆 CLAIM ${track.name.toUpperCase()}</button>`;
+    if(allDone)h+=`<button class="btn-p" onclick="claimTrack('${track.id}')">Claim ${esc(track.name)}</button>`;
     h+=`</div>`;
   }
-  return h;
+  return h+`</div>`;
 }
 async function claimTrack(trackId){
   const cls=userData.class;if(!cls)return;
@@ -3671,7 +3598,7 @@ async function claimTrack(trackId){
   addXP(totalXp);
   await saveUser({tracksCompleted:completed,xp:userData.xp});await saveLeaderboard();
   updateTopBar();checkRankUp();renderMissions();
-  toast(`🏆 ${track.name} complete! +${totalXp} XP`);
+  toast(`${track.name} complete! +${totalXp} XP`);
 }
 
 // ═══════════ PASSIVE ACHIEVEMENT CHECKER ═══════════
@@ -3870,7 +3797,7 @@ function initNotifications(){
       Notification.requestPermission().then(p=>{
         notifPermission=p;
         if(p==='granted'){
-          toast('🔔 Notifications enabled!');
+          toast('Notifications enabled!');
           startRealtimeListeners();
           checkTrainReminder();
         }
@@ -3887,7 +3814,7 @@ function initNotifications(){
 
 function showIOSInstallPrompt(){
   localStorage.setItem('iosInstallPrompted','1');
-  if(confirm('📱 Install LexenFitness to your Home Screen?\n\nTo get push notifications on iPhone, you need to install this app.\n\n1. Tap the Share button (⬆️) in Safari\n2. Scroll down and tap "Add to Home Screen"\n3. Open the app from your home screen\n\nTap OK for more details.')){
+  if(confirm('Install LexenFitness to your Home Screen?\n\nTo get push notifications on iPhone, you need to install this app.\n\n1. Tap the Share button () in Safari\n2. Scroll down and tap "Add to Home Screen"\n3. Open the app from your home screen\n\nTap OK for more details.')){
     alert('Step-by-step:\n\n1. Tap the Share icon at the bottom of Safari (square with arrow up)\n2. Scroll through the options\n3. Tap "Add to Home Screen"\n4. Tap "Add" in the top right\n5. Close Safari, open the LexenFitness app from your home screen\n\nOnce installed, you\'ll get push notifications for messages, friend requests, and pokes.');
   }
 }
@@ -3958,7 +3885,7 @@ function startRealtimeListeners(){
           if(Date.now()-prev<30000)return;
           sessionStorage.setItem(key,String(Date.now()));
           const preview=lastMsg.length>60?lastMsg.slice(0,57)+'...':lastMsg;
-          sendNotif('💬 New Message',preview,{type:'messages',tag:'msg-'+change.doc.id,data:{url:'/lexenfitness/#chat'}});
+          sendNotif('New Message',preview,{type:'messages',tag:'msg-'+change.doc.id,data:{url:'/lexenfitness/#chat'}});
         });
       });
       realtimeUnsubs.push(unsub);
@@ -3974,7 +3901,7 @@ function startRealtimeListeners(){
           const data=change.doc.data();
           const ts=data.createdAt?(data.createdAt.toMillis?data.createdAt.toMillis():new Date(data.createdAt).getTime()):0;
           if(ts<sessionStart)return;
-          sendNotif('👋 Friend Request','@'+(data.fromUsername||'someone')+' wants to be friends',{type:'friendRequests',tag:'friend-'+change.doc.id,data:{url:'/lexenfitness/#profile'}});
+          sendNotif('Friend Request','@'+(data.fromUsername||'someone')+' wants to be friends',{type:'friendRequests',tag:'friend-'+change.doc.id,data:{url:'/lexenfitness/#profile'}});
         });
       });
       realtimeUnsubs.push(unsub);
@@ -3993,7 +3920,7 @@ function startRealtimeListeners(){
         if(newPokes.length){
           const latest=newPokes[newPokes.length-1];
           localStorage.setItem('lastPokeSeen',String(Date.now()));
-          sendNotif('👋 Poke!','@'+latest.fromName+' poked you — time to train',{type:'pokes',tag:'poke',data:{url:'/lexenfitness/#profile'}});
+          sendNotif('Poke!','@'+latest.fromName+' poked you — time to train',{type:'pokes',tag:'poke',data:{url:'/lexenfitness/#profile'}});
         }
       });
       realtimeUnsubs.push(unsub);
@@ -4011,7 +3938,7 @@ function checkEventMissionNotif(){
   const key='evtNotif_'+today;
   if(localStorage.getItem(key))return;
   localStorage.setItem(key,'1');
-  sendNotif('⚡ EVENT MISSION',evt.name+' — '+evt.desc+' (+'+evt.xp+' XP)',{type:'events',tag:'event-'+today,data:{url:'/lexenfitness/#missions'}});
+  sendNotif('EVENT MISSION',evt.name+' — '+evt.desc+' (+'+evt.xp+' XP)',{type:'events',tag:'event-'+today,data:{url:'/lexenfitness/#missions'}});
 }
 
 // Handle click from notification (SW posts this)
@@ -4040,8 +3967,8 @@ function openActivityLog(){
   if(h2){
     if(pendingBackdateISO){
       const d=new Date(pendingBackdateISO);
-      h2.textContent='🏃 Log Activity · '+d.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'})+' (no XP)';
-    }else h2.textContent='🏃 Log Activity';
+      h2.textContent='Log Activity · '+d.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'})+' (no XP)';
+    }else h2.textContent='Log Activity';
   }
   $('activityModal').classList.add('open');
 }
@@ -4084,8 +4011,8 @@ async function saveActivityLog(){
   updateTopBar();checkRankUp();
   closeActivityLog();
   let msg;
-  if(isBackdated)msg=`🏃 ${name} logged for earlier day · ${calBurned} cal (no XP)`;
-  else msg=`🏃 ${name} logged! +${gained} XP · ${calBurned} cal burned`;
+  if(isBackdated)msg=`${name} logged for earlier day · ${calBurned} cal (no XP)`;
+  else msg=`${name} logged! +${gained} XP · ${calBurned} cal burned`;
   toast(msg);
 }
 
@@ -4100,8 +4027,8 @@ function openRestLog(){
   if(h2){
     if(pendingBackdateISO){
       const d=new Date(pendingBackdateISO);
-      h2.textContent='😴 Log Rest · '+d.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'})+' (no XP)';
-    }else h2.textContent='😴 Log Rest Day';
+      h2.textContent='Log Rest · '+d.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'})+' (no XP)';
+    }else h2.textContent='Log Rest Day';
   }
   $('restModal').classList.add('open');
 }
@@ -4146,8 +4073,8 @@ async function saveRestLog(){
   updateTopBar();
   closeRestLog();
   let msg;
-  if(isBackdated)msg=`${isActive?'🚶':'🛏️'} ${isActive?'Active':'Full'} rest logged for earlier day (no XP)`;
-  else msg=`${isActive?'🚶':'🛏️'} ${isActive?'Active':'Full'} rest logged! +${gained} XP`;
+  if(isBackdated)msg=`${isActive?'':''} ${isActive?'Active':'Full'} rest logged for earlier day (no XP)`;
+  else msg=`${isActive?'':''} ${isActive?'Active':'Full'} rest logged! +${gained} XP`;
   toast(msg);
 }
 
@@ -4162,7 +4089,7 @@ function openWeighIn(){
   const histEl=$('wiHistory');
   if(!history.length){histEl.innerHTML='<p style="color:var(--dim);font-size:.7rem;margin-top:.5rem">No check-ins yet. First one is the baseline.</p>'}
   else{
-    let h='<div class="section-title" style="margin:.8rem 0 .3rem;font-size:.6rem">RECENT CHECK-INS</div>';
+    let h='<div class="section-title" style="margin:.8rem 0 .3rem;font-size:.6rem">Recent check-ins</div>';
     history.forEach((w,i)=>{
       const dt=new Date(w.date).toLocaleDateString('en-US',{month:'short',day:'numeric'});
       const diff=i<history.length-1?(w.weight-history[i+1].weight).toFixed(1):'—';
@@ -4192,7 +4119,7 @@ async function saveWeighIn(){
   if(history.length>=12)unlockAch('weighin_12');
   if(history.length>=26)unlockAch('weighin_26');
   closeWeighIn();renderProfile();
-  toast(`📏 Check-in logged! +${gained} XP`);
+  toast(`Check-in logged! +${gained} XP`);
 }
 
 // ═══════════ PHOTO PRIVACY ═══════════
@@ -4211,11 +4138,11 @@ function acceptPhotoPrivacy(){
 let trainerClients=[];
 async function renderTrainerDashboard(){
   const el=$('trainerContent');if(!el)return;
-  let h=`<div class="page-title">TRAINER DASHBOARD</div>`;
+  let h=`<div class="page-title">Trainer dashboard</div>`;
   h+=`<div class="page-sub">Monitor your clients' progress and stay connected</div>`;
-  h+=`<div class="trainer-code-card"><div class="trainer-code-label">YOUR TRAINER CODE</div><div class="trainer-code">${userData.trainerCode||'Generate below'}</div>`;
+  h+=`<div class="trainer-code-card"><div class="trainer-code-label">Your trainer code</div><div class="trainer-code">${userData.trainerCode||'Generate below'}</div>`;
   if(!userData.trainerCode)h+=`<button class="m-save-btn" onclick="generateTrainerCode()">Generate Code</button>`;
-  else h+=`<button class="copy-code-btn" onclick="copyTrainerCode()">📋 Copy</button><div style="font-size:.62rem;color:var(--dim);margin-top:4px">Share this with your clients</div>`;
+  else h+=`<button class="copy-code-btn" onclick="copyTrainerCode()">Copy</button><div style="font-size:.62rem;color:var(--dim);margin-top:4px">Share this with your clients</div>`;
   h+=`</div>`;
   h+=`<div class="section-title" style="margin:1rem 0 .3rem">CLIENTS (${(userData.clients||[]).length})</div>`;
   const clients=userData.clients||[];
@@ -4239,10 +4166,10 @@ async function loadTrainerClientList(){
       let lifts=0,activities=0,rest=0,last=null;
       logSnap.forEach(doc=>{const e=doc.data();if(e.isRest)rest++;else if(e.isActivity)activities++;else lifts++;if(!last||new Date(e.date)>new Date(last))last=e.date});
       const daysSince=last?Math.floor((Date.now()-new Date(last).getTime())/86400000):999;
-      const status=daysSince<=2?'🟢 Active':daysSince<=7?'🟡 Slow':'🔴 Inactive';
+      const status=daysSince<=2?'Active':daysSince<=7?'Slow':'Inactive';
       const weighIns=(u.weighIns||[]).length;
       h+=`<div class="client-card" onclick="openClientDetail('${safeId(uid)}')">
-        <div class="lb-pic">${avatarHtml(u.profilePic,'👤')}</div>
+        <div class="lb-pic">${avatarHtml(u.profilePic)}</div>
         <div class="client-info">
           <div class="client-name">@${esc(u.username||'hunter')} <span class="client-status">${status}</span></div>
           <div class="client-stats">${lifts} lifts · ${activities} cardio · ${rest} rest · ${weighIns} check-ins</div>
@@ -4277,7 +4204,7 @@ async function openClientDetail(uid){
     const now=Date.now();
     const last=logs[0]?new Date(logs[0].date).getTime():null;
     const daysSince=last?Math.floor((now-last)/86400000):999;
-    const statusEmoji=daysSince<=2?'🟢':daysSince<=7?'🟡':'🔴';
+    const statusEmoji=daysSince<=2?'':daysSince<=7?'':'';
     const statusLabel=daysSince<=2?`Active (${daysSince}d ago)`:daysSince<=7?`Slow (${daysSince}d ago)`:`Inactive (${daysSince}d ago)`;
 
     // Weekly averages (last 30 days)
@@ -4303,11 +4230,12 @@ async function openClientDetail(uid){
     const goal=u.nutritionGoal||u.goal||'No goal set';
 
     let h=`<div class="pc-header">
-      <div class="pc-pic${frameClass(u.frame||(u.cosmetics&&u.cosmetics.frame))}">${avatarHtml(u.profilePic,'<div class="pp-placeholder" style="width:60px;height:60px;font-size:1.6rem">👤</div>')}</div>
+      <div class="pc-pic${frameClass(u.frame||(u.cosmetics&&u.cosmetics.frame))}">${avatarHtml(u.profilePic)}</div>
       <div class="pc-info">
         <div class="pc-username${nameClass(u.nameColor||(u.cosmetics&&u.cosmetics.name))}">@${esc(u.username||'hunter')}</div>
+        ${titleName(u.titleId)?`<div class="pc-ttl">${titleLine(u.titleId)}</div>`:''}
         <div class="pc-class">${esc(u.class||'')}${u.subclass?' — '+esc(u.subclass):''} · ${esc(rank)}</div>
-        <div style="font-size:.7rem;color:var(--accent2);margin-top:2px">🎯 ${esc(goal)}</div>
+        <div style="font-size:.7rem;color:var(--accent2);margin-top:2px">${esc(goal)}</div>
         <div style="font-size:.7rem;margin-top:4px">${statusEmoji} ${esc(statusLabel)}</div>
       </div>
     </div>`;
@@ -4324,41 +4252,41 @@ async function openClientDetail(uid){
 
     // Body stats
     if(st.height||st.weight||st.age){
-      h+=`<div class="section-title" style="margin:.6rem 0 .2rem">BODY STATS</div>`;
-      h+=`<div style="font-size:.74rem;color:var(--muted);padding:3px 0">${st.height?'📏 '+esc(st.height):''}${st.weight?' · ⚖️ '+esc(st.weight)+' lbs':''}${st.age?' · 🎂 '+esc(st.age):''}${st.bodyFat?' · '+esc(st.bodyFat)+'% BF':''}</div>`;
+      h+=`<div class="section-title" style="margin:.6rem 0 .2rem">Body stats</div>`;
+      h+=`<div style="font-size:.74rem;color:var(--muted);padding:3px 0">${st.height?''+esc(st.height):''}${st.weight?' · '+esc(st.weight)+' lbs':''}${st.age?' · '+esc(st.age):''}${st.bodyFat?' · '+esc(st.bodyFat)+'% BF':''}</div>`;
     }
 
     // PRs
     if(prs.bench||prs.squat||prs.deadlift||prs.ohp){
-      h+=`<div class="section-title" style="margin:.6rem 0 .2rem">PERSONAL RECORDS</div>`;
+      h+=`<div class="section-title" style="margin:.6rem 0 .2rem">Personal records</div>`;
       h+=`<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;font-size:.72rem">`;
-      if(prs.bench)h+=`<div>🏋️ Bench: <strong>${esc(prs.bench)} lbs</strong></div>`;
-      if(prs.squat)h+=`<div>🦵 Squat: <strong>${esc(prs.squat)} lbs</strong></div>`;
-      if(prs.deadlift)h+=`<div>⚡ DL: <strong>${esc(prs.deadlift)} lbs</strong></div>`;
-      if(prs.ohp)h+=`<div>💪 OHP: <strong>${esc(prs.ohp)} lbs</strong></div>`;
+      if(prs.bench)h+=`<div>Bench: <strong>${esc(prs.bench)} lbs</strong></div>`;
+      if(prs.squat)h+=`<div>Squat: <strong>${esc(prs.squat)} lbs</strong></div>`;
+      if(prs.deadlift)h+=`<div>DL: <strong>${esc(prs.deadlift)} lbs</strong></div>`;
+      if(prs.ohp)h+=`<div>OHP: <strong>${esc(prs.ohp)} lbs</strong></div>`;
       h+=`</div>`;
     }
 
     // Weight trend
     if(weightChange!==null){
-      const arrow=weightChange>0?'📈':weightChange<0?'📉':'➡️';
+      const arrow=weightChange>0?'':weightChange<0?'':'';
       const color=weightChange>0?'var(--gold)':weightChange<0?'var(--green)':'var(--muted)';
-      h+=`<div class="section-title" style="margin:.6rem 0 .2rem">WEIGHT TREND</div>`;
+      h+=`<div class="section-title" style="margin:.6rem 0 .2rem">Weight trend</div>`;
       h+=`<div style="font-size:.78rem;padding:.4rem;background:var(--surface2);border-radius:6px;text-align:center">${arrow} <strong style="color:${color}">${weightChange>0?'+':''}${weightChange} lbs</strong> over ${weightChangeDays} days (${allWeighIns.length} check-ins)</div>`;
     }
 
     // Recent activity
-    h+=`<div class="section-title" style="margin:.6rem 0 .2rem">LAST 10 LOGS</div>`;
+    h+=`<div class="section-title" style="margin:.6rem 0 .2rem">Last 10 logs</div>`;
     if(!logs.length)h+='<p style="color:var(--muted);font-size:.74rem">No workouts logged yet.</p>';
     else logs.slice(0,10).forEach(e=>{
       const dt=new Date(e.date).toLocaleDateString('en-US',{month:'short',day:'numeric'});
-      const type=e.isRest?'😴 Rest':e.isActivity?'🏃 Activity':'🏋️ Lift';
+      const type=e.isRest?'Rest':e.isActivity?'Activity':'Lift';
       const detail=e.isActivity?(e.duration?' · '+num(e.duration)+'m':''):'';
       h+=`<div style="display:flex;justify-content:space-between;font-size:.72rem;padding:3px 0;border-bottom:1px solid var(--border)"><span>${type} · ${esc(e.dayTitle||'Workout')}${detail}</span><span style="color:var(--dim)">${dt}</span></div>`;
     });
 
     if(weighIns.length){
-      h+=`<div class="section-title" style="margin:.6rem 0 .2rem">RECENT CHECK-INS</div>`;
+      h+=`<div class="section-title" style="margin:.6rem 0 .2rem">Recent check-ins</div>`;
       weighIns.forEach((w,i)=>{
         const dt=new Date(w.date).toLocaleDateString('en-US',{month:'short',day:'numeric'});
         const prev=i<weighIns.length-1?weighIns[i+1].weight:null;
@@ -4369,7 +4297,7 @@ async function openClientDetail(uid){
       });
     }
 
-    h+=`<div class="m-actions" style="margin-top:.8rem;flex-wrap:wrap;gap:6px"><button class="m-cancel" onclick="closeProfileCard()" style="flex:1">Close</button><button class="m-save-btn" onclick="messageClient('${safeId(uid)}')" style="flex:1">💬 Message</button></div>`;
+    h+=`<div class="m-actions" style="margin-top:.8rem;flex-wrap:wrap;gap:6px"><button class="m-cancel" onclick="closeProfileCard()" style="flex:1">Close</button><button class="m-save-btn" onclick="messageClient('${safeId(uid)}')" style="flex:1">Message</button></div>`;
     modal.querySelector('.modal').innerHTML=h;
     modal.classList.add('open');
   }catch(e){console.error(e);toast('Error: '+e.message)}
@@ -4458,7 +4386,7 @@ async function renderProgressPhotos(){
     let h='';
     photos.forEach(p=>{
       const dt=new Date(p.date).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'2-digit'});
-      const poseEmoji={front:'👤',side:'🧍',back:'🔙',other:'📷'}[p.pose]||'📷';
+      const poseEmoji={front:'',side:'',back:'',other:''}[p.pose]||'';
       const weight=p.weight?` · ${p.weight} lbs`:'';
       h+=`<div class="photo-card" onclick="viewPhoto(${p.id})">
         <img src="${esc(safeImgSrc(p.dataUrl))}" alt="Progress">
@@ -4471,7 +4399,7 @@ async function renderProgressPhotos(){
     });
     // Add compare button if we have 2+ photos
     if(photos.length>=2){
-      h+=`<div class="photo-compare-row"><button class="m-save-btn" onclick="openPhotoCompare()" style="width:100%;background:var(--accent2);color:#000">🔀 Compare First vs Latest</button></div>`;
+      h+=`<div class="photo-compare-row"><button class="m-save-btn" onclick="openPhotoCompare()" style="width:100%;background:var(--accent2);color:#000">Compare First vs Latest</button></div>`;
     }
     grid.innerHTML=h;
   }catch(e){console.error(e);grid.innerHTML='<p style="color:var(--red);font-size:.78rem;padding:1rem">Failed to load photos: '+e.message+'</p>'}
@@ -4502,7 +4430,7 @@ async function handleProgressPhotoUpload(file){
       if(weight===null)return;
       try{
         await savePhotoToDB({date:new Date().toISOString(),pose:poseNorm,weight:weight.trim(),dataUrl});
-        toast('📸 Photo saved to this device');
+        toast('Photo saved to this device');
         renderProgressPhotos();
         // Track achievement
         const photos=await getAllPhotos();
@@ -4559,42 +4487,42 @@ document.addEventListener('DOMContentLoaded',()=>{
 let libFilter='All',libSearch='';
 function renderLibrary(){
   const el=$('libraryContent');if(!el)return;
-  let h=`<div class="page-title">LEARN</div>
+  let h=`<div class="page-title">Learn</div>
   <div class="page-sub">Training principles, progression, and exercise library</div>`;
   // ── Training Guide (collapsible) ──
   h+=`<div class="learn-section">
     <div class="learn-section-title" onclick="toggleLearnSection(this)">
-      <span>📖 TRAINING PRINCIPLES</span><span class="learn-arrow">▼</span>
+      <span>Training principles</span><span class="learn-arrow">▼</span>
     </div>
     <div class="learn-section-body" style="max-height:none">
       <div class="learn-block">
-        <div class="learn-block-title">🎯 Progressive Overload</div>
+        <div class="learn-block-title">Progressive Overload</div>
         <p>Your body adapts to stress. To keep progressing, each week you should aim to either (1) lift more weight, (2) do more reps at the same weight, or (3) improve form at the same load. Don't skip — adding 2.5–5 lbs per week on main lifts is enough.</p>
       </div>
       <div class="learn-block">
-        <div class="learn-block-title">🔁 Deload Weeks</div>
+        <div class="learn-block-title">Deload Weeks</div>
         <p>Every 4-6 weeks, reduce weight 30-40% and stick to 2-3 easy sets. Your CNS and joints need to recover from accumulated stress. Skipping deloads leads to stalled lifts and injury risk. Your Rest Day logs count here too.</p>
       </div>
       <div class="learn-block">
-        <div class="learn-block-title">💤 Recovery &amp; Sleep</div>
+        <div class="learn-block-title">Recovery &amp; Sleep</div>
         <p>Muscle is built during recovery, not in the gym. Target 7-9 hours of sleep. One bad night kills gym performance; a week of bad sleep kills gains. Prioritize sleep as hard as you prioritize training.</p>
       </div>
       <div class="learn-block">
-        <div class="learn-block-title">🥩 Nutrition Fundamentals</div>
+        <div class="learn-block-title">Nutrition Fundamentals</div>
         <p>Hit your protein goal daily (0.8-1g per lb bodyweight). To grow, eat 200-500 cal above maintenance. To cut fat, eat 300-500 cal below. Track via the Nutrition tab. Hydration matters — aim for your bodyweight in ounces.</p>
       </div>
       <div class="learn-block">
-        <div class="learn-block-title">📊 How Ranks Work</div>
+        <div class="learn-block-title">How Ranks Work</div>
         <p>E → D is automatic at 500 XP. After that, <strong>Rank Trials</strong> gate B/A/S ranks. You'll earn XP up to the rank minimum, then get capped until you complete the trial (perfect weeks, heavy lifts, streaks). Trials force you to earn the rank, not just grind XP.</p>
       </div>
       <div class="learn-block">
-        <div class="learn-block-title">⚔️ Session Mode</div>
-        <p>Tap "▶ START SESSION" to enter a timed workout. A session clock tracks your total time. Check off a set to auto-start the rest timer. Duration gets saved with your log — watch your workout density improve over time.</p>
+        <div class="learn-block-title">Session Mode</div>
+        <p>Tap <strong>Start session</strong> on Train for a timed workout. The clock tracks your total time, and ticking off a set starts the rest timer. The session shows one exercise at a time; the list under it lets you jump around. Trained already? Use <strong>Log it without the timer</strong>.</p>
       </div>
     </div>
   </div>`;
   // ── Exercise Library ──
-  h+=`<div class="learn-section-title" style="margin-top:1rem">💪 EXERCISE LIBRARY</div>`;
+  h+=`<div class="learn-section-title" style="margin-top:1rem">Exercise library</div>`;
   h+=`<div class="lib-search"><input type="text" class="auth-input" placeholder="Search exercises..." value="${esc(libSearch)}" oninput="libSearch=this.value;renderLibrary()" style="margin:0"></div>
   <div class="lib-filters">`;
   h+=`<div class="log-filter${libFilter==='All'?' active':''}" onclick="libFilter='All';renderLibrary()">All</div>`;
@@ -4620,8 +4548,8 @@ function renderLibrary(){
         <div class="lib-cues">${(ex.cues||[]).map(c=>'<div class="lib-cue">→ '+esc(c)+'</div>').join('')}</div>
         <div class="lib-tags">${(ex.tags||[]).map(t=>'<span class="lib-tag">'+esc(t)+'</span>').join('')}</div>
         <div class="lib-actions">
-          <a class="lib-btn video" href="https://www.youtube.com/results?search_query=${ex.yt||ex.name.replace(/ /g,'+')}" target="_blank" rel="noopener">📺 Watch Tutorial</a>
-          <button class="lib-btn add" onclick="event.stopPropagation();addFromLibrary('${ex.name.replace(/'/g,"\\'")}',${ex.reps.includes('s')?'true':'false'},'${(ex.reps||'').replace(/'/g,"\\'")}','${(ex.cues||[])[0]?ex.cues[0].replace(/'/g,"\\'"):''}')">➕ Add to Program</button>
+          <a class="lib-btn video" href="https://www.youtube.com/results?search_query=${ex.yt||ex.name.replace(/ /g,'+')}" target="_blank" rel="noopener">Watch Tutorial</a>
+          <button class="lib-btn add" onclick="event.stopPropagation();addFromLibrary('${ex.name.replace(/'/g,"\\'")}',${ex.reps.includes('s')?'true':'false'},'${(ex.reps||'').replace(/'/g,"\\'")}','${(ex.cues||[])[0]?ex.cues[0].replace(/'/g,"\\'"):''}')">Add to Program</button>
         </div>
       </div>
     </div>`;
@@ -4665,17 +4593,707 @@ async function checkFriendRequests(){
     // Toast on login if there are pending requests
     if(pendingFriendReqs>0){
       const names=[];snap.forEach(d=>{const r=d.data();if(r.fromUsername)names.push('@'+r.fromUsername)});
-      if(names.length===1)toast('👋 Friend request from '+names[0]);
-      else if(names.length>1)toast('👋 '+pendingFriendReqs+' friend requests waiting!');
+      if(names.length===1)toast('Friend request from '+names[0]);
+      else if(names.length>1)toast(''+pendingFriendReqs+' friend requests waiting!');
     }
   }catch(e){}
 }
-function updateFriendBadge(){
-  // Badge on Profile nav
-  const profileNav=document.querySelector('[data-page="profile"] .nav-icon');if(!profileNav)return;
-  let badge=profileNav.querySelector('.friend-badge');
-  if(pendingFriendReqs>0){
-    if(!badge){badge=document.createElement('span');badge.className='friend-badge';profileNav.appendChild(badge)}
-    badge.textContent=pendingFriendReqs>9?'9+':pendingFriendReqs;badge.style.display='';
-  }else{if(badge)badge.style.display='none'}
+function updateFriendBadge(){updateGuildDots()}
+
+// ═══════════ v1.29.0 REDESIGN HELPERS ═══════════
+const ICONS={
+  chev:'<path d="M9 6l6 6-6 6"/>',left:'<path d="M15 6l-6 6 6 6"/>',
+  swap:'<path d="M7 4L3 8l4 4M3 8h13M17 20l4-4-4-4M21 16H8"/>',
+  note:'<path d="M6 3.5h8.5l3.5 3.5v13.5H6z"/><path d="M9 11h6M9 15h4"/>',
+  edit:'<path d="M4 20h4L19 9l-4-4L4 16z"/>',
+  more:'<circle cx="5.5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="18.5" cy="12" r="1.3"/>',
+  plus:'<path d="M12 5v14M5 12h14"/>',x:'<path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/>',
+  search:'<circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/>',
+  scan:'<path d="M4 8V5h3M17 5h3v3M20 16v3h-3M7 19H4v-3M8 9v6M11 9v6M14 9v6M17 9v6"/>',
+  clock:'<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>',
+  cal:'<rect x="3.5" y="5" width="17" height="15.5" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4"/>',
+  pulse:'<path d="M3 12h4l2-5 4 10 2-5h6"/>',moon:'<path d="M19.5 14.5A8 8 0 0 1 9.5 4.5a8 8 0 1 0 10 10z"/>',
+  gear:'<circle cx="12" cy="12" r="3"/><path d="M12 2.8v2.4M12 18.8v2.4M2.8 12h2.4M18.8 12h2.4M5.5 5.5l1.7 1.7M16.8 16.8l1.7 1.7M5.5 18.5l1.7-1.7M16.8 7.2l1.7-1.7"/>',
+  info:'<circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 7.6v.4"/>',
+  badge:'<circle cx="12" cy="9" r="5.5"/><path d="M8.5 13.5L7 21l5-2.5 5 2.5-1.5-7.5"/>',
+  frame:'<rect x="4" y="4" width="16" height="16" rx="2"/><rect x="8" y="8" width="8" height="8" rx="1"/>',
+  shard:'<path d="M12 2.5l6 6.5-6 12.5L6 9z"/><path d="M6 9h12"/>',
+  camera:'<rect x="3" y="6" width="18" height="14" rx="2"/><circle cx="12" cy="13" r="3.5"/><path d="M9 6l1.5-2.5h3L15 6"/>',
+  gate:'<path d="M5 20V8l7-5 7 5v12"/><path d="M9 20v-6h6v6"/>',
+  scale:'<path d="M5 20h14M12 4v16M6 8h12M6 8l-3 6h6zM18 8l-3 6h6z"/>',
+  whistle:'<path d="M4 12a5 5 0 1 0 10 0V9h6V6H9a5 5 0 0 0-5 5z"/>',
+  bolt:'<path d="M13 2.5L5 13.5h6l-1 8 8-11h-6z"/>',check:'<path d="M5 12.5l4.5 4.5L19 7.5"/>',
+  flame:'<path d="M12 21c4 0 6.5-2.6 6.5-6.2 0-3.6-2.7-5.6-3.7-9.3-1.7 1.6-2.3 3.4-2.3 5-1.2-.9-1.9-2.3-2-3.7C8 8.6 5.5 11.4 5.5 14.8 5.5 18.4 8 21 12 21z"/>',
+  play:'<path d="M6 4l14 8-14 8z" fill="currentColor" stroke="none"/>',ladder:'<path d="M7 3v18M17 3v18M7 8h10M7 13h10M7 18h10"/>',
+  share:'<path d="M12 15V3.5M7.5 8L12 3.5 16.5 8"/><path d="M5 12v7.5h14V12"/>',copy:'<rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5.5A1.5 1.5 0 0 0 14.5 4h-9A1.5 1.5 0 0 0 4 5.5v9A1.5 1.5 0 0 0 5.5 16H8"/>',
+  hand:'<path d="M8 13V5.5a1.5 1.5 0 0 1 3 0V11M11 10V4a1.5 1.5 0 0 1 3 0v6M14 10V5.5a1.5 1.5 0 0 1 3 0V13c0 4.5-2.5 7.5-6.5 7.5-3 0-4.5-1.7-6-4.5l-1.5-3a1.5 1.5 0 0 1 2.6-1.5L8 13"/>',
+  trash:'<path d="M4.5 7h15M9.5 7V4.5h5V7M6.5 7l1 13h9l1-13"/>',
+  person:'<circle cx="12" cy="8" r="4"/><path d="M4.5 21c0-4 3.4-7 7.5-7s7.5 3 7.5 7"/>',
+  send:'<path d="M4 12l16-8-6 16-2.5-6.5z"/>',logout:'<path d="M15 4h4.5v16H15M10 8l-4 4 4 4M6 12h10"/>'
+};
+function icon(name,size){return `<svg class="i" width="${size||20}" height="${size||20}" viewBox="0 0 24 24" aria-hidden="true">${ICONS[name]||''}</svg>`}
+function ringBtn(name,label,onclick){return `<button class="ring${name==='more'?' dots':''}" aria-label="${esc(label)}" onclick="${onclick}">${icon(name,16)}</button>`}
+function fmtN(n){return (Math.round(+n||0)).toLocaleString('en-US')}
+function rankLabel(name){return String(name||'').replace(/-RANK$/,'-Rank')}
+function rankLetter(r){return String((r&&r.name)||'E')[0]}
+function sysWin(inner,cls){return `<div class="sys-win${cls?' '+cls:''}"><div class="sys-edge"><div class="sys-win-body">${inner}</div></div></div>`}
+function openProfileView(tab){switchPage('ranks');switchSubTab('ranks',tab)}
+function renderGuild(){
+  const active=document.querySelector('#guildTabs .stab.active');
+  switchSubTab('guild',active?active.dataset.st:'activity');
 }
+function updateGuildDots(){
+  const chat=(typeof unreadChatCount!=='undefined'?unreadChatCount:0)>0,req=(typeof pendingFriendReqs!=='undefined'?pendingFriendReqs:0)>0;
+  const set=(id,on)=>{const el=$(id);if(el)el.style.display=on?'':'none'};
+  set('chatTabDot',chat);set('friendsTabDot',req);set('guildNavDot',chat||req);
+}
+function renderHomeHeader(){
+  const r=getEffectiveRank(),lv=getLevelInfo(),info=getXpBarInfo(),cap=getXpCap(),xm=getXpMultiplier();
+  const title=(r.title&&r.title[userData.class])||rankLabel(r.name);
+  const capped=cap.softCap<1;
+  const ri=RANKS.indexOf(r),gate=RANKS[ri+1];
+  let right;
+  if(gate&&!gate.auto&&gate.trial&&!userData.trialsCompleted.includes(gate.trial)&&userData.xp>=gate.min){
+    const t=RANK_TRIALS[gate.trial];right=`Pass ${t?dayLabel(t.name):'the trial'} to reach ${rankLabel(gate.name)}`;
+  }else{const nr=getNextRank(userData.xp);right=nr?`${fmtN(nr.min-userData.xp)} to ${rankLabel(nr.name)}`:'Max rank'}
+  let chip='';
+  if(capped)chip=`<div class="hh-chip gold" title="Trial active">XP at 25%</div>`;
+  else if(xm.label)chip=`<div class="hh-chip">${xm.mult}× XP</div>`;
+  return `<div id="homeHeader" class="hh">
+    <div class="hh-top"><button class="hh-rank" aria-label="${esc(rankLabel(r.name))}" style="--rk:${esc(r.color)}"><span>${rankLetter(r)}</span></button>
+      <div class="hh-id"><div class="hh-name">${esc(userData.username||'hunter')}</div><div class="hh-title">${titleLine(myTitleId(),title)}</div></div>${chip}</div>
+    <div class="hh-bar"><span class="lv">Lv ${lv.level}</span><div class="hp" role="img" aria-label="${Math.round(info.pct)} percent of the way to the next rank"><div class="hp-fill${capped?' capped':''}" style="width:${info.pct}%"></div></div></div>
+    <div class="hh-sub"><span>${fmtN(userData.xp)} XP</span><span>${esc(right)}</span></div>
+  </div>`;
+}
+function questRow(done,name,desc,right,onclick,rightCls){
+  return `<button class="hq-row${done?' done':''}" ${done?'disabled':`onclick="${onclick}"`}>
+    <span class="hq-box">${done?icon('check',14):''}</span>
+    <span class="hq-txt"><span class="hq-name">${name}</span><span class="hq-desc">${desc}</span></span>
+    <span class="hq-xp${rightCls?' '+rightCls:''}">${right}</span></button>`;
+}
+function nextProgramDay(){
+  const prog=userData.program||[];if(!prog.length)return null;
+  const last=getLiftLogs().find(e=>prog.some(d=>d.id===e.dayId));
+  if(!last)return prog[0];
+  const i=prog.findIndex(d=>d.id===last.dayId);
+  return prog[(i+1)%prog.length];
+}
+function homeStart(dayId){
+  if(sessionActive){switchPage('train');return}
+  currentDay=dayId;workoutView='day';switchPage('train');
+  startSession();
+}
+function dayLabel(t){
+  // Program day titles were stored in caps ("UPPER A"). Show them in title case.
+  const s=String(t||'');return /[a-z]/.test(s)?s:s.toLowerCase().replace(/\b([a-z])/g,c=>c.toUpperCase());
+}
+function renderWeekStrip(){
+  const goal=getWeeklyGoal();
+  const monIso=getMonday(new Date()).toISOString().slice(0,10);
+  const r=evaluateWeek(monIso,goal);
+  const mon=new Date(monIso+'T00:00:00');
+  const todayIdx=(new Date().getDay()+6)%7;
+  let cells='';
+  'MTWTFSS'.split('').forEach((L,i)=>{
+    const d0=mon.getTime()+i*86400000,d1=d0+86400000;
+    const es=workoutLog.filter(e=>{const t=new Date(e.date).getTime();return t>=d0&&t<d1});
+    const trained=es.some(e=>!e.isRest||e.restType==='active');
+    const rest=!trained&&es.some(e=>e.isRest);
+    const st=trained?'done':rest?'rest':i===todayIdx?'today':'open';
+    cells+=`<div class="wk-day${i===todayIdx?' is-today':''}"><span>${L}</span><div class="wk-cell ${st}" title="${trained?'Trained':rest?'Rest day':''}"></div></div>`;
+  });
+  return `<div class="sec-row"><span class="sec">This week</span><span class="mist sm">${r.sessions} of ${r.target} sessions</span></div>
+    <div class="wk-grid">${cells}</div>${renderWeekRisk()}`;
+}
+function renderTrialRow(info){
+  const t=info.trial;const progress=getTrialProgress(t);
+  const pcts=t.tasks.map((task,i)=>Math.min(1,(progress[i]||0)/task.target));
+  const pct=Math.round(pcts.reduce((a,b)=>a+b,0)/Math.max(1,pcts.length)*100);
+  const ready=t.tasks.every((task,i)=>progress[i]>=task.target);
+  return `<button class="li gate-row" aria-expanded="false" onclick="toggleGateDetail(this)">
+      <span class="ico sys">${icon('gate',18)}</span>
+      <span class="t">${esc(dayLabel(t.name))}<small>${ready?'Ready to claim':`Trial for ${rankLabel(info.rank.name)}`}</small></span>
+      <span class="track gate-track"><span class="fill" style="width:${pct}%;display:block"></span></span><span class="chev">${icon('chev',16)}</span></button>
+    <div class="gate-detail" hidden>${renderTrialBanner(info)}</div>`;
+}
+function toggleGateDetail(btn){
+  const d=btn.nextElementSibling;if(!d)return;
+  const open=d.hidden;d.hidden=!open;btn.setAttribute('aria-expanded',open?'true':'false');btn.classList.toggle('open',open);
+}
+function feedRowsHtml(items,limit){
+  return items.slice(0,limit).map(({uid,u,ev,t})=>{
+    const x=feedEventText(ev);if(!x)return '';
+    const gold=u.rank==='S-RANK';
+    return `<button class="ff-row" onclick="openProfileCard('${safeId(uid)}')">
+      <span class="ff-pic${gold?' s':''}${frameClass(u.frame)}">${avatarHtml(u.profilePic,`<span>${esc(String(u.username||'h')[0].toUpperCase())}</span>`)}</span>
+      <span class="ff-body"><span class="ff-line"><span class="ff-name${nameClass(u.nameColor)}">${esc(u.username||'hunter')}</span> ${x.text}</span>${x.sub?`<span class="ff-sub">${x.sub}</span>`:''}</span>
+      <span class="ff-time">${timeAgo(t)}</span></button>`;
+  }).join('');
+}
+async function renderGuildActivity(){
+  const el=$('guildActivity');if(!el)return;
+  const friends=(userData.friends||[]).length;
+  if(!friends){el.innerHTML=`<div class="empty-note">Nobody here yet. Add friends with their code, or share yours.</div>
+    <button class="btn-p" onclick="switchSubTab('guild','friends')">Add friends</button>`;return}
+  if(!feedCache.items)el.innerHTML=`<div class="empty-note">Loading…</div>`;
+  const items=await loadFriendFeed();
+  const now=Date.now();
+  // "Needs a push": friends whose latest workout is 4+ days old (and who share activity at all)
+  const byUser={};(feedCache.docs||[]).forEach(({uid,u})=>{
+    const ws=(Array.isArray(u.recent)?u.recent:[]).filter(ev=>ev&&(ev.t==='workout'||ev.t==='cardio')).map(ev=>new Date(ev.at).getTime()).filter(Boolean);
+    if(ws.length)byUser[uid]={u,last:Math.max(...ws)};
+  });
+  const pokedToday=userData.pokedToday||{},today=getTodayStr();
+  const push=Object.entries(byUser).filter(([,v])=>now-v.last>=4*86400000&&now-v.last<30*86400000).slice(0,3);
+  let h='';
+  if(push.length){
+    h+=`<div class="sec">Needs a push</div><div class="mist sm" style="margin-top:4px">No workout in 4 days or more. A poke costs nothing.</div><div class="li-list" style="margin-top:8px">`;
+    push.forEach(([uid,v])=>{
+      const days=Math.floor((now-v.last)/86400000),poked=pokedToday[uid]===today;
+      h+=`<div class="li"><span class="ff-pic">${avatarHtml(v.u.profilePic,`<span>${esc(String(v.u.username||'h')[0].toUpperCase())}</span>`)}</span>
+        <span class="t">${esc(v.u.username||'hunter')}<small>Last workout ${days} days ago</small></span>
+        ${poked?`<span class="mist sm">Poked</span>`:`<button class="btn-s ghost sm" onclick="sendPoke('${safeId(uid)}','${safeName(v.u.username||'hunter')}').then(renderGuildActivity)">Poke</button>`}</div>`;
+    });
+    h+=`</div>`;
+  }
+  // Group the feed by day
+  const groups={};const label=t=>{const d=new Date(t),td=new Date();const y=new Date();y.setDate(y.getDate()-1);
+    if(d.toDateString()===td.toDateString())return 'Today';if(d.toDateString()===y.toDateString())return 'Yesterday';
+    return d.toLocaleDateString('en-US',{weekday:'long'})};
+  (items||[]).slice(0,40).forEach(it=>{const k=label(it.t);(groups[k]=groups[k]||[]).push(it)});
+  const keys=Object.keys(groups);
+  if(!keys.length)h+=`<div class="empty-note">Quiet week so far. Be the first to log something.</div>`;
+  keys.forEach(k=>{h+=`<div class="sec" style="margin-top:24px">${k}</div><div class="ff-list">${feedRowsHtml(groups[k],40)}</div>`});
+  h+=`<div class="panel invite-mini"><div><div class="im-t">Invite a hunter</div><div class="mist sm">Your code <span class="num im-code">${esc(userData.friendCode||'------')}</span></div></div>
+    <button class="btn-p sm" onclick="shareInvite()">Share</button></div>`;
+  el.innerHTML=h;
+}
+let sesBlock=0;
+function startLogMode(){workoutView='log';buildWorkout();try{window.scrollTo(0,0)}catch(e){}}
+function otherLogsHtml(){
+  return `<div class="sec" style="margin-top:30px">Other logs</div><div class="li-list" style="margin-top:6px">
+    <button class="li" onclick="openActivityLog()"><span class="ico">${icon('pulse',18)}</span><span class="t">Cardio or activity</span><span class="r">Runs, sports, steps</span><span class="chev">${icon('chev',16)}</span></button>
+    <button class="li" onclick="openRestLog()"><span class="ico">${icon('moon',18)}</span><span class="t">Rest day</span><span class="r">Counts toward your week</span><span class="chev">${icon('chev',16)}</span></button>
+    <button class="li" onclick="openBackdatePicker()"><span class="ico">${icon('cal',18)}</span><span class="t">Log an earlier day</span><span class="r">No XP</span><span class="chev">${icon('chev',16)}</span></button></div>`;
+}
+function exCode(day,ei){const ex=day.exercises[ei];return ex.group?String(ex.group):String(ei+1)}
+function grpNum(ex){return ex&&ex.group?String(ex.group).replace(/[A-Za-z]/g,''):''}
+function dayBlocks(day){
+  const out=[];(day.exercises||[]).forEach((ex,ei)=>{
+    const g=grpNum(ex),prev=out[out.length-1];
+    if(g&&prev&&prev.g===g)prev.idx.push(ei);else out.push({g,idx:[ei]});
+  });return out;
+}
+function shortHint(ex,lastMap){
+  if(ex.isTime)return '';
+  const match=fuzzyMatchExercise(ex.name,lastMap);if(!match)return '';
+  const rec=lastMap[match.key];if(!rec||!rec.best)return '';
+  const last=rec.best;const m=String(ex.reps||'').match(/(\d+)\s*-\s*(\d+)/);
+  const upper=m?parseInt(m[2]):parseInt(ex.reps)||0;
+  return upper&&last.r>=upper?`Last ${last.w} lb × ${last.r}. Try ${last.w+5} lb.`:`Last ${last.w} lb × ${last.r}. Match it, beat the reps.`;
+}
+function renderTrainOverview(){
+  const prog=userData.program||[];const day=prog.find(d=>d.id===currentDay);if(!day)return;
+  const di=prog.indexOf(day);const lastMap=buildLastSetMap();
+  const wa=$('workoutActions');if(wa)wa.style.display='none';
+  $('dayTabs').innerHTML=prog.map(d=>`<button class="chip${d.id===currentDay?' on':''}" onclick="switchDay('${safeId(d.id)}')">${esc(dayLabel(d.title))}</button>`).join('')
+    +`<button class="chip chip-icon" aria-label="New workout" onclick="addWorkoutDay()">${icon('plus',16)}</button>`;
+  const lastLog=workoutLog.find(e=>e.dayId===day.id&&!e.isRest&&!e.isActivity);
+  const lastTxt=lastLog?'Last done '+new Date(lastLog.date).toLocaleDateString('en-US',{month:'short',day:'numeric'}):'Not done yet';
+  const n=day.exercises.length;
+  let h=`<div class="tr-head"><div class="tr-head-t"><div class="tr-day">${esc(dayLabel(day.title))}</div>${day.subtitle?`<div class="mist">${esc(day.subtitle)}</div>`:''}
+    <div class="tr-meta"><span>${n} exercise${n!==1?'s':''}</span><span>${lastTxt}</span></div></div>${ringBtn('more','Day options','openWorkoutSettings()')}</div>`;
+  if(day.notes)h+=`<div class="panel tr-notes"><span class="mist">${icon('note',18)}</span><div>${esc(day.notes)}</div></div>`;
+  if(n&&dayHasTypedInputs(day.id)){
+    h+=`<div class="panel tr-pending"><div><div class="tr-pending-t">You have sets typed in</div><div class="mist sm">They're saved but not logged yet. Pick up where you left off.</div></div>
+      <div class="tr-pending-btns"><button class="btn-s" onclick="startLogMode()">Continue logging</button><button class="btn-s ghost" onclick="clearDayInputs()">Clear</button></div></div>`;
+  }
+  if(n){
+    h+=`<button class="btn-p tr-start" onclick="startSession()">${icon('play',14)} Start session</button>
+      <div class="tr-start-sub"><span class="mist">Already trained?</span> <button class="link" onclick="startLogMode()">Log it without the timer</button></div>`;
+  }
+  h+=`<div class="tr-list">`;
+  dayBlocks(day).forEach(b=>{
+    h+=`<div class="tr-blk${b.idx.length>1?' ss':''}">`;
+    b.idx.forEach(ei=>{
+      const ex=day.exercises[ei];const swapped=savedInputs[day.id+'_e'+ei+'_swap']||'';
+      const hint=shortHint(swapped?{...ex,name:swapped}:ex,lastMap);
+      h+=`<div class="tr-row"><span class="tr-code${b.idx.length>1?' lilac':''}">${esc(exCode(day,ei))}</span>
+        <div class="tr-info"><div class="tr-name">${esc(swapped||ex.name)}${swapped?'<span class="tr-tag">Swapped today</span>':''}</div>
+        <div class="mist sm">${ex.sets} × ${esc(ex.reps||'')}${ex.isTime?' sec':''}</div>
+        ${swapped?`<div class="dim sm">Plan says ${esc(ex.name)}</div>`:''}${ex.notes?`<div class="mist sm">${esc(ex.notes)}</div>`:''}${hint?`<div class="lilac sm">${esc(hint)}</div>`:''}</div>
+        ${ringBtn('more','Options for '+(swapped||ex.name),`openExerciseMenu(${di},${ei})`)}</div>`;
+    });
+    h+=`</div>`;
+  });
+  h+=`</div><button class="btn-s ghost tr-add" onclick="openAdd(${di})">${icon('plus',16)} Add exercise</button>`;
+  h+=otherLogsHtml();
+  $('dayContent').innerHTML=h;
+}
+function renderDayFull(){
+  const prog=userData.program||[],day=prog.find(d=>d.id===currentDay);if(!day)return;
+  const di=prog.indexOf(day);const lastMap=buildLastSetMap();let h='';
+  if(!sessionActive){
+    const when=pendingBackdateISO?new Date(pendingBackdateISO).toLocaleDateString('en-US',{weekday:'long',month:'short',day:'numeric'}):'';
+    h+=`<div class="pg-back"><button class="back-btn" onclick="backToWorkoutMenu()">${icon('left',20)}${esc(dayLabel(day.title))}</button></div>
+      <div class="tr-day">Log ${esc(dayLabel(day.title))}</div>
+      <div class="mist" style="margin:4px 0 16px">${when?`For ${esc(when)}. No XP for earlier days, but it keeps your streak.`:'No timer. Fill in what you did, tick each set, then log it.'}</div>`;
+  }
+  if(day.notes&&!sessionActive)h+=`<div class="panel tr-notes"><span class="mist">${icon('note',18)}</span><div>${esc(day.notes)}</div></div>`;
+  dayBlocks(day).forEach((b,bi)=>{
+    const ss=b.idx.length>1;
+    h+=`<div class="ex-blk${ss?' ss panel':''}" data-blk="${bi}">`;
+    if(ss)h+=`<div class="ss-head"><span class="lilac">${icon('swap',16)}</span><div><div class="ss-t">Superset ${b.idx.map(i=>esc(exCode(day,i))).join(' and ')}</div><div class="mist sm">Back to back, rest after the pair</div></div></div>`;
+    b.idx.forEach((ei,k)=>{
+      const ex=day.exercises[ei];
+      const swapKey=day.id+'_e'+ei+'_swap';const swappedName=savedInputs[swapKey]||'';const shownName=swappedName||ex.name;
+      const noteId=day.id+'_e'+ei+'_note';const noteDraft=savedInputs[noteId]||'';
+      h+=`<div class="exercise${ss?' in-superset':' panel'}" data-ei="${ei}">
+        <div class="ex-header"><span class="ex-num${ss?' lilac':''}">${esc(exCode(day,ei))}</span>
+          <div class="ex-title"><div class="ex-name">${esc(shownName)}${swappedName?'<span class="tr-tag">Swapped today</span>':''}</div><div class="mist sm">${ex.sets} × ${esc(ex.reps||'')}${ex.isTime?' sec':''}</div></div>
+          ${ringBtn('swap','Swap '+shownName,`openSwapModal(${di},${ei})`)}${ringBtn('note','Note for this session',`toggleExNote('${noteId}')`)}${ringBtn('edit','Edit '+shownName,`openEdit(${di},${ei})`)}</div>`;
+      if(ex.notes)h+=`<div class="ex-notes">${esc(ex.notes)}</div>`;
+      h+=overloadHint(swappedName?{...ex,name:swappedName}:ex,lastMap);
+      h+=`<div class="ex-note-row${noteDraft?' open':''}" id="row_${noteId}"><input type="text" class="ex-note-input" id="${noteId}" placeholder="Note for this session, like knee felt off on set 2" value="${esc(noteDraft)}" maxlength="200"></div>`;
+      h+=`<div class="sets-grid">`;
+      const tgt=esc(String(ex.reps||'reps'));
+      for(let s=0;s<ex.sets;s++){
+        const wK=day.id+'_e'+ei+'_s'+s+'_w',rK=day.id+'_e'+ei+'_s'+s+'_r',cK=day.id+'_e'+ei+'_s'+s+'_c';
+        if(ex.isTime)h+=`<div class="set-row time"><label for="${rK}">S${s+1}</label><input type="number" inputmode="numeric" id="${rK}" placeholder="${tgt} sec" value="${esc(savedInputs[rK]||'')}" aria-label="Set ${s+1} seconds"><span class="sep"></span><span></span><input type="checkbox" id="${cK}" ${savedInputs[cK]?'checked':''} aria-label="Set ${s+1} done"></div>`;
+        else h+=`<div class="set-row"><label for="${wK}">S${s+1}</label><input type="number" inputmode="decimal" id="${wK}" placeholder="lb" value="${esc(savedInputs[wK]||'')}" aria-label="Set ${s+1} weight"><span class="sep">×</span><input type="number" inputmode="numeric" id="${rK}" placeholder="${tgt}" value="${esc(savedInputs[rK]||'')}" aria-label="Set ${s+1} reps"><input type="checkbox" id="${cK}" ${savedInputs[cK]?'checked':''} aria-label="Set ${s+1} done"></div>`;
+      }
+      h+=`</div></div>`;
+      if(ss&&k<b.idx.length-1)h+=`<div class="ss-gap"></div>`;
+    });
+    if(ss)h+=`<div class="mist sm ss-foot">Gym packed? Doing these one after the other is fine.</div>`;
+    h+=`</div>`;
+  });
+  if(sessionActive)h+=`<div id="sesList"></div>`;
+  h+=`<button class="btn-s ghost tr-add" onclick="openAdd(${di})">${icon('plus',16)} Add exercise</button>`;
+  $('dayContent').innerHTML=h;
+  if(sessionActive){attachSessionCheckboxHandlers();applySessionFocus()}
+}
+function sesBlocks(){const day=(userData.program||[]).find(d=>d.id===currentDay);return day?dayBlocks(day):[]}
+function exDone(day,ei){
+  const ex=day.exercises[ei];let n=0;
+  for(let s=0;s<ex.sets;s++){const c=$(day.id+'_e'+ei+'_s'+s+'_c');if(c?c.checked:savedInputs[day.id+'_e'+ei+'_s'+s+'_c'])n++}
+  return n;
+}
+function firstOpenBlock(){
+  const day=(userData.program||[]).find(d=>d.id===currentDay);if(!day)return 0;
+  const bl=dayBlocks(day);const i=bl.findIndex(b=>b.idx.some(ei=>exDone(day,ei)<day.exercises[ei].sets));
+  return i<0?Math.max(0,bl.length-1):i;
+}
+function applySessionFocus(){
+  const day=(userData.program||[]).find(d=>d.id===currentDay);if(!day)return;
+  const bl=dayBlocks(day);if(sesBlock>=bl.length)sesBlock=Math.max(0,bl.length-1);
+  document.querySelectorAll('#dayContent .ex-blk').forEach(el=>{el.style.display=parseInt(el.dataset.blk)===sesBlock?'':'none'});
+  const lbl=$('sessionDayLabel');if(lbl)lbl.textContent=dayLabel(day.title);
+  let total=0,done=0;day.exercises.forEach((ex,ei)=>{total+=ex.sets;done+=exDone(day,ei)});
+  const pf=$('sesProgFill');if(pf)pf.style.width=(total?Math.round(done/total*100):0)+'%';
+  const first=bl[sesBlock]?bl[sesBlock].idx[0]:0;
+  const pl=$('sesProgLabel');if(pl)pl.textContent=`Exercise ${first+1} of ${day.exercises.length}`;
+  const nb=$('sesNextBtn');
+  if(nb){const nx=bl[sesBlock+1];nb.textContent=nx?'Next: '+exCode(day,nx.idx[0]):'Finish workout'}
+  refreshSesList();
+}
+function refreshSesList(){
+  const el=$('sesList');if(!el)return;
+  const day=(userData.program||[]).find(d=>d.id===currentDay);if(!day)return;
+  const bl=dayBlocks(day);
+  let h=`<div class="sec-row"><span class="sec">All exercises</span><span class="mist sm">Tap to jump</span></div><div class="li-list">`;
+  bl.forEach((b,bi)=>b.idx.forEach(ei=>{
+    const ex=day.exercises[ei],d=exDone(day,ei),full=d>=ex.sets,now=bi===sesBlock;
+    const nm=savedInputs[day.id+'_e'+ei+'_swap']||ex.name;
+    h+=`<button class="li ses-li${now?' now':''}${full?' full':''}" onclick="sesJump(${bi})"><span class="ses-mark">${full?icon('check',13):''}</span>
+      <span class="tr-code${b.idx.length>1?' lilac':''}">${esc(exCode(day,ei))}</span><span class="t">${esc(nm)}<small>${full?`${d} of ${ex.sets} sets done`:now?`Set ${Math.min(d+1,ex.sets)} of ${ex.sets}`:`${ex.sets} × ${esc(ex.reps||'')}`}</small></span></button>`;
+  }));
+  el.innerHTML=h+`</div>`;
+}
+function sesJump(bi){captureInputs();sesBlock=bi;applySessionFocus();try{window.scrollTo({top:0,behavior:'smooth'})}catch(e){}}
+function sessionNext(){
+  captureInputs();persistSession();
+  if(sesBlock>=sesBlocks().length-1){finishSession();return}
+  sesBlock++;applySessionFocus();try{window.scrollTo({top:0,behavior:'smooth'})}catch(e){}
+}
+function openExerciseMenu(di,ei){
+  const day=userData.program[di];if(!day)return;const ex=day.exercises[ei];if(!ex)return;
+  const nm=savedInputs[day.id+'_e'+ei+'_swap']||ex.name;
+  const ss=ex.group?` Superset ${esc(String(ex.group))}.`:'';
+  openSheet(`<div class="sheet-head"><span class="num lilac">${esc(exCode(day,ei))}</span><span class="sheet-t">${esc(nm)}</span></div>
+    <div class="mist sm" style="margin:2px 0 12px">${ex.sets} × ${esc(ex.reps||'')}.${ss}</div>
+    <div class="li-list">
+    <button class="li" onclick="closeSheet();openSwapModal(${di},${ei})"><span class="ico">${icon('swap',18)}</span><span class="t">Swap exercise<small>Equipment taken? Pick something that trains the same thing</small></span></button>
+    <button class="li" onclick="closeSheet();openEdit(${di},${ei})"><span class="ico">${icon('edit',18)}</span><span class="t">Edit<small>Name, sets, target reps, cues, superset pair</small></span></button>
+    <button class="li danger" onclick="closeSheet();editTarget={di:${di},ei:${ei}};deleteEx()"><span class="ico">${icon('trash',18)}</span><span class="t">Remove from ${esc(dayLabel(day.title))}<small>Your past logs stay</small></span></button>
+    </div><button class="btn-s" style="width:100%;margin-top:16px;height:48px" onclick="closeSheet()">Cancel</button>`);
+}
+function openSheet(html){
+  let m=$('sheetModal');
+  if(!m){m=document.createElement('div');m.className='modal-bg';m.id='sheetModal';m.innerHTML='<div class="modal"></div>';
+    m.addEventListener('click',e=>{if(e.target===m)closeSheet()});document.body.appendChild(m)}
+  m.querySelector('.modal').innerHTML=html;m.classList.add('open');
+}
+function closeSheet(){const m=$('sheetModal');if(m)m.classList.remove('open')}
+async function clearDayInputs(){
+  const day=(userData.program||[]).find(d=>d.id===currentDay);if(!day)return;
+  if(!confirm(`Clear the weights and reps you've typed for ${dayLabel(day.title)}?`))return;
+  const pre=day.id+'_e';Object.keys(savedInputs).forEach(k=>{if(k.startsWith(pre)&&/_s\d+_[wrc]$/.test(k))delete savedInputs[k]});
+  try{await db.collection('users').doc(U.uid).collection('meta').doc('inputs').set({data:savedInputs})}catch(e){console.warn(e)}
+  renderDay();toast('Cleared.');
+}
+function addRest(sec){if(restEndMs){restEndMs+=sec*1000;updateSessionClock()}}
+const STR_LIFTS={
+  bench:{inc:/bench/,exc:/incline|decline|close|dumbbell|\bdb\b|machine|smith|floor|board|pin/},
+  squat:{inc:/squat/,exc:/split|goblet|front|hack|bulgarian|jump|sissy|pistol|box|zercher|belt|smith|machine|leg press/},
+  deadlift:{inc:/deadlift|\bdl\b/,exc:/romanian|\brdl\b|stiff|deficit|single|trap|hex|sumo|rack|block|snatch/}
+};
+function bestLoggedLifts(){
+  const out={bench:0,squat:0,deadlift:0};
+  getLiftLogs().forEach(e=>(e.exercises||[]).forEach(ex=>{
+    const n=String(ex.name||'').toLowerCase();
+    Object.entries(STR_LIFTS).forEach(([k,r])=>{
+      if(!r.inc.test(n)||r.exc.test(n))return;
+      (ex.sets||[]).forEach(s=>{const w=parseFloat(s.weight)||0,reps=parseFloat(s.reps)||0;if(reps>0&&w<=1500&&w>out[k])out[k]=w});
+    });
+  }));
+  return out;
+}
+
+// ═══════════ v1.29.0 REDESIGN HELPERS ═══════════
+function dayHasTypedInputs(dayId){
+  const pre=dayId+'_e';
+  return Object.keys(savedInputs||{}).some(k=>k.startsWith(pre)&&/_s\d+_[wrc]$/.test(k)&&(k.endsWith('_c')?savedInputs[k]===true:String(savedInputs[k]||'').trim()!==''));
+}
+function sessionMinutes(){
+  if(!sessionActive||!sessionStartMs)return 0;
+  let el=Date.now()-sessionStartMs-sessionPausedMs;if(sessionPauseStartMs)el-=Date.now()-sessionPauseStartMs;
+  return Math.max(0,Math.floor(el/60000));
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  v1.30.0 — NEW ERA BEGINS: Blue Gates, Titles, Hall of Fame
+// ═══════════════════════════════════════════════════════════════
+ICONS.crown='<path d="M4 18h16M5 17l-1-9 5 4 3-7 3 7 5-4-1 9z"/>';
+ICONS.trophy='<path d="M8 4h8v5a4 4 0 0 1-8 0zM8 6H5a3 3 0 0 0 3 4M16 6h3a3 3 0 0 1-3 4M12 13v4M8.5 20h7"/>';
+ICONS.tag='<path d="M3.5 12.5V4.5h8l9 9-8 8z"/><circle cx="8" cy="9" r="1.2"/>';
+ICONS.lock='<rect x="5" y="11" width="14" height="9.5" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>';
+
+// ─────────────── Blue Gates ───────────────
+// 0 = E/D, 1 = C, 2 = B/A. Floors keep a brand-new hunter's gate winnable and a veteran's honest.
+function blueTier(){const n=getEffectiveRank().name;return n==='C-RANK'?1:(n==='B-RANK'||n==='A-RANK')?2:0}
+function pickBlueGateType(monIso){
+  const [y,m,d]=monIso.split('-').map(Number);
+  const idx=Math.round((Date.UTC(y,m-1,d)-Date.UTC(2026,0,5))/(7*86400000))+3; // offset from the Red Gate cycle
+  const n=BLUE_GATE_POOL.length;
+  return BLUE_GATE_POOL[((idx%n)+n)%n];
+}
+// Swap out a gate this hunter can't possibly clear (no lift history yet, no nutrition targets)
+function blueGateFallback(type,monIso){
+  if(type.id==='heavier_hand'){const base=prBaselineBefore(weekBounds(monIso)[0]);if(!Object.keys(base).length)return BLUE_GATE_POOL.find(t=>t.id==='clean_sweep')}
+  if(type.id==='fuel_run'){const t=(typeof calcTDEE==='function')?calcTDEE():null;if(!t)return BLUE_GATE_POOL.find(t=>t.id==='quest_line')}
+  return type;
+}
+function computeBlueTarget(type,monIso){
+  const tier=blueTier();
+  switch(type.id){
+    case 'iron_tide':{let tot=0,n=0;for(let i=1;i<=4;i++){const v=weeklyVolume(shiftWeek(monIso,-i));if(v>0){tot+=v;n++}}
+      return Math.max([5000,10000,15000][tier],Math.round((n?tot/n:0)*1.05/500)*500)}
+    case 'clean_sweep':return [2,3,4][tier];
+    case 'heavier_hand':return 1;
+    case 'quest_line':return [3,3,4][tier];
+    case 'fuel_run':return [3,4,4][tier];
+    case 'long_road':return [45,60,90][tier];
+    case 'time_under_iron':{let tot=0,n=0;for(let i=1;i<=4;i++){const m=weeklySessionMinutes(shiftWeek(monIso,-i));if(m>0){tot+=m;n++}}
+      return Math.max([60,90,120][tier],Math.round((n?tot/n:0)/10)*10)}
+  }
+  return 1;
+}
+function blueGateDesc(type,target){
+  const t=fmtN(target);
+  switch(type.id){
+    case 'iron_tide':return `Move ${t} lb this week. Scaled from your last four weeks, so it's a stretch, not a wall.`;
+    case 'clean_sweep':return `${t} training sessions this week, with every logged set checked off.`;
+    case 'heavier_hand':return 'Beat your best weight on any one lift.';
+    case 'quest_line':return `Finish every daily quest on ${t} days this week.`;
+    case 'fuel_run':return `Hit your protein target on ${t} days this week.`;
+    case 'long_road':return `Log ${t} minutes of cardio this week.`;
+    case 'time_under_iron':return `Spend ${t} minutes in a timed session this week.`;
+  }
+  return '';
+}
+function blueGateType(g){return BLUE_GATE_POOL.find(t=>t.id===(g&&g.type))||BLUE_GATE_POOL[0]}
+function getBlueGateProgress(g){const type=blueGateType(g);return getGateProgress({week:g.week,type:type.m,target:g.target})}
+let blueGateOpening=null;
+async function ensureBlueGate(){
+  if(isSRank())return null;
+  const wk=gateWeekKey();
+  let g=userData.blueGate;
+  if(g&&g.week===wk)return g;
+  if(blueGateOpening)return blueGateOpening;
+  blueGateOpening=(async()=>{
+    if(g){
+      const hist=userData.blueGateHistory||[];
+      if(!hist.some(h=>h.week===g.week))hist.push({week:g.week,type:g.type,cleared:!!g.cleared});
+      userData.blueGateHistory=hist.slice(-52);
+    }
+    const type=blueGateFallback(pickBlueGateType(wk),wk);
+    g={week:wk,type:type.id,target:computeBlueTarget(type,wk),cleared:false};
+    userData.blueGate=g;
+    try{await saveUser({blueGate:g,blueGateHistory:userData.blueGateHistory||[]})}catch(e){console.warn('blue gate save:',e)}
+    return g;
+  })();
+  try{return await blueGateOpening}finally{blueGateOpening=null}
+}
+function calcStreakFrom(history,g){
+  const all=[...(history||[])];
+  if(g&&g.cleared)all.push({week:g.week,cleared:true});
+  const byWeek={};all.forEach(h=>{byWeek[h.week]=h.cleared});
+  let expect=(g&&g.cleared)?g.week:shiftWeek(gateWeekKey(),-1);
+  let n=0;while(byWeek[expect]){n++;expect=shiftWeek(expect,-1)}
+  return n;
+}
+function calcBlueGateStreak(){return calcStreakFrom(userData.blueGateHistory,userData.blueGate)}
+function renderBlueGateCard(){
+  const g=userData.blueGate;
+  if(!g||g.week!==gateWeekKey()){
+    ensureBlueGate().then(x=>{if(x&&currentPage==='missions')renderMissions()});
+    return sysWin(`<div class="sys-title">[ Blue Gate ]</div><div class="mist" style="text-align:center;margin-top:8px">A gate is opening…</div>`,'blue-gate');
+  }
+  const type=blueGateType(g);
+  const p=getBlueGateProgress(g);
+  const pct=Math.min(100,p.target?(p.val/p.target)*100:0);
+  const msLeft=weekBounds(g.week)[1]-Date.now();
+  const dLeft=Math.max(0,Math.floor(msLeft/86400000)),hLeft=Math.max(0,Math.floor((msLeft%86400000)/3600000));
+  const weekLabel=new Date(g.week+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'});
+  const reward=`+${SHARD_REWARDS.blueGate} shards, +${BLUE_GATE_XP} XP`;
+  let action='',right=`<span class="gold">Clear it: ${reward}</span>`;
+  if(g.cleared){action=`<div class="rg-cleared">Gate cleared</div>`;right=''}
+  else if(p.done){action=`<button class="btn-p rg-claim" onclick="claimBlueGate()">Claim: ${reward}</button>`;right=''}
+  return sysWin(`<div class="sys-title">[ Blue Gate ]</div>
+    <div class="rg-head"><div><div class="rg-name">${esc(type.name)}</div><div class="mist sm">Week of ${weekLabel}</div></div>${g.cleared?'':`<div class="num rg-timer">${dLeft}d ${hLeft}h</div>`}</div>
+    <div class="rg-desc">${esc(blueGateDesc(type,g.target))}</div>
+    <div class="track rg-track"><div class="fill" style="width:${pct}%"></div></div>
+    <div class="rg-nums"><span>${fmtN(p.val)} / ${fmtN(p.target)} ${esc(type.unit)}</span><span>${Math.round(pct)}%</span></div>
+    ${p.blocker&&!g.cleared?`<div class="rg-blocker">${esc(p.blocker)}</div>`:''}
+    ${action}
+    <div class="bg-foot"><button class="link" onclick="openBlueGateInfo()">${fmtN(userData.blueGatesCleared||0)} cleared, gate streak ${calcBlueGateStreak()}</button>${right}</div>`,'blue-gate'+(g.cleared?' cleared':''));
+}
+function openBlueGateInfo(){
+  const pts=['A new gate opens every Monday for every rank, E through A. S-Ranks face the Red Gate instead.',
+    'Seven challenge types rotate: volume, flawless sessions, a heavier top set, quest days, protein days, cardio and time trained.',
+    'Targets scale to you, so a new hunter and a veteran both get a fair fight.',
+    'Clear five for the Gatebreaker title. Your count shows in the Hall of Fame.'];
+  openSheet(`<h2>How Blue Gates work</h2><ol class="bg-how">${pts.map(p=>`<li>${p}</li>`).join('')}</ol>
+    <div class="m-actions"><button class="m-cancel" onclick="closeSheet()">Got it</button></div>`);
+}
+async function claimBlueGate(){
+  const g=userData.blueGate;if(!g||g.cleared)return;
+  const p=getBlueGateProgress(g);
+  if(!p.done){toast('The gate still stands');return}
+  g.cleared=true;g.clearedAt=Date.now();
+  userData.blueGatesCleared=(userData.blueGatesCleared||0)+1;
+  userData.shards=(userData.shards||0)+SHARD_REWARDS.blueGate;
+  const gained=addXP(BLUE_GATE_XP);
+  const type=blueGateType(g);
+  queueFeedEvent('bgate',{name:type.name});
+  await saveUser({blueGate:g,blueGatesCleared:userData.blueGatesCleared,shards:userData.shards,xp:userData.xp,feedEvents:userData.feedEvents||[]});
+  const n=userData.blueGatesCleared;
+  if(n>=1)unlockAch('blue_gate_1');if(n>=10)unlockAch('blue_gate_10');
+  await checkTitles(true);
+  await saveLeaderboard();updateTopBar();
+  showGateCleared(type,gained,{blue:true,shards:SHARD_REWARDS.blueGate,count:n});
+  if(currentPage==='missions')renderMissions();
+}
+
+// ─────────────── Titles ───────────────
+function bestWeekStreak(){return Math.max(userData.prevWeeklyStreak||0,calcWeeklyStreak())}
+// {have, need} for titles with a count, or a boolean for yes/no titles
+function titleProgress(id){
+  const best=bestLoggedLiftsFull();
+  switch(id){
+    case 'first_blood':return{have:Math.min(1,getLiftLogs().length),need:1};
+    case 'quest_keeper':return{have:Math.min(30,userData.missionStreak||0),need:30};
+    case 'centurion':return{have:Math.min(100,getLiftLogs().length),need:100};
+    case 'the_unbroken':return{have:Math.min(12,bestWeekStreak()),need:12};
+    case 'thousand_club':{const t=best.bench.w+best.squat.w+best.deadlift.w;return{have:Math.min(1000,t),need:1000,unit:'lb'}}
+    case 'gatebreaker':return{have:Math.min(5,userData.blueGatesCleared||0),need:5};
+    case 'crimson_hunter':return{have:Math.min(5,userData.redGatesCleared||0),need:5};
+    case 'iron_will':return (userData.trialsCompleted||[]).includes('iron_gate');
+    case 'gauntlet_survivor':return (userData.trialsCompleted||[]).includes('gauntlet');
+    case 'shadow_monarch':return (userData.trialsCompleted||[]).includes('awakening');
+    case 'record_holder':return false; // only granted from the Hall of Fame
+  }
+  return false;
+}
+function titleEarnedNow(id){const p=titleProgress(id);return typeof p==='boolean'?p:p.have>=p.need}
+function titlesEarned(){return (userData.titlesEarned||[]).filter(id=>TITLES.some(t=>t.id===id))}
+function hasTitle(id){return titlesEarned().includes(id)}
+// Only ever returns a name from the catalog, so other users' IDs can't inject anything
+function titleName(id){const t=TITLES.find(x=>x.id===id);return t?t.name:''}
+// Must match the profile exactly for the leaderboard rules, so only filter unknown IDs
+function myTitleId(){const id=userData.titleId||'';return TITLES.some(t=>t.id===id)?id:''}
+async function checkTitles(quiet,extra){
+  const have=new Set(titlesEarned());const fresh=[];
+  TITLES.forEach(t=>{if(!have.has(t.id)&&(titleEarnedNow(t.id)||(extra||[]).includes(t.id))){have.add(t.id);fresh.push(t)}});
+  if(!fresh.length)return [];
+  userData.titlesEarned=[...have];
+  try{await saveUser({titlesEarned:userData.titlesEarned})}catch(e){console.warn('titles save:',e)}
+  setTimeout(()=>toast(fresh.length===1?`New title earned: ${fresh[0].name}. Equip it in Wardrobe.`:`${fresh.length} new titles earned. Equip one in Wardrobe.`),quiet?2600:0);
+  return fresh;
+}
+async function equipTitle(id){
+  if(id&&!hasTitle(id)){toast('Earn that title first');return}
+  userData.titleId=id||'';
+  await saveUser({titleId:userData.titleId});
+  await saveLeaderboard();
+  openWardrobe('title');
+  if(currentPage==='profile')renderProfile();
+  toast(id?`Wearing ${titleName(id)}`:'Title removed');
+}
+function titleRowsHtml(){
+  const earned=new Set(titlesEarned());const on=myTitleId();
+  const order=[...TITLES].sort((a,b)=>(earned.has(b.id)?1:0)-(earned.has(a.id)?1:0));
+  let h=`<p class="wd-sub">Titles are earned, never bought. Wear one and it shows under your name for everyone.</p><div class="li-list ttl-list">`;
+  h+=`<button class="li ttl${on?'':' on'}" onclick="equipTitle('')"><span class="ico">${icon('x',18)}</span><span class="t">No title<small>Show your class title instead</small></span>${on?'':`<span class="ttl-on">${icon('check',18)}</span>`}</button>`;
+  order.forEach(t=>{
+    const have=earned.has(t.id),isOn=on===t.id;
+    const p=titleProgress(t.id);
+    let how=esc(t.how),bar='';
+    if(!have&&typeof p==='object'){how+=`. ${fmtN(p.have)} of ${fmtN(p.need)}${p.unit?' '+p.unit:''}`;bar=`<span class="track ttl-track"><span class="fill" style="width:${Math.min(100,p.have/p.need*100)}%"></span></span>`}
+    const right=isOn?`<span class="ttl-on">${icon('check',18)}</span>`:have?`<span class="btn-s sm ttl-eq">Equip</span>`:`<span class="ttl-lock">${icon('lock',18)}</span>`;
+    h+=`<button class="li ttl${have?'':' locked'}${isOn?' on':''}${t.gold?' gold-t':''}" ${have&&!isOn?`onclick="equipTitle('${safeId(t.id)}')"`:'disabled'}>
+      <span class="ico">${icon('tag',18)}</span><span class="t"><span class="ttl-n">${esc(t.name)}</span><small>${how}</small>${bar}</span>${right}</button>`;
+  });
+  return h+`</div>`;
+}
+// Title line under a name. Falls back to the class title so the line is never empty.
+function titleLine(titleId,fallback){const n=titleName(titleId);return n?`<span class="ttl-chip${titleId==='shadow_monarch'?' gold':''}">${esc(n)}</span>`:esc(fallback||'')}
+
+// ─────────────── Hall of Fame ───────────────
+const HOF_PATTERNS={
+  bench:STR_LIFTS.bench,squat:STR_LIFTS.squat,deadlift:STR_LIFTS.deadlift,
+  ohp:{inc:/overhead press|\bohp\b|military press|standing press|shoulder press/,exc:/dumbbell|\bdb\b|machine|seated|smith|landmine|push press|arnold|behind|kettlebell|\bkb\b|cable|band/}
+};
+// Best finished set per big lift, with the date it was set. Unfinished sets (done:false) don't count.
+function bestLoggedLiftsFull(){
+  const out={};Object.keys(HOF_PATTERNS).forEach(k=>out[k]={w:0,date:''});
+  getLiftLogs().forEach(e=>(e.exercises||[]).forEach(ex=>{
+    const n=String(ex.name||'').toLowerCase();
+    Object.entries(HOF_PATTERNS).forEach(([k,r])=>{
+      if(!r.inc.test(n)||r.exc.test(n))return;
+      const cap=(HOF_LIFTS.find(l=>l.k===k)||{}).cap||1500;
+      (ex.sets||[]).forEach(s=>{if(s.done===false)return;const w=parseFloat(s.weight)||0,reps=parseFloat(s.reps)||0;
+        if(reps>0&&w>0&&w<=cap&&w>out[k].w)out[k]={w:Math.round(w*10)/10,date:e.date||''}});
+    });
+  }));
+  return out;
+}
+function hofOptedIn(){return (userData.privacy||{}).hideHof!==true}
+// What goes on your public leaderboard doc. A record the dev struck stays at 0.
+function hofPublicBests(){
+  const b=bestLoggedLiftsFull(),ex=userData.hofExclude||[],out={};
+  Object.keys(HOF_PATTERNS).forEach(k=>{out[k]=hofOptedIn()&&!ex.includes(k)?b[k].w:0});
+  return out;
+}
+let hofData=null;
+const HOF_CATS=[
+  ...HOF_LIFTS.map(l=>({id:l.k,name:l.name,sub:'Heaviest finished set',unit:'lb',icon:'crown',val:u=>+((u.bests||{})[l.k])||0})),
+  {id:'total',name:'Big three total',sub:'Best bench + squat + deadlift',unit:'lb',icon:'trophy',val:u=>{const b=u.bests||{};return (+b.bench||0)+(+b.squat||0)+(+b.deadlift||0)}},
+  {id:'workouts',name:'Most workouts',sub:'Lifting sessions logged',unit:'',icon:'crown',val:u=>+u.workouts||0},
+  {id:'streak',name:'Longest week streak',sub:'Weeks in a row with 3+ sessions',unit:'weeks',icon:'crown',val:u=>+u.weekStreak||0},
+  {id:'bgates',name:'Most Blue Gates',sub:'Blue Gates cleared',unit:'',icon:'crown',val:u=>+u.blueGates||0}
+];
+async function loadHallOfFame(){
+  const list=[];
+  const snap=await db.collection('leaderboard').limit(500).get();
+  snap.forEach(d=>{const x=d.data()||{};if(x.hof===false)return;list.push({uid:d.id,...x})});
+  // Your own row always uses what's on this phone right now
+  const meIdx=list.findIndex(u=>u.uid===U.uid);
+  if(hofOptedIn()){
+    const mine={uid:U.uid,username:userData.username||'hunter',rank:getEffectiveRank().name,titleId:myTitleId(),profilePic:userData.profilePic,frame:getCos().frame,
+      bests:hofPublicBests(),workouts:getLiftLogs().length,weekStreak:bestWeekStreak(),blueGates:userData.blueGatesCleared||0};
+    if(meIdx>=0)list[meIdx]={...list[meIdx],...mine};else list.push(mine);
+  }else if(meIdx>=0)list.splice(meIdx,1);
+  hofData={at:Date.now(),list};
+  return list;
+}
+function hofRanked(cat){
+  return (hofData?hofData.list:[]).map(u=>({u,v:cat.val(u)})).filter(x=>x.v>0)
+    .sort((a,b)=>b.v-a.v||String(a.u.username||'').localeCompare(String(b.u.username||'')));
+}
+function ordinal(n){const s=['th','st','nd','rd'],v=n%100;return n+(s[(v-20)%10]||s[v]||s[0])}
+function hofValue(v,cat){return `${fmtN(v)}${cat.unit==='lb'?' lb':cat.unit?' '+cat.unit:''}`}
+function hofRow(x,i,cat,opts){
+  const u=x.u,me=u.uid===U.uid;const r=(u.rank&&RANKS.find(k=>k.name===u.rank))||RANKS[0];
+  const t=titleName(u.titleId);
+  let sub=me&&opts&&opts.youSub?opts.youSub:[rankLabel(r.name),t].filter(Boolean).join(', ');
+  const strike=isDev&&!me&&HOF_LIFTS.some(l=>l.k===cat.id)?`<button class="link sm hof-strike" onclick="event.stopPropagation();devStrikeRecord('${safeId(u.uid)}','${cat.id}','${safeName(u.username||'hunter')}')">Strike</button>`:'';
+  return `<div class="hof-row${me?' me':''}${i===0?' first':''}" role="button" tabindex="0" onclick="openProfileCard('${safeId(u.uid)}')">
+    <span class="num hof-pos">${me&&i>2?ordinal(i+1):i+1}</span>
+    <span class="ff-pic hof-av${i===0?' gold':''}${frameClass(u.frame)}">${avatarHtml(u.profilePic,`<span>${esc(String(u.username||'h')[0].toUpperCase())}</span>`)}</span>
+    <span class="t"><span>${me?'You':esc(u.username||'hunter')}</span><small>${esc(sub)}</small></span>${strike}
+    <span class="num hof-v">${hofValue(x.v,cat)}</span></div>`;
+}
+function hofPanel(cat){
+  const ranked=hofRanked(cat);
+  let h=`<div class="panel hof-panel"><div class="hof-head"><span class="hof-ic">${icon(cat.icon,20)}</span><span><span class="hof-name">${esc(cat.name)}</span><small class="mist">${esc(cat.sub)}</small></span></div>`;
+  if(!ranked.length)return h+`<div class="empty-note">No records yet. Log a finished set to claim the first spot.</div></div>`;
+  const best=bestLoggedLiftsFull();
+  const youSub=(best[cat.id]&&best[cat.id].date)?'Set '+new Date(best[cat.id].date).toLocaleDateString('en-US',{month:'short',day:'numeric'}):'Climbing';
+  ranked.slice(0,3).forEach((x,i)=>{h+=hofRow(x,i,cat,{youSub})});
+  const mi=ranked.findIndex(x=>x.u.uid===U.uid);
+  if(mi>2)h+=hofRow(ranked[mi],mi,cat,{youSub});
+  return h+`</div>`;
+}
+async function renderHallOfFame(el){
+  el.innerHTML=hofTabs()+`<div class="empty-note">Opening the Hall of Fame…</div>`;
+  try{await loadHallOfFame()}catch(e){el.innerHTML=hofTabs()+`<div class="empty-note">Couldn't open the Hall of Fame. ${esc(e.message||'')}</div>`;return}
+  let h=hofTabs();
+  h+=sysWin(`<div class="sys-title">[ Hall of Fame ]</div><div class="hof-intro">The heaviest lifts anyone in LexenFitness has logged. Records come from finished sets in your logs, not from Settings.</div>`,'hof-win');
+  if(!hofOptedIn())h+=`<div class="hof-note">You're hidden from the Hall of Fame. Turn on "Show my records in the Hall of Fame" in Settings, Privacy to compete.</div>`;
+  ['deadlift','bench','total'].forEach(id=>{h+=hofPanel(HOF_CATS.find(c=>c.id===id))});
+  h+=`<div class="sec" style="margin-top:26px">More records</div><div class="li-list hof-more">`;
+  ['squat','ohp','workouts','streak','bgates'].forEach(id=>{
+    const cat=HOF_CATS.find(c=>c.id===id);const top=hofRanked(cat)[0];
+    h+=`<button class="li" onclick="openHofCategory('${id}')"><span class="ico gold">${icon(cat.icon,18)}</span><span class="t">${esc(cat.name)}<small>${top?'Held by '+(top.u.uid===U.uid?'you':esc(top.u.username||'hunter')):'No record yet'}</small></span>
+      <span class="r num">${top?hofValue(top.v,cat):'—'}</span><span class="chev">${icon('chev',16)}</span></button>`;
+  });
+  h+=`</div><div class="hof-foot mist sm">Hide your numbers from the Hall of Fame in Settings, Privacy. Records past what's humanly plausible are refused, and a record that doesn't look right can be struck.</div>`;
+  el.innerHTML=h;
+  // Record Holder: first place in anything
+  if(hofOptedIn()&&!hasTitle('record_holder')&&HOF_CATS.some(c=>{const r=hofRanked(c);return r.length>1&&r[0].u.uid===U.uid}))checkTitles(false,['record_holder']);
+}
+function hofTabs(){return `<div class="seg-mini"><button class="chip${lbMode==='all'?' on':''}" onclick="lbMode='all';renderLeaderboard()">All hunters</button><button class="chip${lbMode==='friends'?' on':''}" onclick="lbMode='friends';renderLeaderboard()">Friends</button><button class="chip${lbMode==='hof'?' on':''}" onclick="lbMode='hof';renderLeaderboard()">${icon('crown',14)} Hall of Fame</button></div>`}
+function openHofCategory(id){
+  const cat=HOF_CATS.find(c=>c.id===id);if(!cat)return;
+  const ranked=hofRanked(cat).slice(0,10);
+  openSheet(`<h2>${esc(cat.name)}</h2><div class="mist sm" style="margin:-4px 0 10px">${esc(cat.sub)}. Top 10.</div>
+    <div class="hof-sheet">${ranked.length?ranked.map((x,i)=>hofRow(x,i,cat)).join(''):'<div class="empty-note">No records yet.</div>'}</div>
+    <div class="m-actions"><button class="m-cancel" onclick="closeSheet()">Close</button></div>`);
+}
+// Dev: strike a record that doesn't look right. The owner's app keeps it at 0 from then on.
+async function devStrikeRecord(uid,k,uname){
+  if(!isDev||!HOF_LIFTS.some(l=>l.k===k))return;
+  if(!confirm(`Strike @${uname}'s ${k} record? It drops to 0 and stays out until you restore it.`))return;
+  try{
+    await db.collection('users').doc(uid).update({hofExclude:firebase.firestore.FieldValue.arrayUnion(k)});
+    await db.collection('leaderboard').doc(uid).update({['bests.'+k]:0});
+    toast('Record struck');renderLeaderboard();
+  }catch(e){toast('Strike failed: '+(e.code||e.message))}
+}
+async function devRestoreRecords(){
+  if(!isDev)return;
+  const un=String(prompt('Restore struck records for which username?')||'').trim().toLowerCase().replace(/^@/,'');if(!un)return;
+  try{const d=await db.collection('usernames').doc(un).get();if(!d.exists){toast('No hunter with that name');return}
+    await db.collection('users').doc(d.data().uid).update({hofExclude:[]});toast(`Restored. @${un}'s records come back next time they open the app.`)}
+  catch(e){toast('Restore failed: '+(e.code||e.message))}
+}
+async function devResetBlueGate(){
+  if(!isDev)return;
+  userData.blueGate=null;await ensureBlueGate();toast('Blue Gate reopened');if(currentPage==='missions')renderMissions();else renderProfile();
+}
+
+// ═══════════ v1.29.0 REDESIGN HELPERS ═══════════
+let wardrobeTab='title';

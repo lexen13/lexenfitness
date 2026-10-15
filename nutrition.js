@@ -103,16 +103,16 @@ function deficitWarning(t){
   let msg='',severe=false;
   if(t.target<1200){
     severe=true;
-    msg=`${t.target} cal/day is very low. Sustained intake this low risks muscle loss, hormonal disruption, and rebound weight gain. Strongly consider a smaller deficit.`;
+    msg=`${t.target} cal a day is very low. Staying this low risks muscle loss, hormone disruption and rebound weight gain. Consider a smaller deficit.`;
   }else if(pctBelow>=25){
     severe=true;
-    msg=`That's a ${Math.round(pctBelow)}% deficit — steeper than most people can hold. Expect training, sleep, and muscle retention to suffer. Worth easing off unless this is a short, deliberate push.`;
+    msg=`That's a ${Math.round(pctBelow)}% deficit, steeper than most people can hold. Expect training, sleep and muscle retention to suffer.`;
   }else if(lowFloor){
-    msg=`${t.target} cal/day is on the low side — workable short-term, but hard to sustain and hard to hit your ${t.proteinG}g protein goal. Keep an eye on energy and recovery.`;
+    msg=`${t.target} cal a day is on the low side. Workable short-term, but hard to sustain and hard to hit ${t.proteinG} g of protein.`;
   }else{
-    msg=`Heads up: that's a ${Math.round(pctBelow)}% deficit — an aggressive cut. Good for faster loss, but keep protein high and expect training to feel harder. Best run in shorter blocks than months on end.`;
+    msg=`Aggressive cut. Fine for a few weeks. Keep protein high and watch your strength and sleep.`;
   }
-  return `<div class="deficit-warn${severe?' severe':''}"><div class="dw-msg">${severe?'⚠️':'ℹ️'} ${msg}</div><button type="button" class="dw-learn" onclick="openDeficitInfo()">Learn more about deficits &amp; risks →</button></div>`;
+  return `<button type="button" class="deficit-warn${severe?' severe':''}" onclick="openDeficitInfo()"><span class="dw-i">${icon('info',16)}</span><span class="dw-msg">${msg}</span><span class="dw-learn">Risks</span></button>`;
 }
 function openDeficitInfo(){const m=$('deficitInfoModal');if(m)m.classList.add('open')}
 function renderNutritionPage(){
@@ -124,128 +124,67 @@ function renderNutritionPage(){
   const totals=getDayTotals(dayLog);
   const mealCount=getMealCount();
   const viewDateObj=new Date(viewDate+'T12:00:00');
-  const dateLabel=viewDateObj.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
-
-  let h='';
-
-  // ── Header + Date Nav (always show) ──
-  h+=`<div class="page-title" style="display:flex;justify-content:space-between;align-items:center">NUTRITION <span style="font-family:var(--font-mono);font-size:.65rem;color:var(--muted)">${dateLabel}</span></div>`;
-  h+=`<div class="date-nav">
-    <button class="date-btn" onclick="shiftFoodDate(-1)">◄</button>
-    <button class="date-btn ${isToday?'active':''}" onclick="foodLogDate=null;renderNutritionPage()">Today</button>
-    <button class="date-btn" onclick="shiftFoodDate(1)" ${isToday?'disabled':''}>►</button>
-  </div>`;
-
-  // ── TDEE Card or Setup Prompt ──
+  const dateLabel=viewDateObj.toLocaleDateString('en-US',{weekday:'long',month:'short',day:'numeric'});
+  const dayWord=isToday?'Today':viewDate===getDateStr(new Date(Date.now()-86400000))?'Yesterday':viewDateObj.toLocaleDateString('en-US',{month:'short',day:'numeric'});
+  let h=`<div class="pg-head"><div><h1 class="pg-title">Nutrition</h1><div class="mist">${dateLabel}</div></div>
+    <div class="nu-date"><button class="icon-btn" aria-label="Previous day" onclick="shiftFoodDate(-1)">${icon('left',18)}</button>
+    <button class="nu-date-l" onclick="foodLogDate=null;renderNutritionPage()" ${isToday?'disabled':''}>${dayWord}</button>
+    <button class="icon-btn" aria-label="Next day" onclick="shiftFoodDate(1)" ${isToday?'disabled':''}>${icon('chev',18)}</button></div></div>`;
   if(!t){
-    h+=`<div class="tdee-card" style="text-align:center">
-      <div class="tdee-empty">Set up your body stats to get calorie & macro targets</div>
-      <button class="auth-btn primary" onclick="openMacroModal()" style="margin-top:.6rem;max-width:280px;margin-left:auto;margin-right:auto">⚙️ Set Up Nutrition</button>
-    </div>`;
-    // Show recent days even without TDEE set up
-    h+=`<div class="section-title" style="margin:1rem 0 .4rem">RECENT DAYS</div>`;
-    const logDays0=Object.keys(userData.foodLog||{}).filter(k=>{
-      const d=userData.foodLog[k];
-      if(Array.isArray(d))return d.length>0;
-      if(d&&d.meals)return getDayItemCount(d)>0;
-      return false;
-    }).sort().reverse().slice(0,14);
-    if(!logDays0.length)h+=`<p style="color:var(--muted);font-size:.78rem">No history yet. Set up your nutrition above to start tracking.</p>`;
-    else h+=`<div class="food-history">${logDays0.map(d=>{
-      const dl=getDayLog(d);const tot=getDayTotals(dl);const count=getDayItemCount(dl);
-      const dt=new Date(d+'T12:00:00');const label=dt.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
-      return`<div class="food-history-day" onclick="foodLogDate='${d}';renderNutritionPage()"><div class="fh-date">${label}</div><div class="fh-stats">${tot.cal} cal · ${tot.p}g P · ${count} items</div></div>`;
-    }).join('')}</div>`;
-    $('nutritionContent').innerHTML=h;
-    return;
+    h+=`<div class="panel nu-card"><div class="sec">Set up your targets</div><p class="mist" style="margin:6px 0 14px">Add your height, weight and age to get calorie and macro targets.</p>
+      <button class="btn-p" onclick="openMacroModal()">Set up nutrition</button></div>`;
+    h+=recentDaysHtml(viewDate);
+    $('nutritionContent').innerHTML=h;return;
   }
-
-  const calPct=Math.min(100,(totals.cal/t.target)*100);
-  const pPct=Math.min(100,(totals.p/t.proteinG)*100);
-  const cPct=Math.min(100,(totals.c/t.carbG)*100);
-  const fPct=Math.min(100,(totals.f/t.fatG)*100);
-  const calOver=totals.cal>t.target;
-  h+=`<div class="tdee-card">
-    <div class="tdee-header">${t.custom?'CUSTOM':'AUTO'} · ${t.goal.toUpperCase()} · ${t.actName}${t.steps?' · ~'+t.steps+' steps':''}</div>
-    <div class="tdee-main"><div class="tdee-cal${calOver?' over':''}">${totals.cal} <span style="font-size:1.2rem;opacity:.5">/ ${t.target}</span></div><div class="tdee-cal-label">CALORIES${calOver?' ⚠️ OVER':''}${!calOver&&calPct>=90?' ✅ ON TRACK':''}</div></div>
-    ${t.deficit?`<div class="tdee-maintenance">Maintenance: ${t.maintenance} · <span style="color:${t.deficit<0?'var(--green)':'var(--gold)'}">${t.deficit>0?'+':''}${t.deficit}</span> ${t.deficit<0?'deficit':'surplus'} → <strong style="color:var(--text)">Target: ${t.target} cal</strong></div>`:`<div class="tdee-maintenance">Maintenance / Target: <strong style="color:var(--text)">${t.target} cal</strong></div>`}
+  const calOver=totals.cal>t.target;const left=t.target-totals.cal;
+  const tags=[t.custom?'Custom':'Auto',t.goal,t.actName,t.steps?`About ${fmtN(t.steps)} steps`:''].filter(Boolean);
+  h+=`<div class="panel nu-card"><div class="nu-tags">${tags.map(x=>`<span class="tag">${esc(x)}</span>`).join('')}</div>
+    <div class="nu-cal"><div><span class="num nu-big">${fmtN(totals.cal)}</span><span class="mist nu-of"> / ${fmtN(t.target)} cal</span></div>
+    <div class="nu-left${calOver?' over':''}"><div class="num">${fmtN(Math.abs(left))}</div><div class="mist sm">${calOver?'over':'left'}</div></div></div>
+    <div class="track nu-track"><div class="fill${calOver?' over':''}" style="width:${Math.min(100,totals.cal/t.target*100)}%"></div></div>
+    <div class="mist sm nu-maint">${t.deficit?`Maintenance is ${fmtN(t.maintenance)}. You're eating ${fmtN(Math.abs(t.deficit))} ${t.deficit<0?'under':'over'} it for a ${fmtN(t.target)} target.`:`Maintenance and target: ${fmtN(t.target)} cal.`}</div>
     ${deficitWarning(t)}
-    <div class="macro-bars">
-      <div class="macro-bar-row"><span class="macro-label" style="color:var(--red)">P ${totals.p}/${t.proteinG}g</span><div class="macro-bar"><div class="macro-bar-fill" style="width:${pPct}%;background:var(--red)"></div></div></div>
-      <div class="macro-bar-row"><span class="macro-label" style="color:var(--gold)">C ${totals.c}/${t.carbG}g</span><div class="macro-bar"><div class="macro-bar-fill" style="width:${cPct}%;background:var(--gold)"></div></div></div>
-      <div class="macro-bar-row"><span class="macro-label" style="color:var(--cyan)">F ${totals.f}/${t.fatG}g</span><div class="macro-bar"><div class="macro-bar-fill" style="width:${fPct}%;background:var(--cyan)"></div></div></div>
-    </div>
-    <div class="tdee-btns"><button class="tdee-adjust-btn" onclick="openMacroModal()">⚙️ Adjust Targets</button><button class="tdee-adjust-btn" onclick="openMealCountModal()">🍽️ ${mealCount} Meals</button></div>
-  </div>`;
-
-  // ── MEAL SECTIONS ──
+    <div class="nu-macros">${nuMacro('Protein',totals.p,t.proteinG,'pro')}${nuMacro('Carbs',totals.c,t.carbG,'carb')}${nuMacro('Fat',totals.f,t.fatG,'fat')}</div>
+    <div class="nu-btns"><button class="btn-s" onclick="openMacroModal()">${icon('gear',16)} Adjust targets</button><button class="btn-s" onclick="openMealCountModal()">${icon('note',16)} ${mealCount} meals</button></div></div>`;
   for(let m=1;m<=mealCount;m++){
     const items=dayLog.meals[m]||[];
     const mt=getMealTotals(items);
     const mealTarget=Math.round(t.target/mealCount);
     const mealPct=mealTarget>0?Math.min(100,(mt.cal/mealTarget)*100):0;
-    h+=`<div class="meal-section">
-      <div class="meal-header" onclick="toggleMealSection(this)">
-        <div class="meal-title">🍽️ MEAL ${m}</div>
-        <div class="meal-summary">${mt.cal} cal · P:${mt.p}g · C:${mt.c}g · F:${mt.f}g</div>
-        <div class="meal-mini-bar"><div class="meal-mini-fill" style="width:${mealPct}%"></div></div>
-        <span class="meal-toggle">▼</span>
-      </div>
+    const open=items.length>0||(isToday&&m===firstEmptyMeal(dayLog,mealCount));
+    h+=`<div class="panel meal-section${open?' open':''}">
+      <button class="meal-header" aria-expanded="${open}" onclick="toggleMealSection(this)">
+        <span class="meal-h-t"><span class="sec">${esc(mealName(m))}</span><span class="num mist">${fmtN(mt.cal)} cal</span></span>
+        <span class="mist sm">${items.length?`P ${mt.p} g, C ${mt.c} g, F ${mt.f} g`:'Nothing logged yet'}</span>
+        <span class="meal-chev">${icon('chev',18)}</span>
+        <span class="track"><span class="fill" style="width:${mealPct}%;display:block"></span></span>
+      </button>
       <div class="meal-body">`;
-    if(items.length){
-      h+=items.map((f,i)=>`<div class="food-item">
-        <div class="food-item-info"><div class="food-item-name">${esc(f.name)}</div><div class="food-item-detail">${esc(f.serving||'')} · ${f.cal} cal · P:${f.protein}g C:${f.carbs}g F:${f.fat}g</div></div>
-        <button class="btn-edit-food" onclick="${isToday?`editLoggedFood(${m},${i})`:`editPastLoggedFood('${viewDate}',${m},${i})`}" title="Edit">✏️</button>
-        ${isToday?`<button class="btn-del" onclick="removeMealItem(${m},${i})">✕</button>`:`<button class="btn-del" onclick="removePastMealItem('${viewDate}',${m},${i})">✕</button>`}
-      </div>`).join('');
-    }else{
-      h+=`<p style="color:var(--dim);font-size:.74rem;padding:.3rem 0">No items logged</p>`;
-    }
+    h+=items.map((f,i)=>`<div class="food-item"><div class="food-item-info"><div class="food-item-name">${esc(f.name)}</div>
+        <div class="mist sm">${f.serving?esc(f.serving)+', ':''}${fmtN(f.cal)} cal. P ${num(f.protein)}, C ${num(f.carbs)}, F ${num(f.fat)}</div></div>
+        <button class="ring" aria-label="Edit ${esc(f.name)}" onclick="${isToday?`editLoggedFood(${m},${i})`:`editPastLoggedFood('${viewDate}',${m},${i})`}">${icon('edit',16)}</button>
+        <button class="ring" aria-label="Remove ${esc(f.name)}" onclick="${isToday?`removeMealItem(${m},${i})`:`removePastMealItem('${viewDate}',${m},${i})`}">${icon('x',16)}</button></div>`).join('');
     if(isToday){
-      h+=`<div class="food-actions meal-add-btns">
-        <button class="food-btn sm" onclick="activeMeal=${m};openFoodSearch()">🔍<span class="fb-label">Search</span></button>
-        <button class="food-btn sm" onclick="activeMeal=${m};openScanner()">📸<span class="fb-label">Scan</span></button>
-        <button class="food-btn sm" onclick="activeMeal=${m};openManualFood()">✏️<span class="fb-label">Manual</span></button>
-        <button class="food-btn sm" onclick="activeMeal=${m};openRecentFoods()">🕐<span class="fb-label">Recent</span></button>
-      </div>`;
+      h+=`<div class="meal-add-btns">
+        <button class="food-btn" onclick="activeMeal=${m};openFoodSearch()">${icon('search',18)}<span>Search</span></button>
+        <button class="food-btn" onclick="activeMeal=${m};openScanner()">${icon('scan',18)}<span>Scan</span></button>
+        <button class="food-btn" onclick="activeMeal=${m};openManualFood()">${icon('edit',18)}<span>Manual</span></button>
+        <button class="food-btn" onclick="activeMeal=${m};openRecentFoods()">${icon('clock',18)}<span>Recent</span></button></div>`;
     }else{
-      h+=`<div class="food-actions meal-add-btns">
-        <button class="food-btn sm" onclick="activeMeal=${m};editPastMeal('${viewDate}')">✏️ Edit</button>
-      </div>`;
+      h+=`<div class="meal-add-btns one"><button class="food-btn" onclick="activeMeal=${m};editPastMeal('${viewDate}')">${icon('plus',18)}<span>Add to this meal</span></button></div>`;
     }
     h+=`</div></div>`;
   }
-
-  // ── Remaining macros hint ──
-  const calLeft=t.target-totals.cal;
   const pLeft=t.proteinG-totals.p;
-  if(isToday&&calLeft>100){
-    h+=`<div class="remaining-hint">${calLeft} cal remaining · ${pLeft>0?pLeft+'g protein to go':'Protein hit! ✅'}</div>`;
-  }
-
-  // ── Recent days ──
-  h+=`<div class="section-title" style="margin:1rem 0 .4rem">RECENT DAYS</div>`;
-  const logDays=Object.keys(userData.foodLog||{}).filter(k=>{
-    const d=userData.foodLog[k];
-    if(Array.isArray(d))return d.length>0;
-    if(d&&d.meals)return getDayItemCount(d)>0;
-    return false;
-  }).sort().reverse().slice(0,14);
-  if(!logDays.length)h+=`<p style="color:var(--muted);font-size:.78rem">No history yet.</p>`;
-  else h+=`<div class="food-history">${logDays.map(d=>{
-    const dl=getDayLog(d);const tot=getDayTotals(dl);const count=getDayItemCount(dl);
-    const dt=new Date(d+'T12:00:00');const label=dt.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
-    const isCurrent=d===viewDate;
-    return`<div class="food-history-day${isCurrent?' current':''}" onclick="foodLogDate='${d}';renderNutritionPage()"><div class="fh-date">${label}</div><div class="fh-stats">${tot.cal} cal · ${tot.p}g P · ${count} items</div></div>`;
-  }).join('')}</div>`;
-
+  if(isToday&&left>100)h+=`<div class="nu-remain">${fmtN(left)} cal left, ${pLeft>0?pLeft+' g protein to go':'protein goal hit'}.</div>`;
+  h+=recentDaysHtml(viewDate);
   $('nutritionContent').innerHTML=h;
 }
 
 // ═══════════ TDEE SETUP (first time) ═══════════
 function renderTDEESetup(){
   const st=userData.stats||{};
-  return`<div class="page-title">NUTRITION SETUP</div>
+  return`<div class="page-title">Nutrition setup</div>
   <div class="page-sub">Set up your body stats to get accurate calorie & macro targets</div>
   <div class="tdee-setup">
     <div class="settings-row-fields"><div class="m-field" style="flex:1"><label>Height</label><input type="text" id="tsHeight" placeholder='5\\'10"' value="${st.height||''}"></div><div class="m-field" style="flex:1"><label>Weight (lbs)</label><input type="number" id="tsWeight" value="${st.weight||''}"></div></div>
@@ -297,30 +236,24 @@ async function saveTDEESetup(){
 
 // ═══════════ MEAL COUNT MODAL ═══════════
 function openMealCountModal(){
-  const mc=getMealCount();
-  const h=`<h2>🍽️ Meals Per Day</h2>
-    <div class="meal-count-grid">${[2,3,4,5,6].map(n=>
-      `<button class="meal-count-opt${n===mc?' active':''}" onclick="setMealCount(${n})">${n}</button>`
-    ).join('')}</div>
-    <div class="m-actions" style="margin-top:.6rem"><button class="m-cancel" onclick="closeMealCountModal()">Close</button></div>`;
+  const mc=getMealCount();const names=userData.mealNames||{};
+  let h=`<h2>Meals</h2><div class="mist" style="margin-bottom:10px">How many meals do you log a day?</div>
+    <div class="meal-count-grid">${[2,3,4,5,6].map(n=>`<button class="chip${n===mc?' on':''}" onclick="setMealCount(${n})">${n}</button>`).join('')}</div>
+    <div class="settings-section">Meal names</div><div class="mist sm" style="margin:-4px 0 12px">Optional. Leave blank to keep Meal 1, Meal 2 and so on.</div>`;
+  for(let m=1;m<=mc;m++)h+=`<div class="m-field"><label for="mealName${m}">Meal ${m}</label><input type="text" id="mealName${m}" maxlength="24" placeholder="Meal ${m}" value="${esc(names[m]||'')}"></div>`;
+  h+=`<div class="m-actions"><button class="m-cancel" onclick="closeMealCountModal()">Cancel</button><button class="m-save-btn" onclick="saveMealNames()">Save</button></div>`;
   $('mealCountModal').querySelector('.modal').innerHTML=h;
   $('mealCountModal').classList.add('open');
 }
 function closeMealCountModal(){$('mealCountModal').classList.remove('open')}
 async function setMealCount(n){
   await saveUser({mealCount:n});
-  closeMealCountModal();renderNutritionPage();
-  toast(n+' meals/day set');
+  openMealCountModal();renderNutritionPage();
 }
 
-function toggleMealSection(el){
-  const body=el.nextElementSibling;
-  const toggle=el.querySelector('.meal-toggle');
-  if(body.style.maxHeight&&body.style.maxHeight!=='0px'){
-    body.style.maxHeight='0px';body.style.overflow='hidden';toggle.textContent='▶';
-  }else{
-    body.style.maxHeight=body.scrollHeight+'px';body.style.overflow='visible';toggle.textContent='▼';
-  }
+function toggleMealSection(btn){
+  const sec=btn.closest('.meal-section');if(!sec)return;
+  const open=!sec.classList.contains('open');sec.classList.toggle('open',open);btn.setAttribute('aria-expanded',open);
 }
 
 function shiftFoodDate(dir){
@@ -482,7 +415,7 @@ async function openScanner(){
     html5Scanner=new Html5Qrcode('scannerReader');
     await html5Scanner.start({facingMode:'environment'},{fps:10,qrbox:{width:250,height:150},aspectRatio:1.5},
       async(decodedText)=>{await closeScanner();await lookupBarcode(decodedText)},()=>{});
-    $('scannerStatus').textContent='📷 Point at barcode...';$('scannerStatus').style.color='var(--green)';
+    $('scannerStatus').textContent='Point at barcode...';$('scannerStatus').style.color='var(--green)';
   }catch(e){
     $('scannerStatus').style.color='var(--red)';
     $('scannerStatus').textContent=e.toString().includes('Permission')?'Camera denied. Enter barcode below:':'Camera unavailable. Enter barcode below:';
@@ -549,7 +482,7 @@ function openEditLoggedFood(date,meal,idx){
   if(!f){toast('Item not found');return}
   editLoggedFoodCtx={date,meal,idx,original:{...f}};
   const modal=$('editFoodModal');if(!modal)return;
-  let h=`<h2>✏️ Edit Logged Food</h2>
+  let h=`<h2>Edit Logged Food</h2>
     <p style="color:var(--muted);font-size:.7rem;margin-bottom:.7rem">${date===getTodayStr()?'Today':new Date(date+'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'})} · Meal ${meal}</p>
     <div class="m-field"><label>Food name</label><input type="text" id="ef-name" value="${esc(f.name||'')}"></div>
     <div class="m-field"><label>Serving / Weight</label><input type="text" id="ef-serving" value="${esc(f.serving||'')}" placeholder="e.g. 150g, 1 cup"></div>
@@ -561,7 +494,7 @@ function openEditLoggedFood(date,meal,idx){
       <div class="m-field"><label>Carbs (g)</label><input type="number" id="ef-carbs" value="${f.carbs||0}" inputmode="decimal" step="0.1"></div>
       <div class="m-field"><label>Fat (g)</label><input type="number" id="ef-fat" value="${f.fat||0}" inputmode="decimal" step="0.1"></div>
     </div>
-    <button class="m-save-btn" onclick="scaleEditedFood()" style="background:var(--surface2);color:var(--accent2);font-size:.74rem;padding:8px;margin-top:.5rem;width:100%">⚖️ Auto-scale macros from new weight</button>
+    <button class="m-save-btn" onclick="scaleEditedFood()" style="background:var(--surface2);color:var(--accent2);font-size:.74rem;padding:8px;margin-top:.5rem;width:100%">Auto-scale macros from new weight</button>
     <p style="color:var(--dim);font-size:.62rem;margin-top:4px;text-align:center">Tap if you only changed the weight — recalculates macros proportionally</p>
     <div class="m-actions" style="margin-top:.7rem">
       <button class="m-cancel" onclick="closeEditLoggedFood()">Cancel</button>
@@ -655,11 +588,11 @@ function openMacroModal(){
     {v:'Lean Bulk',l:'Lean Bulk (+250)'},
     {v:'Bulk',l:'Bulk (+500)'}
   ];
-  let h=`<h2>⚙️ Nutrition Settings</h2>`;
-  h+=`<div class="settings-section" style="margin-top:0">BODY STATS</div>`;
+  let h=`<h2>Nutrition Settings</h2>`;
+  h+=`<div class="settings-section" style="margin-top:0">Body stats</div>`;
   h+=`<div class="settings-row-fields"><div class="m-field" style="flex:1"><label>Height</label><input type="text" id="macroHeight" value="${st.height||''}" placeholder="5'10&quot;"></div><div class="m-field" style="flex:1"><label>Weight (lbs)</label><input type="number" id="macroWeight" value="${st.weight||''}"></div></div>`;
   h+=`<div class="settings-row-fields"><div class="m-field" style="flex:1"><label>Age</label><input type="number" id="macroAge" value="${st.age||''}"></div><div class="m-field" style="flex:1"><label>Sex</label><select id="macroSex"><option value="male"${(st.sex||'male')==='male'?' selected':''}>Male</option><option value="female"${st.sex==='female'?' selected':''}>Female</option></select></div></div>`;
-  h+=`<div class="settings-section">ACTIVITY & GOAL</div>`;
+  h+=`<div class="settings-section">Activity and goal</div>`;
   h+=`<div class="m-field"><label>Activity Level</label><select id="macroActivity">${ACTIVITY_LEVELS.map(a=>`<option value="${a.id}"${(userData.activityLevel||'moderate')===a.id?' selected':''}>${a.name} — ${a.desc}</option>`).join('')}</select></div>`;
   h+=`<div class="m-field"><label>Daily Steps Estimate</label><select id="macroSteps">
     <option value="2000"${(userData.dailySteps||'')==='2000'?' selected':''}>~2,000 (mostly sitting)</option>
@@ -670,7 +603,7 @@ function openMacroModal(){
     <option value="12000"${(userData.dailySteps||'')==='12000'?' selected':''}>~12,000+</option>
   </select></div>`;
   h+=`<div class="m-field"><label>Goal</label><select id="macroGoal" onchange="onGoalChange()">${goalOpts.map(g=>`<option value="${g.v}"${curGoal===g.v?' selected':''}>${g.l}</option>`).join('')}</select></div>`;
-  h+=`<div class="settings-section">CUSTOM OVERRIDES</div>`;
+  h+=`<div class="settings-section">Custom overrides</div>`;
   h+=`<label class="toggle-row" style="margin:.3rem 0"><input type="checkbox" class="toggle-cb" id="macroCustomToggle" onchange="toggleMacroFields()" ${cm&&cm.enabled?'checked':''}><span>Override auto-calculated macros</span></label>`;
   h+=`<div class="macro-custom-field"><button type="button" class="tdee-adjust-btn" style="width:100%;margin-bottom:.4rem;font-size:.66rem" onclick="onGoalChange()">↻ Reset calories & macros from my goal</button></div>`;
   h+=`<div class="macro-custom-field"><div class="m-field"><label>Target Calories</label><input type="number" id="macroCalories" value="${cm.calories||(t?t.target:2000)}" oninput="recalcMacros('cal')"></div></div>`;
@@ -774,10 +707,10 @@ function recalcMacros(source){
   const total=pCal+fCal+cCal;
   const diff=total-cal;
   let warn='';
-  if(autoField==='carbs'&&c<=0)warn='<span style="color:var(--red)">⚠️ Protein + Fat exceed calories. Reduce one or increase target.</span>';
-  else if(autoField==='fat'&&f<=0)warn='<span style="color:var(--red)">⚠️ Protein + Carbs exceed calories. Reduce one or increase target.</span>';
-  else if(c<50&&autoField==='carbs')warn='<span style="color:var(--gold)">⚠️ Low carbs ('+c+'g). Consider increasing calories or reducing fat.</span>';
-  else if(f<20)warn='<span style="color:var(--gold)">⚠️ Very low fat ('+f+'g). May affect hormones. Consider 40g+ minimum.</span>';
+  if(autoField==='carbs'&&c<=0)warn='<span style="color:var(--red)">Protein + Fat exceed calories. Reduce one or increase target.</span>';
+  else if(autoField==='fat'&&f<=0)warn='<span style="color:var(--red)">Protein + Carbs exceed calories. Reduce one or increase target.</span>';
+  else if(c<50&&autoField==='carbs')warn='<span style="color:var(--gold)">Low carbs ('+c+'g). Consider increasing calories or reducing fat.</span>';
+  else if(f<20)warn='<span style="color:var(--gold)">Very low fat ('+f+'g). May affect hormones. Consider 40g+ minimum.</span>';
   if(preview){
     preview.innerHTML=`<div class="macro-preview-row">
       <span style="color:var(--red)">P: ${p}g (${pCal})</span> ·
@@ -798,7 +731,7 @@ async function saveMacroSettings(){
   const cm=$('macroCustomToggle').checked?{enabled:true,calories:parseInt($('macroCalories').value)||0,protein:parseInt($('macroProtein').value)||0,carbs:parseInt($('macroCarbs').value)||0,fat:parseInt($('macroFat').value)||0}:{enabled:false};
   // Safety net: custom overrides bypass the preset deficits, so check the raw number too
   if(cm.enabled&&cm.calories>0&&cm.calories<1200){
-    if(!confirm(`⚠️ ${cm.calories} cal/day is very low.\n\nSustained intake this low risks muscle loss, hormonal disruption, and rebound weight gain.\n\nSave anyway?`))return;
+    if(!confirm(`${cm.calories} cal/day is very low.\n\nSustained intake this low risks muscle loss, hormonal disruption, and rebound weight gain.\n\nSave anyway?`))return;
   }
   await saveUser({stats,activityLevel:$('macroActivity').value,dailySteps:$('macroSteps').value,nutritionGoal:$('macroGoal').value,customMacros:cm});
   closeMacroModal();renderNutritionPage();toast('Nutrition settings saved!');
@@ -839,12 +772,12 @@ function buildFoodHistory(){
 function openRecentFoods(){
   const modal=$('recentFoodsModal');if(!modal)return;
   foodHistory=buildFoodHistory();
-  let h=`<h2>🕐 Food History</h2>`;
+  let h=`<h2>Food History</h2>`;
   if(!foodHistory.length){
     h+=`<p style="color:var(--muted);font-size:.78rem;padding:1rem 0">No foods logged yet. Log something first!</p>`;
   }else{
     h+=`<input type="search" id="foodHistSearch" class="food-hist-search" placeholder="Search ${foodHistory.length} foods you've logged…" oninput="renderFoodHistoryList()" autocomplete="off">`;
-    h+=`<div class="page-sub" style="margin:.4rem 0 .5rem">Tap to adjust · ⚡ to log instantly · ✏️ edit default · Meal ${activeMeal}</div>`;
+    h+=`<div class="page-sub" style="margin:.4rem 0 .5rem">Tap to adjust · to log instantly · edit default · Meal ${activeMeal}</div>`;
     h+=`<div class="recent-list" id="foodHistList"></div>`;
   }
   h+=`<div class="m-actions" style="margin-top:.6rem"><button class="m-cancel" onclick="closeRecentFoods()">Close</button></div>`;
@@ -867,8 +800,8 @@ function renderFoodHistoryList(){
         <div class="food-item-name">${esc(f.name)} ${meta}</div>
         <div class="food-item-detail">${esc(f.serving||'')} · ${f.cal} cal · P:${f.protein}g C:${f.carbs}g F:${f.fat}g</div>
       </div>
-      <button class="recent-edit" onclick="event.stopPropagation();editRecentFood(${i})" title="Edit">✏️</button>
-      <div class="recent-quick" onclick="event.stopPropagation();quickRelog(${i})">⚡</div>
+      <button class="recent-edit" onclick="event.stopPropagation();editRecentFood(${i})" title="Edit"></button>
+      <div class="recent-quick" onclick="event.stopPropagation();quickRelog(${i})"></div>
     </div>`;
   }).join('')+(!q&&rows.length>60?`<p style="color:var(--dim);font-size:.66rem;text-align:center;padding:.5rem 0">Showing 60 of ${rows.length} — search to find the rest</p>`:'');
 }
@@ -898,7 +831,7 @@ async function editRecentFood(idx){
   if(recent.length>300)recent.length=300;
   await saveUser({recentFoods:recent});
   openRecentFoods();
-  toast('✏️ Default updated');
+  toast('Default updated');
 }
 function closeRecentFoods(){$('recentFoodsModal').classList.remove('open')}
 
@@ -916,7 +849,7 @@ function openRecentServing(idx){
   recentPending=foodHistory[idx];if(!recentPending)return;
   closeRecentFoods();
   const modal=$('recentServingModal');if(!modal)return;
-  let h=`<h2>🍽️ Adjust Serving</h2>`;
+  let h=`<h2>Adjust Serving</h2>`;
   h+=`<div class="serving-food-name">${esc(recentPending.name)}</div>`;
   h+=`<div style="font-family:var(--font-mono);font-size:.65rem;color:var(--muted);margin:.3rem 0">Last logged: ${esc(recentPending.serving||'1 serving')} · ${recentPending.cal} cal</div>`;
   h+=`<div class="m-field"><label>Servings (multiplier)</label><input type="number" id="recentServingMult" value="1" min="0.25" step="0.25" oninput="updateRecentPreview()"></div>`;
@@ -953,20 +886,51 @@ function renderRankInfo(){
   const er=getEffectiveRank();
   const lvl=getLevelInfo();
   const cap=getXpCap();
-  let h=`<div class="rank-info-header"><div class="ri-label">[ SYSTEM STATUS ]</div><div class="ri-current" style="color:${er.color}">${er.name}</div><div class="ri-title" style="color:${er.color}">${(er.title&&er.title[userData.class])||er.name}</div>`;
+  let h=`<div class="rank-info-header"><div class="ri-label">[ System status ]</div><div class="ri-current" style="color:${er.color}">${er.name}</div><div class="ri-title" style="color:${er.color}">${(er.title&&er.title[userData.class])||er.name}</div>`;
   // Level display
   h+=`<div class="ri-level">Lv <strong>${lvl.level}</strong> / ${lvl.maxLevel}</div>`;
   // Level progress bar
   h+=`<div class="ri-level-bar"><div class="ri-level-bar-fill" style="width:${lvl.progressPct}%;background:${er.color}"></div></div>`;
   if(!lvl.maxed)h+=`<div class="ri-level-sub">${lvl.xpToNextLevel} XP to Lv ${lvl.level+1}</div>`;
-  else h+=`<div class="ri-level-sub" style="color:${er.color}">⚡ MAX LEVEL IN RANK</div>`;
+  else h+=`<div class="ri-level-sub" style="color:${er.color}">Max level in rank</div>`;
   h+=`<div class="ri-xp">${userData.xp} XP</div>`;
   if(cap.softCap<1){
     const trial=RANK_TRIALS[cap.trialName];
-    h+=`<div class="ri-softcap">⚠️ 25% Soft-Cap · Pass ${trial?trial.name:'trial'} for full XP + <strong>${TRIAL_BONUS[cap.trialName]||0}</strong> bonus</div>`;
+    h+=`<div class="ri-softcap">25% Soft-Cap · Pass ${trial?trial.name:'trial'} for full XP + <strong>${TRIAL_BONUS[cap.trialName]||0}</strong> bonus</div>`;
   }
   h+=`</div><div class="ri-divider"></div>`;
   RANKS.forEach(r=>{const isCurrent=er.name===r.name;const isLocked=userData.xp<r.min;
-    h+=`<div class="ri-rank ${isCurrent?'current':''} ${isLocked?'locked':''}"><div class="ri-rank-badge" style="color:${r.color};border-color:${isLocked?'var(--border)':r.color}">${r.name}</div><div class="ri-rank-info"><div class="ri-rank-title" style="color:${isLocked?'var(--dim)':r.color}">${(r.title&&r.title[userData.class])||r.name}</div><div class="ri-rank-xp">${r.min} XP · ${r.levels||10} levels</div><div class="ri-rank-lore">${isLocked?'???':r.lore}</div>${r.trial?`<div class="ri-rank-trial">${isLocked?'🔒 Trial required':'⚔️ Trial: '+RANK_TRIALS[r.trial].name+' (+'+(TRIAL_BONUS[r.trial]||0)+' XP bonus)'}</div>`:''}</div>${isCurrent?'<div class="ri-you">◄ YOU</div>':''}</div>`});
+    h+=`<div class="ri-rank ${isCurrent?'current':''} ${isLocked?'locked':''}"><div class="ri-rank-badge" style="color:${r.color};border-color:${isLocked?'var(--border)':r.color}">${r.name}</div><div class="ri-rank-info"><div class="ri-rank-title" style="color:${isLocked?'var(--dim)':r.color}">${(r.title&&r.title[userData.class])||r.name}</div><div class="ri-rank-xp">${r.min} XP · ${r.levels||10} levels</div><div class="ri-rank-lore">${isLocked?'???':r.lore}</div>${r.trial?`<div class="ri-rank-trial">${isLocked?'Trial required':'Trial: '+RANK_TRIALS[r.trial].name+' (+'+(TRIAL_BONUS[r.trial]||0)+' XP bonus)'}</div>`:''}</div>${isCurrent?'<div class="ri-you">◄ You</div>':''}</div>`});
   return h;
+}
+
+// ═══════════ v1.29.0 REDESIGN HELPERS ═══════════
+function mealName(m){const n=(userData.mealNames||{})[m];return n&&String(n).trim()?String(n).trim().slice(0,24):'Meal '+m}
+function nuMacro(label,have,goal,cls){
+  const pct=goal>0?Math.min(100,have/goal*100):0;
+  return `<div class="nu-macro ${cls}"><div class="nu-macro-top"><span class="nu-macro-l">${label}</span><span class="num">${fmtN(have)}<span class="mist"> / ${fmtN(goal)} g</span></span></div>
+    <div class="track"><div class="fill" style="width:${pct}%"></div></div></div>`;
+}
+function firstEmptyMeal(dayLog,n){for(let m=1;m<=n;m++){if(!(dayLog.meals[m]||[]).length)return m}return 0}
+function recentDaysHtml(viewDate){
+  const logDays=Object.keys(userData.foodLog||{}).filter(k=>{
+    const d=userData.foodLog[k];
+    if(Array.isArray(d))return d.length>0;
+    if(d&&d.meals)return getDayItemCount(d)>0;
+    return false;
+  }).sort().reverse().slice(0,14);
+  let h=`<div class="sec" style="margin-top:30px">Recent days</div>`;
+  if(!logDays.length)return h+`<div class="empty-note">No history yet.</div>`;
+  return h+`<div class="li-list" style="margin-top:6px">`+logDays.map(d=>{
+    const dl=getDayLog(d);const tot=getDayTotals(dl);const count=getDayItemCount(dl);
+    const label=new Date(d+'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
+    return `<button class="li${d===viewDate?' cur':''}" onclick="foodLogDate='${d}';renderNutritionPage();window.scrollTo(0,0)"><span class="t">${label}</span>
+      <span class="r">${fmtN(tot.cal)} cal, ${fmtN(tot.p)} g protein, ${count} item${count!==1?'s':''}</span><span class="chev">${icon('chev',16)}</span></button>`;
+  }).join('')+`</div>`;
+}
+async function saveMealNames(){
+  const mc=getMealCount();const names={};
+  for(let m=1;m<=mc;m++){const v=($('mealName'+m)||{}).value;if(v&&v.trim())names[m]=v.trim().slice(0,24)}
+  await saveUser({mealNames:names});
+  closeMealCountModal();renderNutritionPage();toast('Meals saved');
 }

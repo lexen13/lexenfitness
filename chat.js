@@ -6,8 +6,8 @@ let currentChatFriend=null;
 let chatListener=null;
 
 function renderChatPage(){
-  let h=`<div class="sub-tabs" id="chatTabs">
-    <div class="stab active" data-st="friendchat" onclick="switchSubTab('chat','friendchat')">Friends</div>
+  let h=`<div class="sub-tabs sub-tabs-sm" id="chatTabs">
+    <div class="stab active" data-st="friendchat" onclick="switchSubTab('chat','friendchat')">Messages</div>
     <div class="stab" data-st="aicoach" onclick="switchSubTab('chat','aicoach')">Tips</div>
     <div class="stab" data-st="updates" onclick="switchSubTab('chat','updates')">Updates</div>
   </div>`;
@@ -22,7 +22,7 @@ function renderChatPage(){
 async function renderChatList(){
   const el=$('chatListContent');if(!el)return;
   const friends=userData.friends||[];
-  if(!friends.length){el.innerHTML='<div class="page-title">MESSAGES</div><p style="color:var(--muted);font-size:.82rem;padding:.5rem 0">Add friends from your Profile to start chatting.</p>';return}
+  if(!friends.length){el.innerHTML='<div class="empty-note">Add friends in Guild, then Friends, to start chatting.</div>';return}
   const lastRead=userData.lastReadTimestamps||{};
   // Collect chat data for sorting
   const chatItems=[];
@@ -65,21 +65,17 @@ async function renderChatList(){
     if(!a.isUnread&&b.isUnread)return 1;
     return b.sortTime-a.sortTime;
   });
-  let h='<div class="page-title">MESSAGES</div><div class="page-sub">Tap a friend to chat</div>';
-  if(!chatItems.length)h+='<p style="color:var(--muted);font-size:.78rem;padding:.5rem">Couldn\'t load your friends right now — pull down or reopen the tab to retry.</p>';
+  let h='';
+  if(!chatItems.length)h+='<div class="empty-note">Couldn\'t load your friends right now. Reopen the tab to try again.</div>';
+  h+='<div class="li-list">';
   chatItems.forEach(c=>{
-    h+=`<div class="chat-list-item${c.isUnread?' unread':''}" onclick="openChat('${safeId(c.fid)}')">
-      <div class="lb-pic">${avatarHtml(c.f.profilePic,'👤')}</div>
-      <div class="chat-list-info">
-        <div class="chat-list-name">@${esc(c.f.username||'hunter')} <span class="chat-list-rank" style="color:${c.r.color}">${c.r.name}</span></div>
-        <div class="chat-list-preview${c.isUnread?' unread-text':''}">${c.isUnread?'<strong>@'+esc(c.senderName)+':</strong> ':''}${esc(c.preview)}</div>
-      </div>
-      <div class="chat-list-meta">
-        <div class="chat-list-time">${c.previewTime}</div>
-        ${c.isUnread?'<div class="chat-unread-dot"></div>':''}
-      </div>
-    </div>`;
+    h+=`<button class="li chat-li${c.isUnread?' unread':''}" onclick="openChat('${safeId(c.fid)}')">
+      <span class="ff-pic${c.r.name==='S-RANK'?' s':''}">${avatarHtml(c.f.profilePic,`<span>${esc(String(c.f.username||'h')[0].toUpperCase())}</span>`)}</span>
+      <span class="t">${esc(c.f.username||'hunter')}<small>${c.isUnread?'<strong>'+esc(c.senderName)+':</strong> ':''}${esc(c.preview)}</small></span>
+      <span class="chat-li-meta"><span class="dim sm">${c.previewTime}</span>${c.isUnread?'<span class="stab-dot"></span>':''}</span>
+    </button>`;
   });
+  h+='</div>';
   el.innerHTML=h;
 }
 
@@ -103,13 +99,13 @@ async function openChat(friendUid){
   el.innerHTML=`
     <div class="chat-header">
       <button class="chat-back" onclick="closeChat()">← Back</button>
-      <div class="lb-pic" style="width:28px;height:28px">${avatarHtml(friend.profilePic,'👤')}</div>
+      <div class="lb-pic" style="width:28px;height:28px">${avatarHtml(friend.profilePic)}</div>
       <span class="chat-header-name">@${esc(friend.username||'hunter')}</span>
     </div>
     <div class="chat-messages" id="chatMessages"><p style="color:var(--muted);font-size:.78rem;text-align:center;padding:2rem 0">Loading...</p></div>
     <div class="chat-input-row">
       <input type="text" id="chatInput" class="auth-input" placeholder="Type a message..." style="margin:0;flex:1" onkeydown="if(event.key==='Enter')sendMessage()">
-      <button class="chat-send-btn" onclick="sendMessage()">➤</button>
+      <button class="chat-send-btn" onclick="sendMessage()" aria-label="Send">${icon('send',18)}</button>
     </div>`;
 
   if(chatListener)chatListener();
@@ -126,7 +122,7 @@ async function openChat(friendUid){
 
 function renderMessages(msgs){
   const el=$('chatMessages');if(!el)return;
-  if(!msgs.length){el.innerHTML='<p style="color:var(--muted);font-size:.78rem;text-align:center;padding:2rem 0">No messages yet. Say hi! 👋</p>';return}
+  if(!msgs.length){el.innerHTML='<p style="color:var(--muted);font-size:.78rem;text-align:center;padding:2rem 0">No messages yet. Say hi! </p>';return}
   const now=new Date();const todayStr=now.toDateString();
   const yesterday=new Date(now);yesterday.setDate(yesterday.getDate()-1);const yestStr=yesterday.toDateString();
   let lastDateStr='';
@@ -189,8 +185,8 @@ function renderAICoach(){
   }
 
   let h=`<div class="coach-header">
-    <div class="coach-avatar">📖</div>
-    <div><div class="coach-name">SYSTEM TIPS</div><div class="coach-sub">Quick answers on training, nutrition & recovery — tap a topic or type a keyword</div></div>
+    <div class="coach-avatar ico sys">${icon('info',18)}</div>
+    <div><div class="coach-name">System tips</div><div class="coach-sub">Quick answers on training, nutrition & recovery — tap a topic or type a keyword</div></div>
   </div>`;
 
   // Chat messages
@@ -212,12 +208,12 @@ function renderAICoach(){
     h+=`<div class="coach-suggestions">
       <div class="coach-sug-label">Try asking:</div>
       <div class="coach-sug-chips">
-        <button class="coach-chip" onclick="askCoachQuick('What should I eat today?')">🍽️ What should I eat?</button>
-        <button class="coach-chip" onclick="askCoachQuick('What should I train?')">🏋️ What should I train?</button>
-        <button class="coach-chip" onclick="askCoachQuick('Am I on track?')">📊 Am I on track?</button>
-        <button class="coach-chip" onclick="askCoachQuick('I need motivation')">🔥 Motivate me</button>
-        <button class="coach-chip" onclick="askCoachQuick('How much protein should I eat?')">🥩 Protein needs</button>
-        <button class="coach-chip" onclick="askCoachQuick('Help me with recovery')">😴 Recovery tips</button>
+        <button class="coach-chip" onclick="askCoachQuick('What should I eat today?')">What should I eat?</button>
+        <button class="coach-chip" onclick="askCoachQuick('What should I train?')">What should I train?</button>
+        <button class="coach-chip" onclick="askCoachQuick('Am I on track?')">Am I on track?</button>
+        <button class="coach-chip" onclick="askCoachQuick('I need motivation')">Motivate me</button>
+        <button class="coach-chip" onclick="askCoachQuick('How much protein should I eat?')">Protein needs</button>
+        <button class="coach-chip" onclick="askCoachQuick('Help me with recovery')">Recovery tips</button>
       </div>
     </div>`;
   }
@@ -225,7 +221,7 @@ function renderAICoach(){
   // Input box (ALWAYS visible)
   h+=`<div class="coach-input-row">
     <textarea id="coachInput" class="coach-input" placeholder="Ask your coach anything..." rows="1" onkeydown="coachKeyDown(event)" oninput="autoGrowCoach(this)"></textarea>
-    <button class="chat-send-btn" onclick="sendCoachMessage()">➤</button>
+    <button class="chat-send-btn" onclick="sendCoachMessage()" aria-label="Send">${icon('send',18)}</button>
   </div>`;
 
   el.innerHTML=h;
@@ -310,7 +306,7 @@ function generateCoachResponse(userText){
     case 'greeting':
       return`Hey${userData.name?', '+esc(userData.name.split(' ')[0]):''}. ${rank.name} rank, ${wc} workouts deep. What's on your mind?`;
     case 'thanks':
-      return"Anytime. Now get back to work. 💪";
+      return"Anytime. Now get back to work. ";
     case 'protein':
       if(!t)return"Set up your stats (<strong>Nutrition → Set Up Nutrition</strong>) and I'll give you a real number. General rule: <strong>1g per pound of bodyweight</strong> for anyone lifting seriously.";
       return`Your target is <strong>${t.proteinG}g protein</strong> per day. You've had <strong>${todayTotals.p}g</strong> so far (${Math.round(todayTotals.p/t.proteinG*100)}%). Spread it across 3-4 meals, 30-50g each. Whey shake post-workout is a shortcut, not a cheat code.`;
@@ -331,7 +327,7 @@ function generateCoachResponse(userText){
       const calLeft=t.target-todayTotals.cal;
       if(todayTotals.cal===0)return`Day's target: <strong>${t.target} cal, ${t.proteinG}g protein</strong>. You haven't logged anything. Start with breakfast — 30g+ protein. Eggs, greek yogurt, shake. Your move.`;
       if(calLeft>500)return`You've had <strong>${todayTotals.cal}/${t.target} cal</strong>, <strong>${todayTotals.p}/${t.proteinG}g protein</strong>. ${calLeft} cal left. ${t.proteinG-todayTotals.p>30?'Prioritize protein — you\'re behind.':'Protein on track. Balance the rest.'}`;
-      if(calLeft<-200)return`⚠️ <strong>${Math.abs(calLeft)} over</strong> your ${t.target} target. ${goal.includes('Fat Loss')||t.deficit<0?'This undoes your cut. Tomorrow, tighten up.':'Not the end of the world on a growth phase — just don\'t make it a pattern.'}`;
+      if(calLeft<-200)return`<strong>${Math.abs(calLeft)} over</strong> your ${t.target} target. ${goal.includes('Fat Loss')||t.deficit<0?'This undoes your cut. Tomorrow, tighten up.':'Not the end of the world on a growth phase — just don\'t make it a pattern.'}`;
       return`You're on track: <strong>${todayTotals.cal}/${t.target} cal</strong>, <strong>${todayTotals.p}/${t.proteinG}g protein</strong>. Keep eating like this.`;
     case 'training':
       let resp='';
@@ -355,16 +351,16 @@ function generateCoachResponse(userText){
     case 'volume':
       return"<strong>Weekly volume guidelines:</strong><br>• Beginners: 8-12 sets per muscle per week<br>• Intermediate: 12-18 sets per muscle<br>• Advanced: 15-22 sets per muscle (diminishing returns after)<br>• 4-8 reps for strength, 8-15 for hypertrophy, 15+ for endurance<br>Track it in the <strong>Log</strong> tab.";
     case 'recovery':
-      return`<strong>Recovery protocol:</strong><br>🛏 <strong>Sleep 7-9 hrs</strong> — non-negotiable<br>💧 Bodyweight (lbs) ÷ 2 = oz of water minimum<br>🥩 ${t?t.proteinG+'g protein daily':'Protein — hit 1g/lb bodyweight'}<br>🚶 5-8k steps on rest days<br>🧘 Stretch / mobility 10 min post-workout<br>${hoursSince<24?'You trained recently. Lock these in today.':''}`;
+      return`<strong>Recovery protocol:</strong><br><strong>Sleep 7-9 hrs</strong> — non-negotiable<br>Bodyweight (lbs) ÷ 2 = oz of water minimum<br>${t?t.proteinG+'g protein daily':'Protein — hit 1g/lb bodyweight'}<br>5-8k steps on rest days<br>Stretch / mobility 10 min post-workout<br>${hoursSince<24?'You trained recently. Lock these in today.':''}`;
     case 'progress':
       let p=`<strong>${rank.name}</strong> · ${userData.xp} XP · ${wc} workouts · ${streak}-week streak.<br><br>`;
-      if(streak===0&&wc>0)p+='⚠️ Streak is broken. Get 3 sessions this week to restart it. ';
-      else if(streak>=4)p+=`🔥 ${streak}-week streak — elite territory. `;
+      if(streak===0&&wc>0)p+='Streak is broken. Get 3 sessions this week to restart it. ';
+      else if(streak>=4)p+=`${streak}-week streak — elite territory. `;
       if(wc<10)p+='You\'re in the foundation phase. Show up, that\'s the whole job right now.';
       else if(wc<30)p+='Momentum building. Strength should be climbing weekly.';
       else if(wc<100)p+='Solid base. Start tracking progressive overload — add 2.5-5 lbs or 1 rep weekly.';
       else p+=`${wc} sessions in the bank. You're a veteran. Focus on periodization and nutrition precision now.`;
-      const trial=getAvailableTrial();if(trial)p+=`<br><br>🚪 <strong>${trial.trial.name}</strong> is your next gate. See Missions.`;
+      const trial=getAvailableTrial();if(trial)p+=`<br><br><strong>${trial.trial.name}</strong> is your next gate. See Missions.`;
       return p;
     case 'motivation':
       const msgs=[
@@ -411,10 +407,10 @@ function getGreeting(){
 // ═══════════ UPDATES / CHANGELOG TAB ═══════════
 function renderUpdatesTab(){
   const el=$('updatesContent');if(!el)return;
-  let h=`<div class="page-title" style="display:flex;align-items:center;gap:.5rem">SYSTEM UPDATES <span class="updates-ver">v${APP_VERSION}</span></div>`;
+  let h=`<div class="page-title" style="display:flex;align-items:center;gap:.5rem">System updates <span class="updates-ver">v${APP_VERSION}</span></div>`;
   h+=`<div class="page-sub">Patch notes & version history</div>`;
   // Founder message (always at top)
-  h+=`<div class="founder-card"><div class="founder-header"><span class="founder-icon">⚔️</span><span class="founder-name">Message from the Founder</span></div><div class="founder-body">${WELCOME_MESSAGE.replace(/\n/g,'<br>')}</div></div>`;
+  h+=`<div class="founder-card"><div class="founder-header"><span class="founder-icon"></span><span class="founder-name">Message from the Founder</span></div><div class="founder-body">${WELCOME_MESSAGE.replace(/\n/g,'<br>')}</div></div>`;
   CHANGELOG.forEach((entry,i)=>{
     const isCurrent=entry.version===APP_VERSION;
     const blurb=entry.blurb||'';
@@ -427,7 +423,7 @@ function renderUpdatesTab(){
       ${blurb?`<div class="update-blurb">${blurb}</div>`:''}
       <div class="update-toggle" onclick="this.nextElementSibling.classList.toggle('open');this.textContent=this.nextElementSibling.classList.contains('open')?'Hide details ▲':'What changed ▼'">What changed ▼</div>
       <ul class="update-items collapsible">${entry.items.map(item=>`<li>${item}</li>`).join('')}</ul>
-      ${isCurrent?'<div class="update-current-badge">CURRENT</div>':''}
+      ${isCurrent?'<div class="update-current-badge">Current</div>':''}
     </div>`;
   });
   el.innerHTML=h;
