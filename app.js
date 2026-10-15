@@ -3,6 +3,8 @@
 // ═══════════════════════════════════════════
 firebase.initializeApp({apiKey:"AIzaSyCbH-A7pp1xrtwHSaVUKlPA0hR2skHu9iY",authDomain:"lexenfitness.firebaseapp.com",projectId:"lexenfitness",storageBucket:"lexenfitness.firebasestorage.app",messagingSenderId:"570672585202",appId:"1:570672585202:web:ce329745b0282ee86c736b"});
 const auth=firebase.auth(),db=firebase.firestore();
+// Offline cache: the app opens from what it saved last time, even on a weak signal.
+try{db.enablePersistence({synchronizeTabs:true}).catch(e=>console.warn('[firestore] offline cache off:',e.code||e))}catch(e){}
 const SHARD_SVG='<svg class="shard-i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.5l6 6.5-6 12.5L6 9z"/><path d="M6 9h12"/></svg>';
 const DEV_EMAIL='gabinglee11@gmail.com';
 let U=null,userData={},workoutLog=[],savedInputs={},isDev=false;
@@ -150,6 +152,8 @@ auth.getRedirectResult().catch(err=>{
   }
 });
 const doLogout=()=>auth.signOut();
+function slowRetry(){location.reload()}
+function slowSignOut(){auth.signOut().finally(()=>location.reload())}
 // ═══════════ ACCOUNT DELETION (App Store requirement) ═══════════
 async function deleteAccount(){
   if(!confirm('DELETE YOUR ACCOUNT?\n\nThis permanently erases your account, all workout history, nutrition logs, achievements, and leaderboard entry.\n\nThis CANNOT be undone.'))return;
@@ -197,13 +201,20 @@ async function deleteAccount(){
 }
 function friendlyErr(c){return{'auth/invalid-email':'Invalid email','auth/user-not-found':'No account','auth/wrong-password':'Wrong password','auth/email-already-in-use':'Email taken','auth/weak-password':'Password 6+ chars','auth/invalid-credential':'Invalid email or password','auth/too-many-requests':'Too many attempts','auth/requires-recent-login':'Sign out and back in first','auth/popup-closed-by-user':'Sign-in cancelled','auth/cancelled-popup-request':'Sign-in cancelled','auth/unauthorized-domain':'This domain isn\'t authorized for Google sign-in (admin: add it in Firebase Console)','auth/operation-not-allowed':'Google sign-in isn\'t enabled yet (admin: enable it in Firebase Console)','auth/popup-blocked':'Popup blocked — trying redirect...'}[c]||'Something went wrong'}
 
-// Safety: if loading screen is still showing after 8 seconds, force show auth
-setTimeout(()=>{if($('loadingScreen').style.display!=='none'){$('loadingScreen').style.display='none';showScreen('authScreen')}},8000);
+// Slow start: after 10 s, offer Try again / Sign out on the loading screen. Never drop a
+// signed-in hunter onto the sign-in screen just because the network is slow (v1.31).
+function showSlowStart(msg){
+  if($('loadingScreen').style.display==='none')return;
+  const box=$('ldSlow');if(!box)return;
+  if(msg)$('ldSlowMsg').textContent=msg;
+  box.style.display='';
+}
+setTimeout(()=>showSlowStart(),10000);
+applyPersistence();try{syncKeepBoxes()}catch(e){}
 
 auth.onAuthStateChanged(async u=>{
   if(authLock)return;
-  // Hard timeout: if load takes >20s, force spinner off and show auth screen
-  const hangTimer=setTimeout(()=>{console.warn('[auth] load timeout — forcing spinner off');$('loadingScreen').style.display='none';showScreen('authScreen')},20000);
+  const hangTimer=0; // kept so the clearTimeout calls below stay harmless
   try{
     if(u){
       U=u;isDev=(u.email===DEV_EMAIL);
@@ -215,7 +226,7 @@ auth.onAuthStateChanged(async u=>{
         showScreen('inviteScreen');
         return;
       }
-      await loadUserData();
+      await loadUserData(doc);
       prevRankName=getEffectiveRank().name;
       clearTimeout(hangTimer);
       $('loadingScreen').style.display='none';
@@ -225,9 +236,9 @@ auth.onAuthStateChanged(async u=>{
     }else{clearTimeout(hangTimer);U=null;isDev=false;$('loadingScreen').style.display='none';showScreen('authScreen')}
   }catch(e){
     console.error('[auth] load error:',e);
-    clearTimeout(hangTimer);
-    $('loadingScreen').style.display='none';
-    showScreen('authScreen');
+    // Still signed in: stay on the loading screen and offer a retry instead of the sign-in form
+    if(auth.currentUser){$('loadingScreen').style.display='';showSlowStart("Couldn't load your profile. You're still signed in. Check your signal and try again.")}
+    else{$('loadingScreen').style.display='none';showScreen('authScreen')}
   }
 });
 function showScreen(id){['authScreen','classScreen','appScreen','usernameScreen','inviteScreen'].forEach(s=>{$(s).classList.remove('active');$(s).style.display='none'});$(id).style.display='';$(id).classList.add('active')}
@@ -250,9 +261,9 @@ async function submitUsername(){
 }
 
 // ═══════════ FIRESTORE ═══════════
-async function loadUserData(){
+async function loadUserData(pre){
   console.log('[loadUserData] starting');
-  const doc=await db.collection('users').doc(U.uid).get();
+  const doc=pre||await db.collection('users').doc(U.uid).get();
   console.log('[loadUserData] user doc loaded');
   userData=doc.exists?doc.data():{name:U.displayName||'',xp:0,achievements:[],stats:{},prs:{},friends:[],privacy:{hideName:false,hideStats:false},missionsCompleted:{},missionStreak:0,trialsCompleted:[],foodLog:{}};
   ['achievements','friends','trialsCompleted'].forEach(k=>{if(!userData[k])userData[k]=[]});
@@ -290,7 +301,7 @@ async function saveLeaderboard(){
       rank:r.name,profilePic:safeImgSrc(userData.profilePic),bio:String(userData.bio||'').slice(0,200),
       workouts:getLiftLogs().length,activities:getActivityLogs().length,achCount:(userData.achievements||[]).length,
       frame:c.frame,nameColor:c.name,gatesCleared:userData.redGatesCleared||0,recent:publicFeedEvents(),
-      titleId:myTitleId(),blueGates:userData.blueGatesCleared||0,bests:hofPublicBests(),weekStreak:Math.min(520,bestWeekStreak()),hof:hofOptedIn(),
+      titleId:myTitleId(),blueGates:userData.blueGatesCleared||0,bests:hofPublicBests(),...hofPublicSteps(),weekStreak:Math.min(520,bestWeekStreak()),hof:hofOptedIn(),
       updatedAt:firebase.firestore.FieldValue.serverTimestamp()});
   }catch(e){console.warn('[saveLeaderboard]',e.code||e.message)}
 }
@@ -671,16 +682,11 @@ function renderProgressStrip(){
   }else{
     weightTile=`<button class="ps-tile tap" onclick="openWeighIn()"><div class="ps-v lilac">${icon('scale',20)}</div><div class="ps-l">Log a weigh-in</div></button>`;
   }
-  // 3. Sessions: last 30 days vs the 30 before
-  const now=Date.now();
-  let s30=0,sPrev=0;
-  workoutLog.forEach(e=>{if(e.isRest&&e.restType!=='active')return;const t=new Date(e.date).getTime();
-    if(now-t<=30*86400000)s30++;else if(now-t<=60*86400000)sPrev++;});
-  const sTrend=sPrev>0?(s30>sPrev?trend('up',`▲ ${s30-sPrev}`):s30<sPrev?trend('flat',`▼ ${sPrev-s30}`):trend('flat','Steady')):'';
+  // 3. Steps (v1.31) — replaced "Sessions in 30 days", which This week already covers
   return `<div class="progress-strip">
       <div class="ps-tile"><div class="num ps-v">${fmtV(volThis)}</div><div class="ps-l">lb lifted this week</div>${volTrend}</div>
       ${weightTile}
-      <div class="ps-tile"><div class="num ps-v">${s30}</div><div class="ps-l">Sessions in 30 days</div>${sTrend}</div>
+      ${stepTileHtml()}
   </div>`;
 }
 // ═══════════ DAILY MISSIONS ═══════════
@@ -984,6 +990,7 @@ function getGateProgress(g){
       const t=(typeof calcTDEE==='function')?calcTDEE():null;
       if(!t){blocker='Set up your nutrition targets first (Nutrition → Adjust Targets)';break}
       val=weekDayKeys(wk).filter(k=>getDayTotals(getDayLog(k)).p>=t.proteinG).length;break}
+    case 'steps_week':val=stepsWeek(wk);break;
     case 'cardio_raid':val=Math.round(getActivityLogs().filter(e=>inGateWeek(e,wk)).reduce((a,e)=>a+(parseFloat(e.duration)||0),0));break;
   }
   return {val,target:g.target,blocker,done:val>=g.target&&!blocker};
@@ -2708,22 +2715,6 @@ function calcFullWeeks(){const w={};getLiftLogs().forEach(e=>{const m=getMonday(
 // ═══════════ ACHIEVEMENTS ═══════════
 // Celebration queue — achievement unlocks slide in one at a time instead of unlocking silently
 let achQueue=[],achShowing=false;
-function celebrateAch(a){
-  if(!a)return;
-  achQueue.push(a);
-  if(!achShowing)showNextAch();
-}
-function showNextAch(){
-  const a=achQueue.shift();
-  if(!a){achShowing=false;return}
-  achShowing=true;
-  let card=$('achCelebration');
-  if(!card){card=document.createElement('div');card.id='achCelebration';card.className='ach-celebration';document.body.appendChild(card)}
-  card.innerHTML=sysWin(`<div class="ach-cel-row"><div class="ach-cel-icon">${a.icon}</div><div class="ach-cel-info"><div class="sys-title sm">[ Badge earned ]</div><div class="ach-cel-name">${esc(a.name)}</div>${a.xp>0?`<div class="ach-cel-xp">+${a.xp} XP</div>`:''}</div></div>`);
-  card.classList.add('show');
-  try{if(navigator.vibrate)navigator.vibrate([100,50,100])}catch(e){}
-  setTimeout(()=>{card.classList.remove('show');setTimeout(showNextAch,350)},3200);
-}
 async function unlockAch(id){
   if(userData.achievements.includes(id))return;
   userData.achievements.push(id);
@@ -2763,6 +2754,7 @@ function renderAchievements(){
     {name:'Nutrition',test:a=>['food_log_1','food_log_7','food_log_14','food_log_30','food_log_60','scan_1','scan_5','all_meals','protein_hit'].includes(a.id)},
     {name:'Cardio',test:a=>a.id.startsWith('cardio_')},
     {name:'Rank',test:a=>a.id.startsWith('rank_')||a.id.startsWith('xp_')},
+    {name:'Steps',test:a=>a.id.startsWith('steps_')&&!a.secret},
     {name:'Secrets',test:a=>!!a.secret}
   ];
 
@@ -3598,7 +3590,7 @@ async function claimTrack(trackId){
   addXP(totalXp);
   await saveUser({tracksCompleted:completed,xp:userData.xp});await saveLeaderboard();
   updateTopBar();checkRankUp();renderMissions();
-  toast(`${track.name} complete! +${totalXp} XP`);
+  {const nextT=tracks[tracks.indexOf(track)+1];celebrate({kind:'tier',name:track.name,sub:`${cls} track.${nextT?' '+nextT.name+' is open':' Track finished'}`,xp:totalXp})}
 }
 
 // ═══════════ PASSIVE ACHIEVEMENT CHECKER ═══════════
@@ -3755,6 +3747,8 @@ async function checkPassiveAchievements(){
       if(d.getMonth()===1&&d.getDate()===29)U('leap_of_faith');
       if(!e.isRest&&!e.isActivity&&d.getDay()===5&&d.getHours()>=20)U('friday_lights');
     });
+    // Steps (v1.31)
+    try{stepAchEarnedNow().forEach(id=>U(id))}catch(e){}
     // Fable: the meta-capstone
     if(userData.achievements.length>=100)U('fable_legend');
   }catch(e){console.warn('[checkPassiveAchievements] eval error:',e)}
@@ -3770,7 +3764,7 @@ async function checkPassiveAchievements(){
       await saveUser({achievements:userData.achievements,xp:userData.xp});
       await saveLeaderboard();
       updateTopBar();
-      if(gainedAch>0){const s0=userData.shards||0,s1=s0+gainedAch*SHARD_REWARDS.achievement;for(let s=s0+500;s<s1;s+=500)await userRef.update({shards:s});userData.shards=s1;await saveUser({shards:s1});celebrateAch({icon:'🏆',name:gainedAch===1?'New achievement earned':gainedAch+' achievements earned',xp:gainedXp,desc:''})}
+      if(gainedAch>0){const s0=userData.shards||0,s1=s0+gainedAch*SHARD_REWARDS.achievement;for(let s=s0+500;s<s1;s+=500)await userRef.update({shards:s});userData.shards=s1;await saveUser({shards:s1});userData.achievements.slice(achBefore).forEach(id=>celebrate({kind:'badge',a:ACHIEVEMENTS.find(x=>x.id===id)}))}
       console.log('[checkPassiveAchievements] batched',gainedAch,'unlocks, +'+gainedXp,'XP');
     }catch(e){console.warn('[checkPassiveAchievements] batch save failed:',e)}
   }
@@ -4637,7 +4631,7 @@ function fmtN(n){return (Math.round(+n||0)).toLocaleString('en-US')}
 function rankLabel(name){return String(name||'').replace(/-RANK$/,'-Rank')}
 function rankLetter(r){return String((r&&r.name)||'E')[0]}
 function sysWin(inner,cls){return `<div class="sys-win${cls?' '+cls:''}"><div class="sys-edge"><div class="sys-win-body">${inner}</div></div></div>`}
-function openProfileView(tab){switchPage('ranks');switchSubTab('ranks',tab)}
+function openProfileView(tab){switchPage('ranks');const b=document.querySelector('#page-ranks .pg-back .back-btn');if(b){b.lastChild.textContent='Profile';b.onclick=()=>switchPage('profile')}switchSubTab('ranks',tab)}
 function renderGuild(){
   const active=document.querySelector('#guildTabs .stab.active');
   switchSubTab('guild',active?active.dataset.st:'activity');
@@ -4992,6 +4986,7 @@ function pickBlueGateType(monIso){
 // Swap out a gate this hunter can't possibly clear (no lift history yet, no nutrition targets)
 function blueGateFallback(type,monIso){
   if(type.id==='heavier_hand'){const base=prBaselineBefore(weekBounds(monIso)[0]);if(!Object.keys(base).length)return BLUE_GATE_POOL.find(t=>t.id==='clean_sweep')}
+  if(type.id==='long_walk'&&!hasRecentSteps(monIso))return BLUE_GATE_POOL.find(t=>t.id==='clean_sweep');
   if(type.id==='fuel_run'){const t=(typeof calcTDEE==='function')?calcTDEE():null;if(!t)return BLUE_GATE_POOL.find(t=>t.id==='quest_line')}
   return type;
 }
@@ -5005,6 +5000,7 @@ function computeBlueTarget(type,monIso){
     case 'quest_line':return [3,3,4][tier];
     case 'fuel_run':return [3,4,4][tier];
     case 'long_road':return [45,60,90][tier];
+    case 'long_walk':return stepsGateTarget(monIso);
     case 'time_under_iron':{let tot=0,n=0;for(let i=1;i<=4;i++){const m=weeklySessionMinutes(shiftWeek(monIso,-i));if(m>0){tot+=m;n++}}
       return Math.max([60,90,120][tier],Math.round((n?tot/n:0)/10)*10)}
   }
@@ -5020,6 +5016,7 @@ function blueGateDesc(type,target){
     case 'fuel_run':return `Hit your protein target on ${t} days this week.`;
     case 'long_road':return `Log ${t} minutes of cardio this week.`;
     case 'time_under_iron':return `Spend ${t} minutes in a timed session this week.`;
+    case 'long_walk':return `Log ${t} steps this week. Scaled from your last four weeks of logged steps.`;
   }
   return '';
 }
@@ -5124,6 +5121,8 @@ function titleProgress(id){
     case 'gauntlet_survivor':return (userData.trialsCompleted||[]).includes('gauntlet');
     case 'shadow_monarch':return (userData.trialsCompleted||[]).includes('awakening');
     case 'record_holder':return false; // only granted from the Hall of Fame
+    case 'the_wanderer':return{have:Math.min(1000000,stepsLifetime()),need:1000000};
+    case 'the_strider':return{have:Math.min(100,stepBestStreak()),need:100};
   }
   return false;
 }
@@ -5140,7 +5139,7 @@ async function checkTitles(quiet,extra){
   if(!fresh.length)return [];
   userData.titlesEarned=[...have];
   try{await saveUser({titlesEarned:userData.titlesEarned})}catch(e){console.warn('titles save:',e)}
-  setTimeout(()=>toast(fresh.length===1?`New title earned: ${fresh[0].name}. Equip it in Wardrobe.`:`${fresh.length} new titles earned. Equip one in Wardrobe.`),quiet?2600:0);
+  fresh.forEach(t=>celebrate({kind:'title',t}));
   return fresh;
 }
 async function equipTitle(id){
@@ -5191,6 +5190,11 @@ function bestLoggedLiftsFull(){
   return out;
 }
 function hofOptedIn(){return (userData.privacy||{}).hideHof!==true}
+// Step records for the leaderboard doc. Opted out or struck = zeros.
+function hofPublicSteps(){
+  const off=!hofOptedIn()||(userData.hofExclude||[]).includes('steps');
+  return {stepsTotal:off?0:Math.min(100000000,stepsLifetime()),stepsWeek:off?0:Math.min(420000,stepsWeek(gateWeekKey())),stepsWeekOf:gateWeekKey()};
+}
 // What goes on your public leaderboard doc. A record the dev struck stays at 0.
 function hofPublicBests(){
   const b=bestLoggedLiftsFull(),ex=userData.hofExclude||[],out={};
@@ -5203,7 +5207,9 @@ const HOF_CATS=[
   {id:'total',name:'Big three total',sub:'Best bench + squat + deadlift',unit:'lb',icon:'trophy',val:u=>{const b=u.bests||{};return (+b.bench||0)+(+b.squat||0)+(+b.deadlift||0)}},
   {id:'workouts',name:'Most workouts',sub:'Lifting sessions logged',unit:'',icon:'crown',val:u=>+u.workouts||0},
   {id:'streak',name:'Longest week streak',sub:'Weeks in a row with 3+ sessions',unit:'weeks',icon:'crown',val:u=>+u.weekStreak||0},
-  {id:'bgates',name:'Most Blue Gates',sub:'Blue Gates cleared',unit:'',icon:'crown',val:u=>+u.blueGates||0}
+  {id:'bgates',name:'Most Blue Gates',sub:'Blue Gates cleared',unit:'',icon:'crown',val:u=>+u.blueGates||0},
+  {id:'stepsweek',name:'Most steps this week',sub:'Logged steps since Monday',unit:'',icon:'crown',val:u=>u.stepsWeekOf===gateWeekKey()?(+u.stepsWeek||0):0,strike:'steps'},
+  {id:'stepslife',name:'Lifetime steps',sub:'Every step logged',unit:'',icon:'crown',val:u=>+u.stepsTotal||0,strike:'steps'}
 ];
 async function loadHallOfFame(){
   const list=[];
@@ -5213,7 +5219,7 @@ async function loadHallOfFame(){
   const meIdx=list.findIndex(u=>u.uid===U.uid);
   if(hofOptedIn()){
     const mine={uid:U.uid,username:userData.username||'hunter',rank:getEffectiveRank().name,titleId:myTitleId(),profilePic:userData.profilePic,frame:getCos().frame,
-      bests:hofPublicBests(),workouts:getLiftLogs().length,weekStreak:bestWeekStreak(),blueGates:userData.blueGatesCleared||0};
+      bests:hofPublicBests(),...hofPublicSteps(),workouts:getLiftLogs().length,weekStreak:bestWeekStreak(),blueGates:userData.blueGatesCleared||0};
     if(meIdx>=0)list[meIdx]={...list[meIdx],...mine};else list.push(mine);
   }else if(meIdx>=0)list.splice(meIdx,1);
   hofData={at:Date.now(),list};
@@ -5229,7 +5235,8 @@ function hofRow(x,i,cat,opts){
   const u=x.u,me=u.uid===U.uid;const r=(u.rank&&RANKS.find(k=>k.name===u.rank))||RANKS[0];
   const t=titleName(u.titleId);
   let sub=me&&opts&&opts.youSub?opts.youSub:[rankLabel(r.name),t].filter(Boolean).join(', ');
-  const strike=isDev&&!me&&HOF_LIFTS.some(l=>l.k===cat.id)?`<button class="link sm hof-strike" onclick="event.stopPropagation();devStrikeRecord('${safeId(u.uid)}','${cat.id}','${safeName(u.username||'hunter')}')">Strike</button>`:'';
+  const sk=HOF_LIFTS.some(l=>l.k===cat.id)?cat.id:cat.strike||'';
+  const strike=isDev&&!me&&sk?`<button class="link sm hof-strike" onclick="event.stopPropagation();devStrikeRecord('${safeId(u.uid)}','${sk}','${safeName(u.username||'hunter')}')">Strike</button>`:'';
   return `<div class="hof-row${me?' me':''}${i===0?' first':''}" role="button" tabindex="0" onclick="openProfileCard('${safeId(u.uid)}')">
     <span class="num hof-pos">${me&&i>2?ordinal(i+1):i+1}</span>
     <span class="ff-pic hof-av${i===0?' gold':''}${frameClass(u.frame)}">${avatarHtml(u.profilePic,`<span>${esc(String(u.username||'h')[0].toUpperCase())}</span>`)}</span>
@@ -5255,7 +5262,7 @@ async function renderHallOfFame(el){
   if(!hofOptedIn())h+=`<div class="hof-note">You're hidden from the Hall of Fame. Turn on "Show my records in the Hall of Fame" in Settings, Privacy to compete.</div>`;
   ['deadlift','bench','total'].forEach(id=>{h+=hofPanel(HOF_CATS.find(c=>c.id===id))});
   h+=`<div class="sec" style="margin-top:26px">More records</div><div class="li-list hof-more">`;
-  ['squat','ohp','workouts','streak','bgates'].forEach(id=>{
+  ['squat','ohp','stepsweek','stepslife','workouts','streak','bgates'].forEach(id=>{
     const cat=HOF_CATS.find(c=>c.id===id);const top=hofRanked(cat)[0];
     h+=`<button class="li" onclick="openHofCategory('${id}')"><span class="ico gold">${icon(cat.icon,18)}</span><span class="t">${esc(cat.name)}<small>${top?'Held by '+(top.u.uid===U.uid?'you':esc(top.u.username||'hunter')):'No record yet'}</small></span>
       <span class="r num">${top?hofValue(top.v,cat):'—'}</span><span class="chev">${icon('chev',16)}</span></button>`;
@@ -5275,11 +5282,11 @@ function openHofCategory(id){
 }
 // Dev: strike a record that doesn't look right. The owner's app keeps it at 0 from then on.
 async function devStrikeRecord(uid,k,uname){
-  if(!isDev||!HOF_LIFTS.some(l=>l.k===k))return;
+  if(!isDev||!(HOF_LIFTS.some(l=>l.k===k)||k==='steps'))return;
   if(!confirm(`Strike @${uname}'s ${k} record? It drops to 0 and stays out until you restore it.`))return;
   try{
     await db.collection('users').doc(uid).update({hofExclude:firebase.firestore.FieldValue.arrayUnion(k)});
-    await db.collection('leaderboard').doc(uid).update({['bests.'+k]:0});
+    await db.collection('leaderboard').doc(uid).update(k==='steps'?{stepsTotal:0,stepsWeek:0}:{['bests.'+k]:0});
     toast('Record struck');renderLeaderboard();
   }catch(e){toast('Strike failed: '+(e.code||e.message))}
 }
@@ -5297,3 +5304,339 @@ async function devResetBlueGate(){
 
 // ═══════════ v1.29.0 REDESIGN HELPERS ═══════════
 let wardrobeTab='title';
+
+// ═══════════════════════════════════════════════════════════════
+//  v1.31.0 — Steps, unlock notifications, tap-outside menus, sign-in fixes
+// ═══════════════════════════════════════════════════════════════
+ICONS.steps='<path d="M7.5 3C9 3 10 5 10 7.5S9 12 7.5 12 5 10 5 7.5 6 3 7.5 3Z"/><path d="M5.8 14h3.4v2.2a1.7 1.7 0 0 1-3.4 0Z"/><path d="M16 6c1.5 0 2.5 2 2.5 4.5S17.5 15 16 15s-2.5-2-2.5-4.5S14.5 6 16 6Z"/><path d="M14.3 17h3.4v2.2a1.7 1.7 0 0 1-3.4 0Z"/>';
+
+// ─────────────── Step data ───────────────
+// userData.steps = {'YYYY-MM-DD': total}. A save replaces the day's number (people copy
+// the total from Apple Health / Samsung Health), so nothing can be double counted.
+const STEP_MAX=60000;
+function stepsMap(){const m=userData.steps;return m&&typeof m==='object'?m:{}}
+function stepsOn(d){return Math.max(0,parseInt(stepsMap()[d])||0)}
+function stepGoal(){const g=parseInt(userData.stepGoal);return g>=1000&&g<=STEP_MAX?g:10000}
+function stepDays(){return Object.keys(stepsMap()).filter(d=>stepsOn(d)>0).sort()}
+function stepsLifetime(){return stepDays().reduce((a,d)=>a+stepsOn(d),0)}
+function stepsWeek(monIso){return weekDayKeys(monIso).reduce((a,d)=>a+stepsOn(d),0)}
+function dayShift(d,n){const x=new Date(d+'T12:00:00');x.setDate(x.getDate()+n);return getDateStr(x)}
+function stepBestDay(){let best={d:'',n:0};stepDays().forEach(d=>{const n=stepsOn(d);if(n>best.n)best={d,n}});return best}
+// Days in a row at or over the goal. Today only counts once it's hit, so the streak
+// doesn't look broken first thing in the morning.
+function stepGoalStreak(){
+  const g=stepGoal();let d=getTodayStr();
+  if(stepsOn(d)<g)d=dayShift(d,-1);
+  let n=0;while(stepsOn(d)>=g){n++;d=dayShift(d,-1)}
+  return n;
+}
+function stepBestStreak(){
+  const g=stepGoal();let best=0,run=0,prev='';
+  stepDays().forEach(d=>{if(stepsOn(d)<g){run=0;prev=d;return}run=(prev&&dayShift(prev,1)===d&&run>0)?run+1:1;prev=d;if(run>best)best=run});
+  return Math.max(best,userData.stepBestStreak||0);
+}
+
+// ─────────────── Badges ───────────────
+// Each returns {have, need} so the Steps page can show the closest ones.
+function stepBadgeProgress(id){
+  const g=stepGoal(),days=stepDays(),best=stepBestDay().n,life=stepsLifetime();
+  const big=n=>({have:Math.min(best,n),need:n}),lt=n=>({have:Math.min(life,n),need:n});
+  switch(id){
+    case 'steps_day_10k':return big(10000);case 'steps_15k':return big(15000);case 'steps_20k':return big(20000);case 'steps_25k':return big(25000);case 'steps_30k':return big(30000);
+    case 'steps_life_55k':return lt(55000);case 'steps_life_100k':return lt(100000);case 'steps_life_211k':return lt(211000);case 'steps_life_500k':return lt(500000);
+    case 'steps_life_1m':return lt(1000000);case 'steps_life_2m':return lt(2000000);case 'steps_life_5900k':return lt(5900000);
+    case 'steps_streak_7':return{have:Math.min(stepBestStreak(),7),need:7};
+    case 'steps_streak_30':return{have:Math.min(stepBestStreak(),30),need:30};
+    case 'steps_streak_100':return{have:Math.min(stepBestStreak(),100),need:100};
+    case 'steps_full_week':{let bestWk=0;const wks=new Set(days.map(d=>gateWeekKey(new Date(d+'T12:00:00'))));
+      wks.forEach(w=>{const c=weekDayKeys(w).filter(d=>stepsOn(d)>=g).length;if(c>bestWk)bestWk=c});return{have:bestWk,need:7}}
+    case 'steps_weekend':{let ok=0;days.forEach(d=>{const x=new Date(d+'T12:00:00');if(x.getDay()===6&&stepsOn(d)>=10000&&stepsOn(dayShift(d,1))>=10000)ok=1});return{have:ok,need:1}}
+    case 'steps_month':{const m={};days.forEach(d=>{const k=d.slice(0,7);m[k]=(m[k]||0)+stepsOn(d)});const mx=Math.max(0,...Object.values(m));return{have:Math.min(mx,300000),need:300000}}
+    case 'steps_logbook':return{have:Math.min(days.length,30),need:30};
+    case 'steps_double':{const lifted=new Set(getLiftLogs().filter(e=>!e.backdated).map(e=>getDateStr(new Date(e.date))));return{have:days.some(d=>stepsOn(d)>=g&&lifted.has(d))?1:0,need:1}}
+    case 'steps_comeback':{let ok=0;for(let i=1;i<days.length;i++){const gap=(new Date(days[i]+'T12:00:00')-new Date(days[i-1]+'T12:00:00'))/86400000;if(gap>=4&&stepsOn(days[i])>=g)ok=1}return{have:ok,need:1}}
+    case 'steps_exact':return{have:days.some(d=>stepsOn(d)===10000)?1:0,need:1};
+  }
+  return null;
+}
+function stepAchIds(){return ACHIEVEMENTS.filter(a=>a.id.startsWith('steps_')).map(a=>a.id)}
+function stepAchEarnedNow(){return stepAchIds().filter(id=>{const p=stepBadgeProgress(id);return p&&p.have>=p.need})}
+// Unlock several badges in ONE write, then show them together
+async function unlockMany(ids){
+  const fresh=ids.filter(id=>!userData.achievements.includes(id));
+  if(!fresh.length)return [];
+  fresh.forEach(id=>unlockAchSilent(id));
+  userData.shards=(userData.shards||0)+fresh.length*SHARD_REWARDS.achievement;
+  fresh.forEach(id=>{const a=ACHIEVEMENTS.find(x=>x.id===id);if(a&&(a.xp>=100||a.secret))queueFeedEvent('ach',{id})});
+  await saveUser({achievements:userData.achievements,xp:userData.xp,shards:userData.shards,feedEvents:userData.feedEvents||[]});
+  fresh.forEach(id=>celebrate({kind:'badge',a:ACHIEVEMENTS.find(x=>x.id===id)}));
+  return fresh;
+}
+
+// ─────────────── Saving ───────────────
+async function saveSteps(d,n){
+  n=Math.round(+n||0);
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(d)||d>getTodayStr()){toast('Pick today or an earlier day');return false}
+  if(n<0||n>STEP_MAX){toast(`Steps go up to ${fmtN(STEP_MAX)} a day`);return false}
+  const steps={...stepsMap()};
+  if(n>0)steps[d]=n;else delete steps[d];
+  const upd={steps};
+  // +10 XP for hitting the goal, once per day, and only for today or yesterday
+  // (no back-filling a year of XP)
+  const xpDays={...(userData.stepXpDays||{})};
+  let gained=0;
+  if(n>=stepGoal()&&!xpDays[d]&&(d===getTodayStr()||d===dayShift(getTodayStr(),-1))){
+    gained=addXP(10);xpDays[d]=1;
+    Object.keys(xpDays).sort().slice(0,-40).forEach(k=>delete xpDays[k]);
+    upd.stepXpDays=xpDays;upd.xp=userData.xp;
+  }
+  userData.steps=steps;
+  const bs=stepBestStreak();if(bs>(userData.stepBestStreak||0))upd.stepBestStreak=bs;
+  try{await saveUser(upd)}catch(e){toast('Couldn\'t save steps. Check your connection.');return false}
+  await unlockMany(stepAchEarnedNow());
+  // Today's "Step It Up" quest, if it's in today's list, completes itself
+  try{const ms=getDailyMissions(getTodayStr(),userData.class)||[];const done=(userData.missionsCompleted||{})[getTodayStr()]||[];
+    if(d===getTodayStr()&&n>=10000&&ms.some(m=>m.id==='steps_10k')&&!done.includes('steps_10k'))await completeMission('steps_10k')}catch(e){console.warn(e)}
+  await saveLeaderboard();updateTopBar();
+  toast(n>0?`${fmtN(n)} steps saved${gained?`, goal hit +${gained} XP`:''}`:'Steps cleared');
+  if(currentPage==='missions')renderMissions();
+  if($('sp-steps')&&$('sp-steps').classList.contains('active'))renderStepsPage();
+  return true;
+}
+
+// ─────────────── Home tile ───────────────
+function stepTileHtml(){
+  const today=getTodayStr(),n=stepsOn(today),g=stepGoal();
+  if(!n){const y=stepsOn(dayShift(today,-1));
+    return `<button class="ps-tile tap st-tile empty" onclick="openStepLog()"><span class="st-tile-ic">${icon('steps',18)}</span><div class="ps-l st-tile-cta">Log steps</div><div class="ps-l">${y?'Yesterday '+fmtN(y):'Tap to add today'}</div></button>`}
+  const hit=n>=g,pct=Math.min(100,n/g*100);
+  const big=n>=10000?(n/1000).toFixed(n>=100000?0:1).replace(/\.0$/,'')+'k':fmtN(n);
+  return `<button class="ps-tile tap st-tile${hit?' hit':''}" onclick="openStepLog()"><div class="num ps-v">${big}</div><div class="ps-l">${hit?'Goal hit':'Steps of '+(g%1000===0?g/1000+'k':fmtN(g))}</div><span class="st-tile-bar"><span style="width:${pct}%"></span></span></button>`;
+}
+
+// ─────────────── Log steps sheet ───────────────
+let stepLogDate=null;
+function openStepLog(d){
+  const today=getTodayStr(),yest=dayShift(today,-1);
+  stepLogDate=d||stepLogDate||today;if(stepLogDate>today)stepLogDate=today;
+  const mode=stepLogDate===today?'today':stepLogDate===yest?'yest':'earlier';
+  const cur=stepsOn(stepLogDate);
+  const label=mode==='today'?'today':mode==='yest'?'yesterday':new Date(stepLogDate+'T12:00:00').toLocaleDateString('en-US',{weekday:'long',month:'short',day:'numeric'});
+  const min=dayShift(today,-365);
+  openSheet(`<h2>Log steps</h2>
+    <div class="sub-tabs st-days" role="tablist">
+      <button class="stab${mode==='today'?' active':''}" onclick="openStepLog('${today}')">Today</button>
+      <button class="stab${mode==='yest'?' active':''}" onclick="openStepLog('${yest}')">Yesterday</button>
+      <label class="stab${mode==='earlier'?' active':''} st-earlier">${icon('cal',16)} Earlier<input type="date" max="${yest}" min="${min}" value="${mode==='earlier'?stepLogDate:''}" onchange="if(this.value)openStepLog(this.value)" aria-label="Pick an earlier day"></label>
+    </div>
+    <label class="au-label" for="stepInput">Total steps for ${esc(label)}</label>
+    <div class="st-field"><input id="stepInput" type="text" inputmode="numeric" autocomplete="off" placeholder="0" value="${cur?fmtN(cur):''}" oninput="stepInputFmt(this)" onkeydown="if(event.key==='Enter')submitStepLog()"><span class="mist">steps</span></div>
+    <div class="mist sm st-help">Copy the total from Apple Health, Samsung Health or your watch app. Saving again later replaces this number. Up to ${fmtN(STEP_MAX)} a day.</div>
+    <button class="li st-goal-row" onclick="openStepGoal()"><span class="t">Daily goal<small>Change it any time</small></span><span class="num">${fmtN(stepGoal())}</span><span class="chev">${icon('chev',16)}</span></button>
+    <button class="btn-p st-save" id="stepSaveBtn" onclick="submitStepLog()">${cur?'Save '+fmtN(cur)+' steps':'Save steps'}</button>
+    ${cur?`<button class="link st-clear" onclick="submitStepLog(0)">Clear this day</button>`:''}
+    <button class="link st-more" onclick="closeSheet();openStepsPage()">${icon('pulse',16)} Your week, streaks and badges</button>`);
+  setTimeout(()=>{const i=$('stepInput');if(i){i.focus();try{i.setSelectionRange(i.value.length,i.value.length)}catch(e){}}},250);
+}
+function stepInputFmt(el){
+  const digits=el.value.replace(/\D/g,'').slice(0,6);const n=parseInt(digits)||0;
+  el.value=digits?fmtN(n):'';
+  const b=$('stepSaveBtn');if(b)b.textContent=n?`Save ${fmtN(n)} steps`:'Save steps';
+  el.classList.toggle('over',n>STEP_MAX);
+}
+async function submitStepLog(force){
+  const el=$('stepInput');const n=force===0?0:parseInt(String(el&&el.value||'').replace(/\D/g,''))||0;
+  if(force!==0&&!n){toast('Type your step total first');return}
+  if(n>STEP_MAX){toast(`Steps go up to ${fmtN(STEP_MAX)} a day`);return}
+  if(await saveSteps(stepLogDate||getTodayStr(),n)){closeSheet();stepLogDate=null}
+}
+function openStepGoal(){
+  const g=stepGoal();const presets=[6000,8000,10000,12000,15000];
+  openSheet(`<h2>Daily step goal</h2><div class="mist sm" style="margin:-4px 0 12px">Streaks and the +10 XP use this number.</div>
+    <div class="st-goals">${presets.map(p=>`<button class="chip${p===g?' on':''}" onclick="setStepGoal(${p})">${p/1000}k</button>`).join('')}</div>
+    <label class="au-label" for="stepGoalInput">Or your own number</label>
+    <div class="st-field"><input id="stepGoalInput" type="text" inputmode="numeric" placeholder="${fmtN(g)}" value="${presets.includes(g)?'':fmtN(g)}" oninput="this.value=this.value.replace(/\\D/g,'').slice(0,5)?fmtN(parseInt(this.value.replace(/\\D/g,'').slice(0,5))):''"><span class="mist">steps</span></div>
+    <div class="m-actions"><button class="m-cancel" onclick="closeSheet()">Cancel</button><button class="m-save-btn" onclick="setStepGoal(parseInt($('stepGoalInput').value.replace(/\\D/g,''))||0)">Save</button></div>`);
+}
+async function setStepGoal(n){
+  if(!n){closeSheet();return}
+  if(n<1000||n>STEP_MAX){toast(`Pick a goal from 1,000 to ${fmtN(STEP_MAX)}`);return}
+  await saveUser({stepGoal:n});closeSheet();toast(`Goal set to ${fmtN(n)} steps`);
+  if(currentPage==='missions')renderMissions();
+  if($('sp-steps')&&$('sp-steps').classList.contains('active'))renderStepsPage();
+}
+
+// ─────────────── Steps page ───────────────
+let stepWeekOffset=0;
+function openStepsPage(){
+  stepWeekOffset=0;
+  switchPage('ranks');switchSubTab('ranks','steps');
+  const b=document.querySelector('#page-ranks .pg-back .back-btn');
+  if(b){b.lastChild.textContent='Home';b.onclick=()=>switchPage('missions')}
+  document.querySelectorAll('.nav-item').forEach(n=>n.classList.toggle('active',n.dataset.page==='missions'));
+  renderStepsPage();window.scrollTo(0,0);
+}
+function renderStepsPage(){
+  const el=$('stepsContent');if(!el)return;
+  const g=stepGoal(),today=getTodayStr();
+  const wk=shiftWeek(gateWeekKey(),stepWeekOffset);const keys=weekDayKeys(wk);
+  const vals=keys.map(stepsOn);const total=vals.reduce((a,b)=>a+b,0);
+  const counted=keys.filter(d=>d<=today&&stepsOn(d)>0).length;
+  const avg=counted?Math.round(total/counted):0;
+  const mx=Math.max(g*1.3,...vals);
+  const bars=keys.map((d,i)=>{const v=vals[i];const cls=v>=g?' hit':'';return `<div class="st-bar${cls}${d===today?' today':''}" style="height:${v?Math.max(4,v/mx*130):3}px" title="${fmtN(v)}"></div>`}).join('');
+  const dn=['M','T','W','T','F','S','S'];
+  const lab=keys.map((d,i)=>`<span${d===today?' class="on"':''}>${dn[i]}</span>`).join('');
+  const range=`${new Date(keys[0]+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'})} to ${new Date(keys[6]+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'})}`;
+  const best=stepBestDay();
+  let h=`<div class="pg-head"><h1 class="pg-title">Steps</h1><div class="pg-actions"><button class="btn-s" onclick="openStepLog('${today}')">${icon('plus',16)} Log</button></div></div>`;
+  h+=sysWin(`<div class="sys-title">[ Steps ]</div>
+    <div class="st-sum"><div><div class="num st-sum-v">${fmtN(total)}</div><div class="mist sm">${stepWeekOffset===0?'This week so far':'That week'}</div></div>
+      <div style="text-align:right"><div class="num st-sum-v">${fmtN(avg)}</div><div class="mist sm">Daily average</div></div></div>
+    <div class="st-bars" role="img" aria-label="Steps each day, ${range}">${bars}<div class="st-goal-line" style="bottom:${Math.min(130,g/mx*130)}px"><span>Goal ${fmtN(g)}</span></div></div>
+    <div class="st-blab">${lab}</div>
+    <div class="st-wknav"><button class="link" onclick="stepWeekOffset--;renderStepsPage()">${icon('left',14)} Earlier</button><span class="mist sm">${range}</span>
+      <button class="link" ${stepWeekOffset>=0?'disabled':''} onclick="stepWeekOffset++;renderStepsPage()">Later ${icon('chev',14)}</button></div>`,'st-win');
+  h+=`<div class="st-kv">
+    <div class="panel"><div class="num">${fmtN(stepsLifetime())}</div><div class="mist sm">Lifetime steps</div></div>
+    <div class="panel"><div class="num">${best.n?fmtN(best.n):'—'}</div><div class="mist sm">${best.d?'Best day, '+new Date(best.d+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'}):'Best day'}</div></div>
+    <div class="panel"><div class="num st-flame">${stepGoalStreak()} ${icon('flame',16)}</div><div class="mist sm">Goal streak, days</div></div>
+    <div class="panel"><div class="num">${stepBestStreak()}</div><div class="mist sm">Best streak, days</div></div></div>`;
+  h+=`<div class="sec" style="margin-top:26px">Daily goal</div><div class="mist sm">Streaks and the +10 XP use this number.</div>
+    <div class="st-goals">${[6000,8000,10000,12000,15000].map(p=>`<button class="chip${p===g?' on':''}" onclick="setStepGoal(${p})">${p/1000}k</button>`).join('')}<button class="chip${[6000,8000,10000,12000,15000].includes(g)?'':' on'}" onclick="openStepGoal()">${[6000,8000,10000,12000,15000].includes(g)?'Other':fmtN(g)}</button></div>`;
+  const recent=[];for(let i=0;i<14;i++)recent.push(dayShift(today,-i));
+  h+=`<div class="sec" style="margin-top:26px">Recent days</div><div class="li-list st-recent">`+recent.map((d,i)=>{const v=stepsOn(d);
+    const lbl=i===0?'Today':i===1?'Yesterday':new Date(d+'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
+    return `<button class="li" onclick="openStepLog('${d}')"><span class="t">${lbl}</span><span class="num${v?'':' dim'}">${v?fmtN(v):'—'}</span><span class="st-ok">${v>=g?icon('check',18):''}</span><span class="mist">${icon('edit',16)}</span></button>`}).join('')+`</div>`;
+  const ul=userData.achievements||[];
+  const next=ACHIEVEMENTS.filter(a=>a.id.startsWith('steps_')&&!a.secret&&!ul.includes(a.id)).map(a=>({a,p:stepBadgeProgress(a.id)})).filter(x=>x.p)
+    .sort((x,y)=>y.p.have/y.p.need-x.p.have/x.p.need).slice(0,3);
+  if(next.length){
+    h+=`<div class="sec" style="margin-top:26px">Next badges</div><div class="li-list">`+next.map(({a,p})=>`<button class="li" onclick="openProfileView('badges')"><span class="ico">${icon('badge',18)}</span>
+      <span class="t">${esc(a.name)}<small>${esc(a.desc)}. ${p.need>1?fmtN(p.have)+' of '+fmtN(p.need):'Not yet'}</small><span class="track st-track"><span class="fill" style="width:${Math.min(100,p.have/p.need*100)}%"></span></span></span><span class="chev">${icon('chev',16)}</span></button>`).join('')+`</div>`;
+  }
+  el.innerHTML=h;
+}
+
+// ─────────────── Blue Gate: Long Walk ───────────────
+function stepsGateTarget(monIso){
+  const tier=blueTier();let tot=0,n=0;
+  for(let i=1;i<=4;i++){const v=stepsWeek(shiftWeek(monIso,-i));if(v>0){tot+=v;n++}}
+  return Math.max([35000,45000,50000][tier],Math.round((n?tot/n:0)*1.1/1000)*1000);
+}
+function hasRecentSteps(monIso){const s=new Date(monIso+'T12:00:00');for(let i=1;i<=14;i++){const x=new Date(s);x.setDate(x.getDate()-i);if(stepsOn(getDateStr(x))>0)return true}return false}
+
+// ─────────────── Nutrition: suggest a step range from real steps ───────────────
+const STEP_BUCKETS=[2000,4000,6000,8000,10000,12000];
+function stepRangeSuggestion(){
+  const today=getTodayStr();const vals=[];
+  for(let i=1;i<=14;i++){const v=stepsOn(dayShift(today,-i));if(v>0)vals.push(v)}
+  if(vals.length<10)return null;
+  const avg=Math.round(vals.reduce((a,b)=>a+b,0)/vals.length);
+  const bucket=STEP_BUCKETS.reduce((b,x)=>Math.abs(x-avg)<Math.abs(b-avg)?x:b,STEP_BUCKETS[0]);
+  const cur=parseInt(userData.dailySteps)||0;
+  if(bucket===cur)return null;
+  const dis=userData.stepHintDismissed||'';
+  if(dis&&dis>dayShift(today,-14))return null;
+  const delta=(typeof stepsToCalories==='function')?stepsToCalories(bucket)-stepsToCalories(cur):0;
+  return {avg,bucket,cur,delta};
+}
+function stepRangeHintHtml(){
+  const s=stepRangeSuggestion();if(!s)return '';
+  const curTxt=s.cur?'about '+fmtN(s.cur):'no step estimate';
+  return `<div class="st-hint"><span class="st-hint-i">${icon('steps',18)}</span><div>Your last 14 days average <b>${fmtN(s.avg)} steps</b>, but your target assumes ${curTxt}. Switching to about ${fmtN(s.bucket)} ${s.delta>=0?'adds':'takes off'} ${fmtN(Math.abs(s.delta))} cal a day.</div>
+    <div class="st-hint-btns"><button class="btn-s" onclick="dismissStepHint()">${s.cur?'Keep '+fmtN(s.cur):'Not now'}</button><button class="btn-s on" onclick="applyStepHint(${s.bucket})">Use ${fmtN(s.bucket)}</button></div></div>`;
+}
+async function dismissStepHint(){await saveUser({stepHintDismissed:getTodayStr()});renderNutritionPage()}
+async function applyStepHint(b){if(!STEP_BUCKETS.includes(b))return;await saveUser({dailySteps:String(b),stepHintDismissed:getTodayStr()});renderNutritionPage();toast(`Step range set to about ${fmtN(b)}`)}
+
+// ─────────────── Unlock notifications ───────────────
+// kinds: badge {a} · title {t} · tier {name, sub, xp}. Badges that arrive together show as one card.
+let unlockQueue=[],unlockShowing=false,unlockTimer=null,unlockBatch=[];
+function celebrate(item){if(!item||(item.kind==='badge'&&!item.a))return;unlockQueue.push(item);if(!unlockShowing)showNextUnlock()}
+function celebrateAch(a){if(a)celebrate({kind:'badge',a})}
+function unlockRow(ic,name,desc){return `<div class="un-row"><span class="un-ic">${ic}</span><span class="un-t"><span class="un-n">${esc(name)}</span>${desc?`<span class="un-d">${esc(desc)}</span>`:''}</span></div>`}
+function showNextUnlock(){
+  clearTimeout(unlockTimer);
+  const item=unlockQueue.shift();
+  if(!item){unlockShowing=false;return}
+  unlockShowing=true;
+  let card=$('achCelebration');
+  if(!card){card=document.createElement('div');card.id='achCelebration';card.className='ach-celebration';card.setAttribute('role','status');document.body.appendChild(card)}
+  let html='',gold=false,ms=3800;card.onclick=null;
+  if(item.kind==='badge'){
+    unlockBatch=[item.a];
+    while(unlockQueue.length&&unlockQueue[0].kind==='badge'){unlockBatch.push(unlockQueue.shift().a)}
+    const xp=unlockBatch.reduce((s,a)=>s+(a.xp||0),0),sh=unlockBatch.length*SHARD_REWARDS.achievement;
+    const rew=[xp?`+${fmtN(xp)} XP`:'',`+${sh} shards`].filter(Boolean).join(', ');
+    if(unlockBatch.length===1){
+      const a=unlockBatch[0];
+      html=`<div class="sys-title sm">[ Badge earned ]</div>${unlockRow(a.icon||'🏅',a.name,a.desc)}<div class="un-foot"><span class="gold">${rew}</span></div>`;
+      card.onclick=()=>{hideUnlock();openProfileView('badges')};
+    }else{
+      const show=unlockBatch.slice(0,3),more=unlockBatch.length-show.length;
+      html=`<div class="sys-title sm">[ ${unlockBatch.length} badges earned ]</div>${show.map(a=>unlockRow(a.icon||'🏅',a.name,a.desc)).join('')}
+        ${more>0?`<div class="un-more">and ${more} more</div>`:''}<div class="un-foot"><span class="gold">${rew}</span><button class="btn-s sm" onclick="event.stopPropagation();openUnlockList()">${more>0?`See all ${unlockBatch.length}`:'See all'}</button></div>`;
+      card.onclick=()=>openUnlockList();ms=6500;
+    }
+    try{if(navigator.vibrate)navigator.vibrate([100,50,100])}catch(e){}
+  }else if(item.kind==='title'){
+    gold=true;ms=6000;
+    html=`<div class="sys-title sm">[ Title earned ]</div>${unlockRow(icon('tag',20),item.t.name,item.t.how)}
+      <div class="un-foot"><span class="gold">Wear it under your name</span><button class="btn-s sm" onclick="event.stopPropagation();hideUnlock();equipTitle('${safeId(item.t.id)}')">Equip</button></div>`;
+    card.onclick=()=>{hideUnlock();openWardrobe('title')};
+  }else if(item.kind==='tier'){
+    html=`<div class="sys-title sm">[ Tier complete ]</div>${unlockRow(icon('ladder',20),item.name,item.sub)}<div class="un-foot"><span class="gold">+${fmtN(item.xp)} XP</span></div>`;
+    card.onclick=()=>hideUnlock();
+  }
+  card.innerHTML=sysWin(html,'un-win'+(gold?' gold':''));
+  requestAnimationFrame(()=>card.classList.add('show'));
+  unlockTimer=setTimeout(hideUnlock,ms);
+}
+function hideUnlock(){
+  clearTimeout(unlockTimer);
+  const card=$('achCelebration');if(!card){unlockShowing=false;return}
+  if(!card.classList.contains('show')){showNextUnlock();return}
+  card.classList.remove('show');setTimeout(showNextUnlock,380);
+}
+function openUnlockList(){
+  const list=unlockBatch.slice();hideUnlock();
+  openSheet(`<h2>${list.length} badges earned</h2><div class="li-list un-list">${list.map(a=>`<div class="li"><span class="ico un-ico">${a.icon||'🏅'}</span><span class="t">${esc(a.name)}<small>${esc(a.desc||'')}</small></span><span class="num gold">${a.xp?'+'+fmtN(a.xp):''}</span></div>`).join('')}</div>
+    <div class="m-actions"><button class="m-cancel" onclick="closeSheet()">Close</button><button class="m-save-btn" onclick="closeSheet();openProfileView('badges')">All badges</button></div>`);
+}
+
+// ─────────────── Tap outside a menu to close it ───────────────
+// One rule for every .modal-bg. It presses the menu's own Cancel/Close button so any
+// cleanup runs (the scanner stops the camera, etc.). If something was typed, it asks first.
+(function(){
+  let downOn=null;
+  document.addEventListener('pointerdown',e=>{downOn=e.target},true);
+  document.addEventListener('input',e=>{const m=e.target.closest&&e.target.closest('.modal-bg');if(m)m.dataset.dirty='1'},true);
+  // Opening a menu clears its "typed" flag
+  const mo=new MutationObserver(ms=>ms.forEach(r=>{const el=r.target;if(el.classList&&el.classList.contains('modal-bg')&&el.classList.contains('open')&&!r.oldValue?.includes('open'))delete el.dataset.dirty}));
+  const watch=()=>document.querySelectorAll('.modal-bg').forEach(m=>{if(!m.dataset.watched){m.dataset.watched='1';mo.observe(m,{attributes:true,attributeFilter:['class'],attributeOldValue:true})}});
+  watch();setInterval(watch,3000);
+  document.addEventListener('click',e=>{
+    const m=e.target;
+    if(!m.classList||!m.classList.contains('modal-bg')||!m.classList.contains('open'))return;
+    if(downOn!==m)return; // a drag that started inside the menu (e.g. selecting text) doesn't count
+    if(m.id==='sheetModal')return; // the sheet has its own handler
+    if(m.dataset.dirty==='1'&&!confirm('Discard what you typed?'))return;
+    closeModalBg(m);
+  });
+})();
+function closeModalBg(m){
+  const btns=[...m.querySelectorAll('button')];
+  const btn=btns.find(b=>/close|cancel/i.test(b.getAttribute('onclick')||''))||m.querySelector('.m-cancel')||btns.find(b=>/^(cancel|close|done|not now|skip)$/i.test(b.textContent.trim()));
+  if(btn)btn.click();
+  if(m.classList.contains('open'))m.classList.remove('open');
+  delete m.dataset.dirty;
+}
+
+// ─────────────── Keep me signed in ───────────────
+function keepSignedIn(){try{return localStorage.getItem('lexen_keep')!=='0'}catch(e){return true}}
+function applyPersistence(){
+  try{const P=firebase.auth.Auth.Persistence;return auth.setPersistence(keepSignedIn()?P.LOCAL:(P.SESSION||P.LOCAL)).catch(e=>console.warn('[auth] persistence',e))}catch(e){return Promise.resolve()}
+}
+function setKeepSignedIn(on){try{localStorage.setItem('lexen_keep',on?'1':'0')}catch(e){}document.querySelectorAll('.keep-cb').forEach(c=>c.checked=on);applyPersistence()}
+function syncKeepBoxes(){document.querySelectorAll('.keep-cb').forEach(c=>c.checked=keepSignedIn())}

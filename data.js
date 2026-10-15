@@ -1,9 +1,19 @@
 // ═══════════════════════════════════════════
 //  LEXENFITNESS — DATA v4 (Solo Leveling)
 // ═══════════════════════════════════════════
-const APP_VERSION='1.30.0';
+const APP_VERSION='1.31.0';
 const WELCOME_MESSAGE=`Welcome to Lexen Fitness! A Solo-Leveling inspired, gamified Fitness App to help friends and family stay motivated by giving fitness a game-like experience.\n\nThis app is developed by one person, and is very much still in the testing phase. Not everything will be perfect, but please bear with me. If you have any suggestions, feel free to pass them along as I continue to make this the best app that I can, before I actually have to start buying dev rights with Apple and Google.\n\nFeel free to share this with your own family and friends as we build a community that becomes healthier together!\n\n— Gavin (founder)`;
 const CHANGELOG=[
+  {version:'1.31.0',date:'Oct 2026',title:'Every step counts',blurb:'Log your daily steps and they count toward badges, titles, Blue Gates and the Hall of Fame. You\'ll also stay signed in properly now, and every unlock tells you exactly what you earned.',items:[
+    'Steps: tap the steps tile on Home and type today\'s total from Apple Health, Samsung Health or your watch app. Saving again replaces the number, so update it as often as you like',
+    'Hit your daily step goal for +10 XP. Your week, streaks and best day are one tap away',
+    '22 new step badges, plus two new titles: The Wanderer and The Strider',
+    'Long Walk joins the Blue Gate rotation, and the Hall of Fame tracks most steps this week and lifetime steps',
+    'Nutrition suggests a better step range once your logged steps show you walk more, or less, than it assumes. Nothing changes unless you tap it',
+    'Keep me signed in on the sign-in screen. A slow connection no longer sends you back to sign in',
+    'Unlock notifications now say what you earned and why. Several at once show by name, with See all',
+    'Tap outside any menu to close it. If you typed something, it asks first'
+  ]},
   {version:'1.30.0',date:'Oct 2026',title:'NEW ERA BEGINS',blurb:'A new mark for the System, and three new things to chase. Every hunter below S-Rank now gets a weekly Blue Gate, you can earn titles to wear under your name, and the Hall of Fame shows the heaviest lifts anyone in LexenFitness has logged.',items:[
     'New app icon and loading screen. Re-add LexenFitness to your home screen if the old icon sticks around',
     'Blue Gates: a new weekly challenge for E through A-Rank, scaled to your own training. Clear it for shards and XP. You\'ll find it on Home',
@@ -1182,7 +1192,8 @@ const BLUE_GATE_POOL=[
   {id:'quest_line',m:'iron_discipline',name:'Quest Line',unit:'days'},
   {id:'fuel_run',m:'fuel_the_hunt',name:'Fuel Run',unit:'days'},
   {id:'long_road',m:'cardio_raid',name:'Long Road',unit:'min'},
-  {id:'time_under_iron',m:'endurance_gate',name:'Time Under Iron',unit:'min'}
+  {id:'time_under_iron',m:'endurance_gate',name:'Time Under Iron',unit:'min'},
+  {id:'long_walk',m:'steps_week',name:'Long Walk',unit:'steps'}
 ];
 ACHIEVEMENTS.push(
   {id:'blue_gate_1',icon:'🔷',name:'First Breach',desc:'Clear your first Blue Gate',xp:30},
@@ -1202,6 +1213,8 @@ const TITLES=[
   {id:'gauntlet_survivor',name:'Gauntlet Survivor',how:'Survive the Gauntlet'},
   {id:'crimson_hunter',name:'Crimson Hunter',how:'Clear 5 Red Gates'},
   {id:'record_holder',name:'Record Holder',how:'Hold a first place in the Hall of Fame'},
+  {id:'the_wanderer',name:'The Wanderer',how:'Log 1,000,000 lifetime steps'},
+  {id:'the_strider',name:'The Strider',how:'Hit your step goal 100 days in a row'},
   {id:'shadow_monarch',name:'Shadow Monarch',how:'Reach S-Rank',gold:true}
 ];
 // Hall of Fame categories. lift: published from logged sets. Caps match the database
@@ -1212,3 +1225,30 @@ const HOF_LIFTS=[
   {k:'squat',name:'Squat',cap:1100},
   {k:'ohp',name:'Overhead press',cap:550}
 ];
+
+// ═══════════ v1.31.0 — Steps ═══════════
+// The daily mission 'Step It Up' (steps_10k) completes itself when you log 10,000+ today.
+ACHIEVEMENTS.push(
+  {id:'steps_day_10k',icon:'🚶',name:'Ten Thousand',desc:'Walk 10,000 steps in a day',xp:20},
+  {id:'steps_15k',icon:'🥾',name:'Long Haul',desc:'Walk 15,000 steps in a day',xp:30},
+  {id:'steps_20k',icon:'🌑',name:'Shadow Step',desc:'Walk 20,000 steps in a day',xp:50},
+  {id:'steps_25k',icon:'🕳️',name:'Dungeon Crawler',desc:'Walk 25,000 steps in a day',xp:75},
+  {id:'steps_30k',icon:'🛣️',name:'Endless Road',desc:'Walk 30,000 steps in a day',xp:100},
+  {id:'steps_life_55k',icon:'🏅',name:'Walked a Marathon',desc:'Log 55,000 steps, about 42 km',xp:25},
+  {id:'steps_life_100k',icon:'💯',name:'Hundred Thousand',desc:'Log 100,000 lifetime steps',xp:40},
+  {id:'steps_life_211k',icon:'🗺️',name:'Hundred-Mile Hunter',desc:'Log 211,000 steps, about 160 km',xp:60},
+  {id:'steps_life_500k',icon:'🌄',name:'Half a Million',desc:'Log 500,000 lifetime steps',xp:100},
+  {id:'steps_life_1m',icon:'🌍',name:'The Million',desc:'Log 1,000,000 lifetime steps',xp:200},
+  {id:'steps_life_2m',icon:'🌌',name:'Two Million',desc:'Log 2,000,000 lifetime steps',xp:250},
+  {id:'steps_life_5900k',icon:'🧭',name:'Coast to Coast',desc:'Log 5,900,000 steps, about 4,500 km',xp:400},
+  {id:'steps_streak_7',icon:'👣',name:'Week on Foot',desc:'Hit your step goal 7 days in a row',xp:40},
+  {id:'steps_streak_30',icon:'⛓️',name:'Iron Soles',desc:'Hit your step goal 30 days in a row',xp:120},
+  {id:'steps_streak_100',icon:'🏃',name:'Unbroken Stride',desc:'Hit your step goal 100 days in a row',xp:300},
+  {id:'steps_full_week',icon:'📅',name:'Full Week',desc:'Hit your step goal every day, Monday to Sunday',xp:60},
+  {id:'steps_weekend',icon:'🌤️',name:'Weekend Wanderer',desc:'Walk 10,000 steps on both Saturday and Sunday',xp:30},
+  {id:'steps_month',icon:'🗓️',name:'Month of Miles',desc:'Log 300,000 steps in one calendar month',xp:100},
+  {id:'steps_logbook',icon:'📒',name:'Logbook',desc:'Log steps on 30 different days',xp:40},
+  {id:'steps_double',icon:'⚔️',name:'Double Duty',desc:'Hit your step goal and finish a workout on the same day',xp:25},
+  {id:'steps_comeback',icon:'🔁',name:'Comeback Walk',desc:'Hit your step goal after 3 or more days without logging',xp:25},
+  {id:'steps_exact',icon:'🎯',name:'Precision',desc:'Log exactly 10,000 steps',xp:30,secret:true}
+);

@@ -144,6 +144,7 @@ function renderNutritionPage(){
     <div class="track nu-track"><div class="fill${calOver?' over':''}" style="width:${Math.min(100,totals.cal/t.target*100)}%"></div></div>
     <div class="mist sm nu-maint">${t.deficit?`Maintenance is ${fmtN(t.maintenance)}. You're eating ${fmtN(Math.abs(t.deficit))} ${t.deficit<0?'under':'over'} it for a ${fmtN(t.target)} target.`:`Maintenance and target: ${fmtN(t.target)} cal.`}</div>
     ${deficitWarning(t)}
+    ${stepRangeHintHtml()}
     <div class="nu-macros">${nuMacro('Protein',totals.p,t.proteinG,'pro')}${nuMacro('Carbs',totals.c,t.carbG,'carb')}${nuMacro('Fat',totals.f,t.fatG,'fat')}</div>
     <div class="nu-btns"><button class="btn-s" onclick="openMacroModal()">${icon('gear',16)} Adjust targets</button><button class="btn-s" onclick="openMealCountModal()">${icon('note',16)} ${mealCount} meals</button></div></div>`;
   for(let m=1;m<=mealCount;m++){
