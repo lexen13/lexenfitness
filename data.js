@@ -1,9 +1,10 @@
 // ═══════════════════════════════════════════
 //  LEXENFITNESS — DATA v4 (Solo Leveling)
 // ═══════════════════════════════════════════
-const APP_VERSION='1.32.1';
+const APP_VERSION='1.32.2';
 const WELCOME_MESSAGE=`Welcome to Lexen Fitness! A Solo-Leveling inspired, gamified Fitness App to help friends and family stay motivated by giving fitness a game-like experience.\n\nThis app is developed by one person, and is very much still in the testing phase. Not everything will be perfect, but please bear with me. If you have any suggestions, feel free to pass them along as I continue to make this the best app that I can, before I actually have to start buying dev rights with Apple and Google.\n\nFeel free to share this with your own family and friends as we build a community that becomes healthier together!\n\n— Gavin (founder)`;
 const CHANGELOG=[
+  {version:'1.32.2',date:'Oct 2026',title:'Pick any day',blurb:'Logging steps for an earlier day now opens a calendar right in the sheet. Days you\'ve already logged have a dot.',items:['The Earlier button in Log steps opens a calendar that stays put until you pick a day']},
   {version:'1.32.1',date:'Oct 2026',title:'Your colors are back',blurb:'Profile frames and name colors show again everywhere: the Shop, Wardrobe, your profile, the leaderboard and the Hall of Fame.',items:['Frames glow and name colors show again. Nothing you bought or equipped was lost']},
   {version:'1.32.0',date:'Oct 2026',title:'Go the distance',blurb:'Distance joins steps: log it in the same sheet, earn distance badges and a new title, and see who\'s covered the most ground in the Hall of Fame. Unlock notifications are also quicker and easier to clear.',items:[
     'Log steps now takes distance too. Copy "Walking + Running Distance" from your Health app, or leave it blank and it\'s worked out from your steps and height',

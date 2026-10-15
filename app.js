@@ -5424,7 +5424,8 @@ function stepTileHtml(){
 
 // ─────────────── Log steps sheet ───────────────
 let stepLogDate=null;
-function openStepLog(d){
+function openStepLog(d,keepCal){
+  if(!keepCal)stepCalOpen=false;
   const today=getTodayStr(),yest=dayShift(today,-1);
   stepLogDate=d||stepLogDate||today;if(stepLogDate>today)stepLogDate=today;
   const mode=stepLogDate===today?'today':stepLogDate===yest?'yest':'earlier';
@@ -5436,8 +5437,9 @@ function openStepLog(d){
     <div class="sub-tabs st-days" role="tablist">
       <button class="stab${mode==='today'?' active':''}" onclick="openStepLog('${today}')">Today</button>
       <button class="stab${mode==='yest'?' active':''}" onclick="openStepLog('${yest}')">Yesterday</button>
-      <label class="stab${mode==='earlier'?' active':''} st-earlier">${icon('cal',16)} Earlier<input type="date" max="${yest}" min="${min}" value="${mode==='earlier'?stepLogDate:''}" onchange="if(this.value)openStepLog(this.value)" aria-label="Pick an earlier day"></label>
+      <button class="stab${mode==='earlier'||stepCalOpen?' active':''}" aria-expanded="${stepCalOpen}" onclick="toggleStepCal()">${icon('cal',16)} ${mode==='earlier'?new Date(stepLogDate+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'}):'Earlier'}</button>
     </div>
+    <div id="stepCal" class="st-cal"${stepCalOpen?'':' hidden'}>${stepCalHtml()}</div>
     <label class="au-label" for="stepInput">Steps for ${esc(label)}</label>
     <div class="st-field"><input id="stepInput" type="text" inputmode="numeric" autocomplete="off" placeholder="0" value="${cur?fmtN(cur):''}" oninput="stepInputFmt(this)" onkeydown="if(event.key==='Enter')submitStepLog()"><span class="mist">steps</span></div>
     <div class="st-dist-head"><label class="au-label" for="distInput">Distance <span class="dim">(optional)</span></label>
@@ -5744,3 +5746,40 @@ async function switchStepUnit(u){
   const di=$('distInput');if(di&&km!==null)di.value=String(Math.round(toUnit(km)*100)/100);
   $('distUnitLbl').textContent=u;stepLogRefresh();
 }
+
+// ── v1.32.2: in-sheet calendar for earlier days ──
+// Replaces the phone's date picker, which on iPhone fills in today's date as soon as it
+// opens; the sheet redrew on that and the picker vanished before you could pick a day.
+let stepCalOpen=false,stepCalMonth=null;
+function stepCalHtml(){
+  const today=getTodayStr(),min=dayShift(today,-365);
+  const m=stepCalMonth||(stepLogDate||today).slice(0,7);
+  const [y,mo]=m.split('-').map(Number);
+  const first=new Date(y,mo-1,1,12),days=new Date(y,mo,0).getDate();
+  const lead=(first.getDay()+6)%7; // Monday first
+  const title=first.toLocaleDateString('en-US',{month:'long',year:'numeric'});
+  const canPrev=m>min.slice(0,7),canNext=m<today.slice(0,7);
+  let cells='';for(let i=0;i<lead;i++)cells+='<span></span>';
+  for(let dd=1;dd<=days;dd++){
+    const d=`${m}-${String(dd).padStart(2,'0')}`;
+    const off=d>today||d<min,has=stepsOn(d)>0||distTyped(d)!==null;
+    cells+=`<button class="st-day${d===stepLogDate?' on':''}${d===today?' today':''}${has?' has':''}" ${off?'disabled':`onclick="pickStepDay('${d}')"`} aria-label="${new Date(d+'T12:00:00').toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'})}${has?', logged':''}">${dd}</button>`;
+  }
+  return `<div class="st-cal-head"><button class="icon-btn" ${canPrev?'':'disabled'} onclick="stepCalNav(-1)" aria-label="Previous month">${icon('left',18)}</button><span>${title}</span><button class="icon-btn" ${canNext?'':'disabled'} onclick="stepCalNav(1)" aria-label="Next month">${icon('chev',18)}</button></div>
+    <div class="st-cal-dow">${['M','T','W','T','F','S','S'].map(x=>`<span>${x}</span>`).join('')}</div><div class="st-cal-grid">${cells}</div>`;
+}
+function toggleStepCal(){
+  stepCalOpen=!stepCalOpen;if(stepCalOpen)stepCalMonth=null;
+  const el=$('stepCal');if(!el)return;
+  if(stepCalOpen){el.innerHTML=stepCalHtml();el.hidden=false}else el.hidden=true;
+  const t=getTodayStr(),earlier=stepLogDate&&stepLogDate!==t&&stepLogDate!==dayShift(t,-1);
+  const tabs=document.querySelectorAll('.st-days .stab');
+  if(tabs[2]){tabs[2].classList.toggle('active',stepCalOpen||!!earlier);tabs[2].setAttribute('aria-expanded',stepCalOpen)}
+}
+function stepCalNav(n){
+  const m=stepCalMonth||(stepLogDate||getTodayStr()).slice(0,7);
+  const [y,mo]=m.split('-').map(Number);const x=new Date(y,mo-1+n,1,12);
+  stepCalMonth=`${x.getFullYear()}-${String(x.getMonth()+1).padStart(2,'0')}`;
+  const el=$('stepCal');if(el)el.innerHTML=stepCalHtml();
+}
+function pickStepDay(d){stepCalOpen=false;stepCalMonth=null;openStepLog(d)}
