@@ -1729,3 +1729,24 @@ body.in-session .page{padding-bottom:200px}
 .modal .sub-tabs .stab{background:none}.modal .sub-tabs .stab.active{background:#2D2858}
 .keep-row{margin-bottom:12px}
 .un-more{margin:2px 0 0 52px}
+
+/* v1.32.0 — Distance + notifications */
+.st-dist-head{display:flex;justify-content:space-between;align-items:center;margin-top:14px}
+.st-dist-head .au-label{margin:0}
+.dist-unit-seg{margin:0;padding:3px;gap:3px;width:110px}
+.dist-unit-seg .stab{height:28px;font-size:13px;background:none}
+.dist-unit-seg .stab.active{background:#2D2858}
+.set-units{width:100%;max-width:260px;margin-top:6px}
+.st-field.sm{border-width:1px;border-color:var(--border);margin-top:6px}
+.st-field.sm input{font-size:24px;padding:4px 0}
+.st-sum.three{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+.st-sum.three .st-sum-v{font-size:21px}
+.st-dist{width:74px;text-align:right;font-size:14px;white-space:nowrap}
+.un-head{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.un-x{width:32px;height:32px;border-radius:50%;border:1px solid #393560;background:none;color:var(--muted);display:flex;align-items:center;justify-content:center;margin:-4px -6px 0 0;flex:none;padding:0}
+.un-x svg{stroke:currentColor}
+.un-row.gold .un-ic{background:rgba(242,193,78,.08);border-color:rgba(242,193,78,.45);color:var(--gold)}
+.un-row.gold .un-n{color:var(--gold)}
+.un-list .ico.gold{color:var(--gold);border-color:rgba(242,193,78,.5)}
+.un-list .t.gold{color:var(--gold)}
+.un-list .btn-s.sm{height:34px;font-size:13px;padding:0 12px}

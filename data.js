@@ -1,9 +1,16 @@
 // ═══════════════════════════════════════════
 //  LEXENFITNESS — DATA v4 (Solo Leveling)
 // ═══════════════════════════════════════════
-const APP_VERSION='1.31.0';
+const APP_VERSION='1.32.0';
 const WELCOME_MESSAGE=`Welcome to Lexen Fitness! A Solo-Leveling inspired, gamified Fitness App to help friends and family stay motivated by giving fitness a game-like experience.\n\nThis app is developed by one person, and is very much still in the testing phase. Not everything will be perfect, but please bear with me. If you have any suggestions, feel free to pass them along as I continue to make this the best app that I can, before I actually have to start buying dev rights with Apple and Google.\n\nFeel free to share this with your own family and friends as we build a community that becomes healthier together!\n\n— Gavin (founder)`;
 const CHANGELOG=[
+  {version:'1.32.0',date:'Oct 2026',title:'Go the distance',blurb:'Distance joins steps: log it in the same sheet, earn distance badges and a new title, and see who\'s covered the most ground in the Hall of Fame. Unlock notifications are also quicker and easier to clear.',items:[
+    'Log steps now takes distance too. Copy "Walking + Running Distance" from your Health app, or leave it blank and it\'s worked out from your steps and height',
+    'Pick miles or kilometers in the Log steps sheet or in Settings',
+    '9 distance badges and a new title, The Pathfinder, for 1,000 miles',
+    'Hall of Fame: farthest this week and lifetime distance',
+    'Lots of unlocks at once now show as one card. Tap the ✕ or swipe it up to clear it, and See all keeps the full list'
+  ]},
   {version:'1.31.0',date:'Oct 2026',title:'Every step counts',blurb:'Log your daily steps and they count toward badges, titles, Blue Gates and the Hall of Fame. You\'ll also stay signed in properly now, and every unlock tells you exactly what you earned.',items:[
     'Steps: tap the steps tile on Home and type today\'s total from Apple Health, Samsung Health or your watch app. Saving again replaces the number, so update it as often as you like',
     'Hit your daily step goal for +10 XP. Your week, streaks and best day are one tap away',
@@ -1215,6 +1222,7 @@ const TITLES=[
   {id:'record_holder',name:'Record Holder',how:'Hold a first place in the Hall of Fame'},
   {id:'the_wanderer',name:'The Wanderer',how:'Log 1,000,000 lifetime steps'},
   {id:'the_strider',name:'The Strider',how:'Hit your step goal 100 days in a row'},
+  {id:'the_pathfinder',name:'The Pathfinder',how:'Cover 1,000 mi (1,609 km) in total'},
   {id:'shadow_monarch',name:'Shadow Monarch',how:'Reach S-Rank',gold:true}
 ];
 // Hall of Fame categories. lift: published from logged sets. Caps match the database
@@ -1251,4 +1259,17 @@ ACHIEVEMENTS.push(
   {id:'steps_double',icon:'⚔️',name:'Double Duty',desc:'Hit your step goal and finish a workout on the same day',xp:25},
   {id:'steps_comeback',icon:'🔁',name:'Comeback Walk',desc:'Hit your step goal after 3 or more days without logging',xp:25},
   {id:'steps_exact',icon:'🎯',name:'Precision',desc:'Log exactly 10,000 steps',xp:30,secret:true}
+);
+
+// ═══════════ v1.32.0 — Distance ═══════════
+ACHIEVEMENTS.push(
+  {id:'steps_dist_day_5',icon:'🛤️',name:'Long Stroll',desc:'Cover 5 mi (8 km) in a day',xp:30},
+  {id:'steps_dist_day_10',icon:'🏞️',name:'Ten-Miler',desc:'Cover 10 mi (16 km) in a day',xp:60},
+  {id:'steps_dist_day_half',icon:'🥈',name:'Half Marathon Day',desc:'Cover 13.1 mi (21.1 km) in a day',xp:100},
+  {id:'steps_dist_week_25',icon:'🗺️',name:'Road Week',desc:'Cover 25 mi (40 km) in one week',xp:50},
+  {id:'steps_dist_week_50',icon:'🧗',name:'Fifty Up',desc:'Cover 50 mi (80 km) in one week',xp:120},
+  {id:'steps_dist_life_marathon',icon:'🏁',name:'First Marathon',desc:'Cover 26.2 mi (42.2 km) in total',xp:30},
+  {id:'steps_dist_life_100',icon:'💠',name:'Century',desc:'Cover 100 mi (161 km) in total',xp:60},
+  {id:'steps_dist_life_500',icon:'⛰️',name:'Long March',desc:'Cover 500 mi (805 km) in total',xp:150},
+  {id:'steps_dist_life_1000',icon:'🧭',name:'Thousand-Mile Hunter',desc:'Cover 1,000 mi (1,609 km) in total',xp:300}
 );

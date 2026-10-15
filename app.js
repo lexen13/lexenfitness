@@ -301,7 +301,7 @@ async function saveLeaderboard(){
       rank:r.name,profilePic:safeImgSrc(userData.profilePic),bio:String(userData.bio||'').slice(0,200),
       workouts:getLiftLogs().length,activities:getActivityLogs().length,achCount:(userData.achievements||[]).length,
       frame:c.frame,nameColor:c.name,gatesCleared:userData.redGatesCleared||0,recent:publicFeedEvents(),
-      titleId:myTitleId(),blueGates:userData.blueGatesCleared||0,bests:hofPublicBests(),...hofPublicSteps(),weekStreak:Math.min(520,bestWeekStreak()),hof:hofOptedIn(),
+      titleId:myTitleId(),blueGates:userData.blueGatesCleared||0,bests:hofPublicBests(),...hofPublicSteps(),...hofPublicDist(),weekStreak:Math.min(520,bestWeekStreak()),hof:hofOptedIn(),
       updatedAt:firebase.firestore.FieldValue.serverTimestamp()});
   }catch(e){console.warn('[saveLeaderboard]',e.code||e.message)}
 }
@@ -2868,6 +2868,7 @@ function fallbackCopy(text){const t=document.createElement('textarea');t.value=t
 // ═══════════ SETTINGS ═══════════
 function openSettings(){
   const st=userData.stats||{},prs=userData.prs||{},priv=userData.privacy||{};
+  document.querySelectorAll('.set-units .stab').forEach(b=>b.classList.toggle('active',b.dataset.u===distUnit()));
   $('setUsername').value=userData.username||'';$('setDisplayName').value=userData.name||'';
   $('setHeight').value=st.height||'';$('setWeight').value=st.weight||'';$('setAge').value=st.age||'';$('setBodyFat').value=st.bodyFat||'';
   $('setSex').value=st.sex||'male';
@@ -5123,6 +5124,7 @@ function titleProgress(id){
     case 'record_holder':return false; // only granted from the Hall of Fame
     case 'the_wanderer':return{have:Math.min(1000000,stepsLifetime()),need:1000000};
     case 'the_strider':return{have:Math.min(100,stepBestStreak()),need:100};
+    case 'the_pathfinder':return{have:Math.round(Math.min(1000,distLifetime()/KM_PER_MI)),need:1000,unit:'mi'};
   }
   return false;
 }
@@ -5209,7 +5211,9 @@ const HOF_CATS=[
   {id:'streak',name:'Longest week streak',sub:'Weeks in a row with 3+ sessions',unit:'weeks',icon:'crown',val:u=>+u.weekStreak||0},
   {id:'bgates',name:'Most Blue Gates',sub:'Blue Gates cleared',unit:'',icon:'crown',val:u=>+u.blueGates||0},
   {id:'stepsweek',name:'Most steps this week',sub:'Logged steps since Monday',unit:'',icon:'crown',val:u=>u.stepsWeekOf===gateWeekKey()?(+u.stepsWeek||0):0,strike:'steps'},
-  {id:'stepslife',name:'Lifetime steps',sub:'Every step logged',unit:'',icon:'crown',val:u=>+u.stepsTotal||0,strike:'steps'}
+  {id:'stepslife',name:'Lifetime steps',sub:'Every step logged',unit:'',icon:'crown',val:u=>+u.stepsTotal||0,strike:'steps'},
+  {id:'distweek',name:'Farthest this week',sub:'Distance since Monday',unit:'dist',icon:'crown',val:u=>u.stepsWeekOf===gateWeekKey()?(+u.distWeek||0):0,strike:'steps'},
+  {id:'distlife',name:'Lifetime distance',sub:'Every mile logged',unit:'dist',icon:'crown',val:u=>+u.distTotal||0,strike:'steps'}
 ];
 async function loadHallOfFame(){
   const list=[];
@@ -5219,7 +5223,7 @@ async function loadHallOfFame(){
   const meIdx=list.findIndex(u=>u.uid===U.uid);
   if(hofOptedIn()){
     const mine={uid:U.uid,username:userData.username||'hunter',rank:getEffectiveRank().name,titleId:myTitleId(),profilePic:userData.profilePic,frame:getCos().frame,
-      bests:hofPublicBests(),...hofPublicSteps(),workouts:getLiftLogs().length,weekStreak:bestWeekStreak(),blueGates:userData.blueGatesCleared||0};
+      bests:hofPublicBests(),...hofPublicSteps(),...hofPublicDist(),workouts:getLiftLogs().length,weekStreak:bestWeekStreak(),blueGates:userData.blueGatesCleared||0};
     if(meIdx>=0)list[meIdx]={...list[meIdx],...mine};else list.push(mine);
   }else if(meIdx>=0)list.splice(meIdx,1);
   hofData={at:Date.now(),list};
@@ -5230,7 +5234,7 @@ function hofRanked(cat){
     .sort((a,b)=>b.v-a.v||String(a.u.username||'').localeCompare(String(b.u.username||'')));
 }
 function ordinal(n){const s=['th','st','nd','rd'],v=n%100;return n+(s[(v-20)%10]||s[v]||s[0])}
-function hofValue(v,cat){return `${fmtN(v)}${cat.unit==='lb'?' lb':cat.unit?' '+cat.unit:''}`}
+function hofValue(v,cat){if(cat.unit==='dist')return fmtDist(v,toUnit(v)>=100?0:1);return `${fmtN(v)}${cat.unit==='lb'?' lb':cat.unit?' '+cat.unit:''}`}
 function hofRow(x,i,cat,opts){
   const u=x.u,me=u.uid===U.uid;const r=(u.rank&&RANKS.find(k=>k.name===u.rank))||RANKS[0];
   const t=titleName(u.titleId);
@@ -5262,7 +5266,7 @@ async function renderHallOfFame(el){
   if(!hofOptedIn())h+=`<div class="hof-note">You're hidden from the Hall of Fame. Turn on "Show my records in the Hall of Fame" in Settings, Privacy to compete.</div>`;
   ['deadlift','bench','total'].forEach(id=>{h+=hofPanel(HOF_CATS.find(c=>c.id===id))});
   h+=`<div class="sec" style="margin-top:26px">More records</div><div class="li-list hof-more">`;
-  ['squat','ohp','stepsweek','stepslife','workouts','streak','bgates'].forEach(id=>{
+  ['squat','ohp','stepsweek','stepslife','distweek','distlife','workouts','streak','bgates'].forEach(id=>{
     const cat=HOF_CATS.find(c=>c.id===id);const top=hofRanked(cat)[0];
     h+=`<button class="li" onclick="openHofCategory('${id}')"><span class="ico gold">${icon(cat.icon,18)}</span><span class="t">${esc(cat.name)}<small>${top?'Held by '+(top.u.uid===U.uid?'you':esc(top.u.username||'hunter')):'No record yet'}</small></span>
       <span class="r num">${top?hofValue(top.v,cat):'—'}</span><span class="chev">${icon('chev',16)}</span></button>`;
@@ -5286,7 +5290,7 @@ async function devStrikeRecord(uid,k,uname){
   if(!confirm(`Strike @${uname}'s ${k} record? It drops to 0 and stays out until you restore it.`))return;
   try{
     await db.collection('users').doc(uid).update({hofExclude:firebase.firestore.FieldValue.arrayUnion(k)});
-    await db.collection('leaderboard').doc(uid).update(k==='steps'?{stepsTotal:0,stepsWeek:0}:{['bests.'+k]:0});
+    await db.collection('leaderboard').doc(uid).update(k==='steps'?{stepsTotal:0,stepsWeek:0,distTotal:0,distWeek:0}:{['bests.'+k]:0});
     toast('Record struck');renderLeaderboard();
   }catch(e){toast('Strike failed: '+(e.code||e.message))}
 }
@@ -5357,7 +5361,7 @@ function stepBadgeProgress(id){
     case 'steps_comeback':{let ok=0;for(let i=1;i<days.length;i++){const gap=(new Date(days[i]+'T12:00:00')-new Date(days[i-1]+'T12:00:00'))/86400000;if(gap>=4&&stepsOn(days[i])>=g)ok=1}return{have:ok,need:1}}
     case 'steps_exact':return{have:days.some(d=>stepsOn(d)===10000)?1:0,need:1};
   }
-  return null;
+  return distBadgeProgress(id);
 }
 function stepAchIds(){return ACHIEVEMENTS.filter(a=>a.id.startsWith('steps_')).map(a=>a.id)}
 function stepAchEarnedNow(){return stepAchIds().filter(id=>{const p=stepBadgeProgress(id);return p&&p.have>=p.need})}
@@ -5374,15 +5378,17 @@ async function unlockMany(ids){
 }
 
 // ─────────────── Saving ───────────────
-async function saveSteps(d,n){
+async function saveSteps(d,n,km){
   n=Math.round(+n||0);
   if(!/^\d{4}-\d{2}-\d{2}$/.test(d)||d>getTodayStr()){toast('Pick today or an earlier day');return false}
   if(n<0||n>STEP_MAX){toast(`Steps go up to ${fmtN(STEP_MAX)} a day`);return false}
+  if(km!=null&&(isNaN(km)||km<0||km>DIST_MAX_KM)){toast(`Distance goes up to ${distUnit()==='km'?'100 km':'62 mi'} a day`);return false}
   const steps={...stepsMap()};
   if(n>0)steps[d]=n;else delete steps[d];
   const upd={steps};
-  // +10 XP for hitting the goal, once per day, and only for today or yesterday
-  // (no back-filling a year of XP)
+  // km undefined = leave the typed distance alone; null or 0 = clear it (estimate from steps)
+  if(km!==undefined){const dist={...distMap()};if(km>0)dist[d]=Math.round(km*1000)/1000;else delete dist[d];upd.dist=dist;userData.dist=dist}
+  // +10 XP for hitting the goal, once per day, and only for today or yesterday (no back-filling XP)
   const xpDays={...(userData.stepXpDays||{})};
   let gained=0;
   if(n>=stepGoal()&&!xpDays[d]&&(d===getTodayStr()||d===dayShift(getTodayStr(),-1))){
@@ -5398,7 +5404,8 @@ async function saveSteps(d,n){
   try{const ms=getDailyMissions(getTodayStr(),userData.class)||[];const done=(userData.missionsCompleted||{})[getTodayStr()]||[];
     if(d===getTodayStr()&&n>=10000&&ms.some(m=>m.id==='steps_10k')&&!done.includes('steps_10k'))await completeMission('steps_10k')}catch(e){console.warn(e)}
   await saveLeaderboard();updateTopBar();
-  toast(n>0?`${fmtN(n)} steps saved${gained?`, goal hit +${gained} XP`:''}`:'Steps cleared');
+  const distTxt=(n>0||distTyped(d))?', '+fmtDist(distKmOn(d)):'';
+  toast(n>0||distTyped(d)?`${n?fmtN(n)+' steps':'Distance'} saved${n?distTxt:''}${gained?`, goal hit +${gained} XP`:''}`:'Day cleared');
   if(currentPage==='missions')renderMissions();
   if($('sp-steps')&&$('sp-steps').classList.contains('active'))renderStepsPage();
   return true;
@@ -5407,11 +5414,12 @@ async function saveSteps(d,n){
 // ─────────────── Home tile ───────────────
 function stepTileHtml(){
   const today=getTodayStr(),n=stepsOn(today),g=stepGoal();
-  if(!n){const y=stepsOn(dayShift(today,-1));
+  if(!n&&!distTyped(today)){const y=stepsOn(dayShift(today,-1));
     return `<button class="ps-tile tap st-tile empty" onclick="openStepLog()"><span class="st-tile-ic">${icon('steps',18)}</span><div class="ps-l st-tile-cta">Log steps</div><div class="ps-l">${y?'Yesterday '+fmtN(y):'Tap to add today'}</div></button>`}
   const hit=n>=g,pct=Math.min(100,n/g*100);
   const big=n>=10000?(n/1000).toFixed(n>=100000?0:1).replace(/\.0$/,'')+'k':fmtN(n);
-  return `<button class="ps-tile tap st-tile${hit?' hit':''}" onclick="openStepLog()"><div class="num ps-v">${big}</div><div class="ps-l">${hit?'Goal hit':'Steps of '+(g%1000===0?g/1000+'k':fmtN(g))}</div><span class="st-tile-bar"><span style="width:${pct}%"></span></span></button>`;
+  const dist=fmtDist(distKmOn(today));
+  return `<button class="ps-tile tap st-tile${hit?' hit':''}" onclick="openStepLog()"><div class="num ps-v">${big}</div><div class="ps-l">${hit?'Goal hit':'Steps'}, ${dist}</div><span class="st-tile-bar"><span style="width:${pct}%"></span></span></button>`;
 }
 
 // ─────────────── Log steps sheet ───────────────
@@ -5420,35 +5428,36 @@ function openStepLog(d){
   const today=getTodayStr(),yest=dayShift(today,-1);
   stepLogDate=d||stepLogDate||today;if(stepLogDate>today)stepLogDate=today;
   const mode=stepLogDate===today?'today':stepLogDate===yest?'yest':'earlier';
-  const cur=stepsOn(stepLogDate);
+  const cur=stepsOn(stepLogDate),typed=distTyped(stepLogDate),u=distUnit();
   const label=mode==='today'?'today':mode==='yest'?'yesterday':new Date(stepLogDate+'T12:00:00').toLocaleDateString('en-US',{weekday:'long',month:'short',day:'numeric'});
   const min=dayShift(today,-365);
+  const typedTxt=typed!==null?(Math.round(toUnit(typed)*100)/100).toString():'';
   openSheet(`<h2>Log steps</h2>
     <div class="sub-tabs st-days" role="tablist">
       <button class="stab${mode==='today'?' active':''}" onclick="openStepLog('${today}')">Today</button>
       <button class="stab${mode==='yest'?' active':''}" onclick="openStepLog('${yest}')">Yesterday</button>
       <label class="stab${mode==='earlier'?' active':''} st-earlier">${icon('cal',16)} Earlier<input type="date" max="${yest}" min="${min}" value="${mode==='earlier'?stepLogDate:''}" onchange="if(this.value)openStepLog(this.value)" aria-label="Pick an earlier day"></label>
     </div>
-    <label class="au-label" for="stepInput">Total steps for ${esc(label)}</label>
+    <label class="au-label" for="stepInput">Steps for ${esc(label)}</label>
     <div class="st-field"><input id="stepInput" type="text" inputmode="numeric" autocomplete="off" placeholder="0" value="${cur?fmtN(cur):''}" oninput="stepInputFmt(this)" onkeydown="if(event.key==='Enter')submitStepLog()"><span class="mist">steps</span></div>
-    <div class="mist sm st-help">Copy the total from Apple Health, Samsung Health or your watch app. Saving again later replaces this number. Up to ${fmtN(STEP_MAX)} a day.</div>
+    <div class="st-dist-head"><label class="au-label" for="distInput">Distance <span class="dim">(optional)</span></label>
+      <div class="sub-tabs dist-unit-seg"><button class="stab${u==='mi'?' active':''}" data-u="mi" onclick="switchStepUnit('mi')">mi</button><button class="stab${u==='km'?' active':''}" data-u="km" onclick="switchStepUnit('km')">km</button></div></div>
+    <div class="st-field sm"><input id="distInput" type="text" inputmode="decimal" autocomplete="off" value="${typedTxt}" oninput="distInputFmt(this)" onkeydown="if(event.key==='Enter')submitStepLog()"><span class="mist" id="distUnitLbl">${u}</span></div>
+    <div class="mist sm st-help" id="stepHelp"></div>
     <button class="li st-goal-row" onclick="openStepGoal()"><span class="t">Daily goal<small>Change it any time</small></span><span class="num">${fmtN(stepGoal())}</span><span class="chev">${icon('chev',16)}</span></button>
-    <button class="btn-p st-save" id="stepSaveBtn" onclick="submitStepLog()">${cur?'Save '+fmtN(cur)+' steps':'Save steps'}</button>
-    ${cur?`<button class="link st-clear" onclick="submitStepLog(0)">Clear this day</button>`:''}
+    <button class="btn-p st-save" id="stepSaveBtn" onclick="submitStepLog()">Save</button>
+    ${cur||typed!==null?`<button class="link st-clear" onclick="submitStepLog(0)">Clear this day</button>`:''}
     <button class="link st-more" onclick="closeSheet();openStepsPage()">${icon('pulse',16)} Your week, streaks and badges</button>`);
+  stepLogRefresh();
   setTimeout(()=>{const i=$('stepInput');if(i){i.focus();try{i.setSelectionRange(i.value.length,i.value.length)}catch(e){}}},250);
 }
-function stepInputFmt(el){
-  const digits=el.value.replace(/\D/g,'').slice(0,6);const n=parseInt(digits)||0;
-  el.value=digits?fmtN(n):'';
-  const b=$('stepSaveBtn');if(b)b.textContent=n?`Save ${fmtN(n)} steps`:'Save steps';
-  el.classList.toggle('over',n>STEP_MAX);
-}
+function stepInputFmt(el){const digits=el.value.replace(/\D/g,'').slice(0,6);el.value=digits?fmtN(parseInt(digits)):'';stepLogRefresh()}
 async function submitStepLog(force){
-  const el=$('stepInput');const n=force===0?0:parseInt(String(el&&el.value||'').replace(/\D/g,''))||0;
-  if(force!==0&&!n){toast('Type your step total first');return}
+  const {n,km}=force===0?{n:0,km:null}:stepLogVals();
+  if(force!==0&&!n&&!km){toast('Type your steps or distance first');return}
   if(n>STEP_MAX){toast(`Steps go up to ${fmtN(STEP_MAX)} a day`);return}
-  if(await saveSteps(stepLogDate||getTodayStr(),n)){closeSheet();stepLogDate=null}
+  if(km!==null&&km>DIST_MAX_KM){toast(`Distance goes up to ${distUnit()==='km'?'100 km':'62 mi'} a day`);return}
+  if(await saveSteps(stepLogDate||getTodayStr(),n,km)){closeSheet();stepLogDate=null}
 }
 function openStepGoal(){
   const g=stepGoal();const presets=[6000,8000,10000,12000,15000];
@@ -5488,10 +5497,12 @@ function renderStepsPage(){
   const dn=['M','T','W','T','F','S','S'];
   const lab=keys.map((d,i)=>`<span${d===today?' class="on"':''}>${dn[i]}</span>`).join('');
   const range=`${new Date(keys[0]+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'})} to ${new Date(keys[6]+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'})}`;
-  const best=stepBestDay();
+  const best=stepBestDay(),far=distBestDay();
+  const md=d=>new Date(d+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'});
   let h=`<div class="pg-head"><h1 class="pg-title">Steps</h1><div class="pg-actions"><button class="btn-s" onclick="openStepLog('${today}')">${icon('plus',16)} Log</button></div></div>`;
   h+=sysWin(`<div class="sys-title">[ Steps ]</div>
-    <div class="st-sum"><div><div class="num st-sum-v">${fmtN(total)}</div><div class="mist sm">${stepWeekOffset===0?'This week so far':'That week'}</div></div>
+    <div class="st-sum three"><div><div class="num st-sum-v">${fmtN(total)}</div><div class="mist sm">${stepWeekOffset===0?'Steps this week':'Steps that week'}</div></div>
+      <div><div class="num st-sum-v">${fmtDist(distWeek(wk))}</div><div class="mist sm">Distance</div></div>
       <div style="text-align:right"><div class="num st-sum-v">${fmtN(avg)}</div><div class="mist sm">Daily average</div></div></div>
     <div class="st-bars" role="img" aria-label="Steps each day, ${range}">${bars}<div class="st-goal-line" style="bottom:${Math.min(130,g/mx*130)}px"><span>Goal ${fmtN(g)}</span></div></div>
     <div class="st-blab">${lab}</div>
@@ -5499,21 +5510,25 @@ function renderStepsPage(){
       <button class="link" ${stepWeekOffset>=0?'disabled':''} onclick="stepWeekOffset++;renderStepsPage()">Later ${icon('chev',14)}</button></div>`,'st-win');
   h+=`<div class="st-kv">
     <div class="panel"><div class="num">${fmtN(stepsLifetime())}</div><div class="mist sm">Lifetime steps</div></div>
-    <div class="panel"><div class="num">${best.n?fmtN(best.n):'—'}</div><div class="mist sm">${best.d?'Best day, '+new Date(best.d+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'}):'Best day'}</div></div>
+    <div class="panel"><div class="num">${best.n?fmtN(best.n):'—'}</div><div class="mist sm">${best.d?'Best day, '+md(best.d):'Best day'}</div></div>
+    <div class="panel"><div class="num">${fmtDist(distLifetime(),distLifetime()>=160?0:1)}</div><div class="mist sm">Lifetime distance</div></div>
+    <div class="panel"><div class="num">${far.km?fmtDist(far.km):'—'}</div><div class="mist sm">${far.d?'Farthest day, '+md(far.d):'Farthest day'}</div></div>
     <div class="panel"><div class="num st-flame">${stepGoalStreak()} ${icon('flame',16)}</div><div class="mist sm">Goal streak, days</div></div>
     <div class="panel"><div class="num">${stepBestStreak()}</div><div class="mist sm">Best streak, days</div></div></div>`;
   h+=`<div class="sec" style="margin-top:26px">Daily goal</div><div class="mist sm">Streaks and the +10 XP use this number.</div>
     <div class="st-goals">${[6000,8000,10000,12000,15000].map(p=>`<button class="chip${p===g?' on':''}" onclick="setStepGoal(${p})">${p/1000}k</button>`).join('')}<button class="chip${[6000,8000,10000,12000,15000].includes(g)?'':' on'}" onclick="openStepGoal()">${[6000,8000,10000,12000,15000].includes(g)?'Other':fmtN(g)}</button></div>`;
   const recent=[];for(let i=0;i<14;i++)recent.push(dayShift(today,-i));
-  h+=`<div class="sec" style="margin-top:26px">Recent days</div><div class="li-list st-recent">`+recent.map((d,i)=>{const v=stepsOn(d);
+  h+=`<div class="sec" style="margin-top:26px">Recent days</div><div class="li-list st-recent">`+recent.map((d,i)=>{const v=stepsOn(d),km=distKmOn(d);
     const lbl=i===0?'Today':i===1?'Yesterday':new Date(d+'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
-    return `<button class="li" onclick="openStepLog('${d}')"><span class="t">${lbl}</span><span class="num${v?'':' dim'}">${v?fmtN(v):'—'}</span><span class="st-ok">${v>=g?icon('check',18):''}</span><span class="mist">${icon('edit',16)}</span></button>`}).join('')+`</div>`;
+    return `<button class="li" onclick="openStepLog('${d}')"><span class="t">${lbl}</span><span class="num${v?'':' dim'}">${v?fmtN(v):'—'}</span><span class="st-dist mist">${km>0?(distIsEst(d)?'≈ ':'')+fmtDist(km):''}</span><span class="st-ok">${v>=g?icon('check',18):''}</span><span class="mist">${icon('edit',16)}</span></button>`}).join('')+`</div>
+    <div class="mist sm" style="margin-top:6px">≈ means worked out from steps because no distance was typed.</div>`;
   const ul=userData.achievements||[];
   const next=ACHIEVEMENTS.filter(a=>a.id.startsWith('steps_')&&!a.secret&&!ul.includes(a.id)).map(a=>({a,p:stepBadgeProgress(a.id)})).filter(x=>x.p)
     .sort((x,y)=>y.p.have/y.p.need-x.p.have/x.p.need).slice(0,3);
   if(next.length){
+    const prog=p=>p.dist?`${fmtDist(p.have)} of ${fmtDist(p.need)}`:p.need>1?fmtN(p.have)+' of '+fmtN(p.need):'Not yet';
     h+=`<div class="sec" style="margin-top:26px">Next badges</div><div class="li-list">`+next.map(({a,p})=>`<button class="li" onclick="openProfileView('badges')"><span class="ico">${icon('badge',18)}</span>
-      <span class="t">${esc(a.name)}<small>${esc(a.desc)}. ${p.need>1?fmtN(p.have)+' of '+fmtN(p.need):'Not yet'}</small><span class="track st-track"><span class="fill" style="width:${Math.min(100,p.have/p.need*100)}%"></span></span></span><span class="chev">${icon('chev',16)}</span></button>`).join('')+`</div>`;
+      <span class="t">${esc(a.name)}<small>${esc(a.desc)}. ${prog(p)}</small><span class="track st-track"><span class="fill" style="width:${Math.min(100,p.have/p.need*100)}%"></span></span></span><span class="chev">${icon('chev',16)}</span></button>`).join('')+`</div>`;
   }
   el.innerHTML=h;
 }
@@ -5552,58 +5567,6 @@ async function applyStepHint(b){if(!STEP_BUCKETS.includes(b))return;await saveUs
 
 // ─────────────── Unlock notifications ───────────────
 // kinds: badge {a} · title {t} · tier {name, sub, xp}. Badges that arrive together show as one card.
-let unlockQueue=[],unlockShowing=false,unlockTimer=null,unlockBatch=[];
-function celebrate(item){if(!item||(item.kind==='badge'&&!item.a))return;unlockQueue.push(item);if(!unlockShowing)showNextUnlock()}
-function celebrateAch(a){if(a)celebrate({kind:'badge',a})}
-function unlockRow(ic,name,desc){return `<div class="un-row"><span class="un-ic">${ic}</span><span class="un-t"><span class="un-n">${esc(name)}</span>${desc?`<span class="un-d">${esc(desc)}</span>`:''}</span></div>`}
-function showNextUnlock(){
-  clearTimeout(unlockTimer);
-  const item=unlockQueue.shift();
-  if(!item){unlockShowing=false;return}
-  unlockShowing=true;
-  let card=$('achCelebration');
-  if(!card){card=document.createElement('div');card.id='achCelebration';card.className='ach-celebration';card.setAttribute('role','status');document.body.appendChild(card)}
-  let html='',gold=false,ms=3800;card.onclick=null;
-  if(item.kind==='badge'){
-    unlockBatch=[item.a];
-    while(unlockQueue.length&&unlockQueue[0].kind==='badge'){unlockBatch.push(unlockQueue.shift().a)}
-    const xp=unlockBatch.reduce((s,a)=>s+(a.xp||0),0),sh=unlockBatch.length*SHARD_REWARDS.achievement;
-    const rew=[xp?`+${fmtN(xp)} XP`:'',`+${sh} shards`].filter(Boolean).join(', ');
-    if(unlockBatch.length===1){
-      const a=unlockBatch[0];
-      html=`<div class="sys-title sm">[ Badge earned ]</div>${unlockRow(a.icon||'🏅',a.name,a.desc)}<div class="un-foot"><span class="gold">${rew}</span></div>`;
-      card.onclick=()=>{hideUnlock();openProfileView('badges')};
-    }else{
-      const show=unlockBatch.slice(0,3),more=unlockBatch.length-show.length;
-      html=`<div class="sys-title sm">[ ${unlockBatch.length} badges earned ]</div>${show.map(a=>unlockRow(a.icon||'🏅',a.name,a.desc)).join('')}
-        ${more>0?`<div class="un-more">and ${more} more</div>`:''}<div class="un-foot"><span class="gold">${rew}</span><button class="btn-s sm" onclick="event.stopPropagation();openUnlockList()">${more>0?`See all ${unlockBatch.length}`:'See all'}</button></div>`;
-      card.onclick=()=>openUnlockList();ms=6500;
-    }
-    try{if(navigator.vibrate)navigator.vibrate([100,50,100])}catch(e){}
-  }else if(item.kind==='title'){
-    gold=true;ms=6000;
-    html=`<div class="sys-title sm">[ Title earned ]</div>${unlockRow(icon('tag',20),item.t.name,item.t.how)}
-      <div class="un-foot"><span class="gold">Wear it under your name</span><button class="btn-s sm" onclick="event.stopPropagation();hideUnlock();equipTitle('${safeId(item.t.id)}')">Equip</button></div>`;
-    card.onclick=()=>{hideUnlock();openWardrobe('title')};
-  }else if(item.kind==='tier'){
-    html=`<div class="sys-title sm">[ Tier complete ]</div>${unlockRow(icon('ladder',20),item.name,item.sub)}<div class="un-foot"><span class="gold">+${fmtN(item.xp)} XP</span></div>`;
-    card.onclick=()=>hideUnlock();
-  }
-  card.innerHTML=sysWin(html,'un-win'+(gold?' gold':''));
-  requestAnimationFrame(()=>card.classList.add('show'));
-  unlockTimer=setTimeout(hideUnlock,ms);
-}
-function hideUnlock(){
-  clearTimeout(unlockTimer);
-  const card=$('achCelebration');if(!card){unlockShowing=false;return}
-  if(!card.classList.contains('show')){showNextUnlock();return}
-  card.classList.remove('show');setTimeout(showNextUnlock,380);
-}
-function openUnlockList(){
-  const list=unlockBatch.slice();hideUnlock();
-  openSheet(`<h2>${list.length} badges earned</h2><div class="li-list un-list">${list.map(a=>`<div class="li"><span class="ico un-ico">${a.icon||'🏅'}</span><span class="t">${esc(a.name)}<small>${esc(a.desc||'')}</small></span><span class="num gold">${a.xp?'+'+fmtN(a.xp):''}</span></div>`).join('')}</div>
-    <div class="m-actions"><button class="m-cancel" onclick="closeSheet()">Close</button><button class="m-save-btn" onclick="closeSheet();openProfileView('badges')">All badges</button></div>`);
-}
 
 // ─────────────── Tap outside a menu to close it ───────────────
 // One rule for every .modal-bg. It presses the menu's own Cancel/Close button so any
@@ -5640,3 +5603,144 @@ function applyPersistence(){
 }
 function setKeepSignedIn(on){try{localStorage.setItem('lexen_keep',on?'1':'0')}catch(e){}document.querySelectorAll('.keep-cb').forEach(c=>c.checked=on);applyPersistence()}
 function syncKeepBoxes(){document.querySelectorAll('.keep-cb').forEach(c=>c.checked=keepSignedIn())}
+// ═══════════ v1.32.0 — Distance ═══════════
+ICONS.route='<path d="M6 19a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM18 9a2 2 0 1 0 0-4 2 2 0 0 0 0 4z"/><path d="M8 17h7.5a3 3 0 0 0 0-6h-7a3 3 0 0 1 0-6H16"/>';
+// userData.dist = {date: km} holds only distances people TYPED. A day without one is
+// worked out from its steps and the hunter's height, and marked as an estimate.
+const DIST_MAX_KM=100, KM_PER_MI=1.609344;
+function distMap(){const m=userData.dist;return m&&typeof m==='object'?m:{}}
+function distUnit(){return userData.distUnit==='km'?'km':'mi'}
+function heightCm(){
+  const h=String((userData.stats||{}).height||'').trim();
+  const ft=h.match(/(\d+)\s*'\s*(\d+(?:\.\d+)?)?/);if(ft)return Math.round((+ft[1]*12+(+ft[2]||0))*2.54);
+  const n=parseFloat(h);if(n>=120&&n<=230)return n;if(n>=48&&n<=90)return Math.round(n*2.54);
+  return 170;
+}
+function strideKm(){return heightCm()*0.415/100000}
+function distTyped(d){const v=parseFloat(distMap()[d]);return v>0?v:null}
+function distKmOn(d){const t=distTyped(d);return t!==null?t:stepsOn(d)*strideKm()}
+function distIsEst(d){return distTyped(d)===null&&stepsOn(d)>0}
+function distDays(){return [...new Set([...stepDays(),...Object.keys(distMap()).filter(d=>distTyped(d)!==null)])].sort()}
+function distLifetime(){return distDays().reduce((a,d)=>a+distKmOn(d),0)}
+function distWeek(monIso){return weekDayKeys(monIso).reduce((a,d)=>a+distKmOn(d),0)}
+function distBestDay(){let b={d:'',km:0};distDays().forEach(d=>{const k=distKmOn(d);if(k>b.km)b={d,km:k}});return b}
+function toUnit(km){return distUnit()==='km'?km:km/KM_PER_MI}
+function fmtDist(km,dp){const v=toUnit(km);const p=dp!=null?dp:(v>=100?0:1);return `${v.toLocaleString('en-US',{minimumFractionDigits:p,maximumFractionDigits:p})} ${distUnit()}`}
+async function setDistUnit(u){if(u!=='mi'&&u!=='km')return;await saveUser({distUnit:u});document.querySelectorAll('.dist-unit-seg .stab').forEach(b=>b.classList.toggle('active',b.dataset.u===u));
+  if(currentPage==='missions')renderMissions();if($('sp-steps')&&$('sp-steps').classList.contains('active'))renderStepsPage()}
+// Distance badges: their ids start with steps_ so they sit in the Steps group and unlock with the rest
+const DIST_BADGES={steps_dist_day_5:['day',8.04672],steps_dist_day_10:['day',16.09344],steps_dist_day_half:['day',21.0975],
+  steps_dist_week_25:['week',40.2336],steps_dist_week_50:['week',80.4672],
+  steps_dist_life_marathon:['life',42.195],steps_dist_life_100:['life',160.9344],steps_dist_life_500:['life',804.672],steps_dist_life_1000:['life',1609.344]};
+function distBadgeProgress(id){
+  const b=DIST_BADGES[id];if(!b)return null;const[kind,need]=b;let have=0;
+  if(kind==='day')have=distBestDay().km;
+  else if(kind==='life')have=distLifetime();
+  else{const wks=new Set(distDays().map(d=>gateWeekKey(new Date(d+'T12:00:00'))));wks.forEach(w=>{have=Math.max(have,distWeek(w))})}
+  // small tolerance so 13.1 mi typed counts as a half marathon
+  return {have:Math.min(need,have+0.01),need,dist:true};
+}
+function hofPublicDist(){
+  const off=!hofOptedIn()||(userData.hofExclude||[]).includes('steps');
+  return {distTotal:off?0:Math.min(1000000,Math.round(distLifetime()*10)/10),distWeek:off?0:Math.min(700,Math.round(distWeek(gateWeekKey())*10)/10)};
+}
+
+// ═══════════ v1.32.0 — Unlock notifications, take two ═══════════
+// A burst becomes ONE card. It waits 0.6 s to gather everything, anything that unlocks
+// while it's up joins it, it leaves after 4 s (one) or 6 s (several, max 8 s on screen),
+// and ✕ or a swipe up clears it at once. See all keeps the full list.
+let unlockQueue=[],unlockShowing=false,unlockTimer=null,unlockBatch=[],unlockGather=null,unlockShownAt=0;
+function celebrate(item){
+  if(!item||(item.kind==='badge'&&!item.a)||(item.kind==='title'&&!item.t))return;
+  const card=$('achCelebration');
+  if(unlockShowing&&unlockBatch.length&&card&&card.classList.contains('show')){unlockBatch.push(item);renderUnlockCard(true);return}
+  unlockQueue.push(item);
+  if(!unlockShowing&&!unlockGather)unlockGather=setTimeout(()=>{unlockGather=null;showNextUnlock()},600);
+}
+function celebrateAch(a){if(a)celebrate({kind:'badge',a})}
+function unlockRow(ic,name,desc,gold){return `<div class="un-row${gold?' gold':''}"><span class="un-ic">${ic}</span><span class="un-t"><span class="un-n">${esc(name)}</span>${desc?`<span class="un-d">${esc(desc)}</span>`:''}</span></div>`}
+function unlockItemRow(it){
+  if(it.kind==='title')return unlockRow(icon('tag',18),it.t.name,'Title: '+it.t.how,true);
+  if(it.kind==='tier')return unlockRow(icon('ladder',18),it.name,it.sub);
+  return unlockRow(it.a.icon||'🏅',it.a.name,it.a.desc);
+}
+function unlockOrder(items){const r={title:0,tier:1,badge:2};return items.slice().sort((a,b)=>r[a.kind]-r[b.kind])}
+function showNextUnlock(){
+  clearTimeout(unlockTimer);
+  if(!unlockQueue.length){unlockShowing=false;unlockBatch=[];return}
+  unlockShowing=true;unlockBatch=unlockQueue.splice(0);unlockShownAt=Date.now();
+  renderUnlockCard(false);
+  try{if(navigator.vibrate)navigator.vibrate([100,50,100])}catch(e){}
+}
+function renderUnlockCard(grew){
+  let card=$('achCelebration');
+  if(!card){card=document.createElement('div');card.id='achCelebration';card.className='ach-celebration';card.setAttribute('role','status');document.body.appendChild(card);
+    let y0=null;card.addEventListener('touchstart',e=>{y0=e.touches[0].clientY},{passive:true});
+    card.addEventListener('touchmove',e=>{if(y0!==null&&e.touches[0].clientY-y0<-30){y0=null;hideUnlock()}},{passive:true});
+    card.addEventListener('touchend',()=>{y0=null},{passive:true})}
+  const items=unlockOrder(unlockBatch);
+  const badges=items.filter(i=>i.kind==='badge');
+  const xp=badges.reduce((s,i)=>s+(i.a.xp||0),0)+items.filter(i=>i.kind==='tier').reduce((s,i)=>s+(i.xp||0),0);
+  const sh=badges.length*SHARD_REWARDS.achievement;
+  const rew=[xp?`+${fmtN(xp)} XP`:'',sh?`+${sh} shards`:''].filter(Boolean).join(', ');
+  const x=`<button class="un-x" aria-label="Dismiss" onclick="event.stopPropagation();hideUnlock()">${icon('x',14)}</button>`;
+  let html='',gold=false;
+  if(items.length===1){
+    const it=items[0];
+    if(it.kind==='badge'){html=`<div class="un-head"><div class="sys-title sm">[ Badge earned ]</div>${x}</div>${unlockItemRow(it)}<div class="un-foot"><span class="gold">${rew}</span></div>`;
+      card.onclick=()=>{hideUnlock();openProfileView('badges')}}
+    else if(it.kind==='title'){gold=true;html=`<div class="un-head"><div class="sys-title sm">[ Title earned ]</div>${x}</div>${unlockRow(icon('tag',20),it.t.name,it.t.how)}
+      <div class="un-foot"><span class="gold">Wear it under your name</span><button class="btn-s sm" onclick="event.stopPropagation();hideUnlock();equipTitle('${safeId(it.t.id)}')">Equip</button></div>`;
+      card.onclick=()=>{hideUnlock();openWardrobe('title')}}
+    else{html=`<div class="un-head"><div class="sys-title sm">[ Tier complete ]</div>${x}</div>${unlockItemRow(it)}<div class="un-foot"><span class="gold">+${fmtN(it.xp)} XP</span></div>`;
+      card.onclick=()=>hideUnlock()}
+  }else{
+    const allBadges=badges.length===items.length;
+    const show=items.slice(0,3),more=items.length-3;
+    const moreTxt=more>0?`and ${more} more${allBadges||items.slice(3).every(i=>i.kind==='badge')?' badge'+(more!==1?'s':''):''}`:'';
+    html=`<div class="un-head"><div class="sys-title sm">[ ${items.length} ${allBadges?'badges earned':'unlocked'} ]</div>${x}</div>${show.map(unlockItemRow).join('')}
+      ${moreTxt?`<div class="un-more">${moreTxt}</div>`:''}<div class="un-foot"><span class="gold">${rew}</span><button class="btn-s sm" onclick="event.stopPropagation();openUnlockList()">See all ${items.length}</button></div>`;
+    card.onclick=()=>openUnlockList();
+  }
+  card.innerHTML=sysWin(html,'un-win'+(gold?' gold':''));
+  if(!grew)requestAnimationFrame(()=>card.classList.add('show'));
+  clearTimeout(unlockTimer);
+  const ms=items.length===1?4000:6000;
+  unlockTimer=setTimeout(hideUnlock,grew?Math.max(1500,Math.min(ms,unlockShownAt+8000-Date.now())):ms);
+}
+function hideUnlock(){
+  clearTimeout(unlockTimer);
+  const card=$('achCelebration');if(card)card.classList.remove('show');
+  setTimeout(()=>{unlockShowing=false;unlockBatch=[];if(unlockQueue.length)showNextUnlock()},380);
+}
+function openUnlockList(){
+  const list=unlockOrder(unlockBatch);hideUnlock();
+  const row=it=>it.kind==='title'?`<div class="li"><span class="ico gold">${icon('tag',18)}</span><span class="t gold">${esc(it.t.name)}<small>Title: ${esc(it.t.how)}</small></span><button class="btn-s sm" onclick="closeSheet();equipTitle('${safeId(it.t.id)}')">Equip</button></div>`
+    :it.kind==='tier'?`<div class="li"><span class="ico">${icon('ladder',18)}</span><span class="t">${esc(it.name)}<small>${esc(it.sub)}</small></span><span class="num gold">+${fmtN(it.xp)}</span></div>`
+    :`<div class="li"><span class="ico un-ico">${it.a.icon||'🏅'}</span><span class="t">${esc(it.a.name)}<small>${esc(it.a.desc||'')}</small></span><span class="num gold">${it.a.xp?'+'+fmtN(it.a.xp):''}</span></div>`;
+  openSheet(`<h2>${list.length} unlocked</h2><div class="li-list un-list">${list.map(row).join('')}</div>
+    <div class="m-actions"><button class="m-cancel" onclick="closeSheet()">Close</button><button class="m-save-btn" onclick="closeSheet();openProfileView('badges')">All badges</button></div>`);
+}
+
+// ═══════════ v1.29.0 REDESIGN HELPERS ═══════════
+function stepLogVals(){
+  const n=parseInt(String(($('stepInput')||{}).value||'').replace(/\D/g,''))||0;
+  const raw=String(($('distInput')||{}).value||'').replace(',','.').trim();
+  const v=parseFloat(raw);const km=raw&&v>0?(distUnit()==='km'?v:v*KM_PER_MI):null;
+  return {n,km};
+}
+function stepLogRefresh(){
+  const {n,km}=stepLogVals();const di=$('distInput');if(!di)return;
+  const est=n*strideKm();
+  di.placeholder=n?'≈ '+(Math.round(toUnit(est)*10)/10):'0.0';
+  $('stepHelp').textContent=`Copy steps and "Walking + Running Distance" from Apple Health, Samsung Health or your watch app. ${n&&km===null?`Leave distance blank and it's worked out from your steps and height, about ${fmtDist(est)}. `:''}Saving again later replaces this day.`;
+  const b=$('stepSaveBtn');if(b)b.textContent=n||km?`Save ${[n?fmtN(n)+' steps':'',km?fmtDist(km):''].filter(Boolean).join(', ')}`:'Save';
+  $('stepInput').classList.toggle('over',n>STEP_MAX);di.classList.toggle('over',km!==null&&km>DIST_MAX_KM);
+}
+function distInputFmt(el){el.value=el.value.replace(',','.').replace(/[^\d.]/g,'').replace(/(\..*)\./g,'$1').replace(/^(\d{0,3})\d*(\.\d{0,2})?.*$/,'$1$2');stepLogRefresh()}
+async function switchStepUnit(u){
+  const {km}=stepLogVals();
+  await setDistUnit(u);
+  const di=$('distInput');if(di&&km!==null)di.value=String(Math.round(toUnit(km)*100)/100);
+  $('distUnitLbl').textContent=u;stepLogRefresh();
+}
