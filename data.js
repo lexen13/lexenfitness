@@ -1,9 +1,14 @@
 // ═══════════════════════════════════════════
 //  LEXENFITNESS — DATA v4 (Solo Leveling)
 // ═══════════════════════════════════════════
-const APP_VERSION='1.32.2';
+const APP_VERSION='1.32.3';
 const WELCOME_MESSAGE=`Welcome to Lexen Fitness! A Solo-Leveling inspired, gamified Fitness App to help friends and family stay motivated by giving fitness a game-like experience.\n\nThis app is developed by one person, and is very much still in the testing phase. Not everything will be perfect, but please bear with me. If you have any suggestions, feel free to pass them along as I continue to make this the best app that I can, before I actually have to start buying dev rights with Apple and Google.\n\nFeel free to share this with your own family and friends as we build a community that becomes healthier together!\n\n— Gavin (founder)`;
 const CHANGELOG=[
+  {version:'1.32.3',date:'Nov 2026',title:'Eight new Red Gates',blurb:'Red Gates now rotate through 15 challenges instead of 7, and your friends list shows when everyone last trained.',items:[
+    'New Red Gates: Trinity, Step Storm, Quest Hunter, Centurion, Dawn Raid, Long March, Six-Day Siege and Macro Master. The order shuffles each cycle',
+    'Friends list and Needs a push now show when each friend last trained, and update as soon as they log',
+    'Train shows the right Last done date after logging an earlier day'
+  ]},
   {version:'1.32.2',date:'Oct 2026',title:'Pick any day',blurb:'Logging steps for an earlier day now opens a calendar right in the sheet. Days you\'ve already logged have a dot.',items:['The Earlier button in Log steps opens a calendar that stays put until you pick a day']},
   {version:'1.32.1',date:'Oct 2026',title:'Your colors are back',blurb:'Profile frames and name colors show again everywhere: the Shop, Wardrobe, your profile, the leaderboard and the Hall of Fame.',items:['Frames glow and name colors show again. Nothing you bought or equipped was lost']},
   {version:'1.32.0',date:'Oct 2026',title:'Go the distance',blurb:'Distance joins steps: log it in the same sheet, earn distance badges and a new title, and see who\'s covered the most ground in the Hall of Fame. Unlock notifications are also quicker and easier to clear.',items:[
@@ -1155,7 +1160,16 @@ const RED_GATE_POOL=[
   {id:'cardio_raid',icon:'🫀',name:'CARDIO RAID',desc:'Log 150 minutes of cardio this week.',unit:'min'},
   {id:'flawless_five',icon:'⚔️',name:'FLAWLESS FIVE',desc:'5 training sessions this week. Every logged set checked off.',unit:'sessions'},
   {id:'fuel_the_hunt',icon:'🥩',name:'FUEL THE HUNT',desc:'Hit your protein target on 5 of the 7 days.',unit:'days'},
-  {id:'endurance_gate',icon:'⏳',name:'ENDURANCE GATE',desc:'Spend 120% of your usual weekly minutes in Session Mode.',unit:'min'}
+  {id:'endurance_gate',icon:'⏳',name:'ENDURANCE GATE',desc:'Spend 120% of your usual weekly minutes in Session Mode.',unit:'min'},
+  // v1.32.3: eight more, interleaved so lifting, cardio and discipline weeks alternate
+  {id:'trinity',icon:'🔱',name:'TRINITY',desc:'Bench, squat and deadlift this week, each with a set at 85% or more of your best.',unit:'lifts'},
+  {id:'step_storm',icon:'🌪️',name:'STEP STORM',desc:'Log {t} steps this week. 110% of your best recent week.',unit:'steps'},
+  {id:'quest_hunter',icon:'🗡️',name:'QUEST HUNTER',desc:'Complete {t} daily quests this week.',unit:'quests'},
+  {id:'centurion_sets',icon:'🛡️',name:'CENTURION',desc:'Check off {t} sets this week.',unit:'sets'},
+  {id:'dawn_raid',icon:'🌅',name:'DAWN RAID',desc:'Start {t} workouts before 9 AM this week.',unit:'workouts'},
+  {id:'long_march',icon:'🥾',name:'LONG MARCH',desc:'Cover {t} this week, walking or running.',unit:'dist'},
+  {id:'six_day_siege',icon:'🏹',name:'SIX-DAY SIEGE',desc:'Train on {t} different days this week. Lifting or cardio both count.',unit:'days'},
+  {id:'macro_master',icon:'⚖️',name:'MACRO MASTER',desc:'Land within 10% of your calorie target on {t} days this week.',unit:'days'}
 ];
 ACHIEVEMENTS.push(
   {id:'red_gate_1',icon:'⛩️',name:'Through the Red Gate',desc:'Clear your first Red Gate',xp:50},

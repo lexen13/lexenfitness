@@ -291,19 +291,81 @@ async function loadUserData(pre){
   console.log('[loadUserData] done');
 }
 async function saveUser(f){await db.collection('users').doc(U.uid).update(f);Object.assign(userData,f)}
+// Profile fields the leaderboard rules compare against (v1.32.3)
+const LB_MIRROR=['xp','username','trialsCompleted','redGatesCleared','blueGatesCleared','titleId','cosmetics','hofExclude'];
+function buildLeaderboardDoc(){
+  const r=getEffectiveRank(),c=getCos();
+  return {
+    username:userData.username||'hunter',xp:userData.xp||0,class:userData.class||'',subclass:userData.subclass||'',
+    rank:r.name,profilePic:safeImgSrc(userData.profilePic),bio:String(userData.bio||'').slice(0,200),
+    workouts:getLiftLogs().length,activities:getActivityLogs().length,achCount:(userData.achievements||[]).length,
+    frame:c.frame,nameColor:c.name,gatesCleared:userData.redGatesCleared||0,recent:publicFeedEvents(),lastWorkoutAt:(userData.privacy||{}).shareActivity===false?'':lastTrainedISO(),
+    titleId:myTitleId(),blueGates:userData.blueGatesCleared||0,bests:hofPublicBests(),...hofPublicSteps(),...hofPublicDist(),weekStreak:Math.min(520,bestWeekStreak()),hof:hofOptedIn(),
+    updatedAt:firebase.firestore.FieldValue.serverTimestamp()};
+}
+// Same checks as leaderboardOk in the database rules, so a refusal can say WHICH one failed
+function lbChecks(u,d){
+  const why=[],g=(o,k,v)=>o&&o[k]!==undefined&&o[k]!==null?o[k]:v,isN=v=>typeof v==='number'&&isFinite(v);
+  const t=g(u,'trialsCompleted',[]),co=g(u,'cosmetics',{}),ex=g(u,'hofExclude',[]),r=g(d,'rank','');
+  if(g(d,'xp',-1)!==g(u,'xp',0))why.push(`xp: board ${g(d,'xp',-1)}, profile ${g(u,'xp',0)}`);
+  if(g(d,'username','')!==g(u,'username',''))why.push('username');
+  if(r==='B-RANK'&&!t.includes('iron_gate')||r==='A-RANK'&&!t.includes('gauntlet')||r==='S-RANK'&&!t.includes('awakening'))why.push('rank '+r+' without its trial');
+  if(g(d,'gatesCleared',0)!==g(u,'redGatesCleared',0))why.push('red gates');
+  if(g(d,'frame','')!==g(co,'frame',''))why.push(`frame: board ${g(d,'frame','')||'none'}, profile ${g(co,'frame','')||'none'}`);
+  if(g(d,'nameColor','')!==g(co,'name',''))why.push(`name color: board ${g(d,'nameColor','')||'none'}, profile ${g(co,'name','')||'none'}`);
+  if(!Array.isArray(g(d,'recent',[]))||g(d,'recent',[]).length>20)why.push('recent');
+  if(g(d,'blueGates',0)!==g(u,'blueGatesCleared',0))why.push('blue gates');
+  if(g(d,'titleId','')!==g(u,'titleId',''))why.push(`title: board ${g(d,'titleId','')||'none'}, profile ${g(u,'titleId','')||'none'}`);
+  const b=g(d,'bests',{});[['bench',800],['squat',1100],['deadlift',1100],['ohp',550]].forEach(([k,cap])=>{const v=g(b,k,0);if(!isN(v)||v<0||v>cap||(v&&ex.includes(k)))why.push('best '+k+' '+v)});
+  if(!isN(g(d,'weekStreak',0))||g(d,'weekStreak',0)<0||g(d,'weekStreak',0)>520)why.push('week streak '+g(d,'weekStreak',0));
+  ['stepsTotal','stepsWeek','distTotal','distWeek'].forEach(k=>{const v=g(d,k,0);if(!isN(v)||v<0)why.push(k+' '+v)});
+  return why;
+}
 async function saveLeaderboard(){
   // Never throw: a failed leaderboard write must not abort the action that triggered it
   try{
     try{await checkTitles(true)}catch(e){}
-    const r=getEffectiveRank(),c=getCos();
-    await db.collection('leaderboard').doc(U.uid).set({
-      username:userData.username||'hunter',xp:userData.xp||0,class:userData.class||'',subclass:userData.subclass||'',
-      rank:r.name,profilePic:safeImgSrc(userData.profilePic),bio:String(userData.bio||'').slice(0,200),
-      workouts:getLiftLogs().length,activities:getActivityLogs().length,achCount:(userData.achievements||[]).length,
-      frame:c.frame,nameColor:c.name,gatesCleared:userData.redGatesCleared||0,recent:publicFeedEvents(),
-      titleId:myTitleId(),blueGates:userData.blueGatesCleared||0,bests:hofPublicBests(),...hofPublicSteps(),...hofPublicDist(),weekStreak:Math.min(520,bestWeekStreak()),hof:hofOptedIn(),
-      updatedAt:firebase.firestore.FieldValue.serverTimestamp()});
+    const ref=db.collection('leaderboard').doc(U.uid);
+    try{await ref.set(buildLeaderboardDoc())}
+    catch(e){
+      if(e.code!=='permission-denied')throw e;
+      // The profile on the server and this phone disagree (an earlier save failed, or a grant
+      // landed while the app was open). Take the server's values and try once more.
+      const fresh=(await db.collection('users').doc(U.uid).get({source:'server'})).data()||{};
+      LB_MIRROR.forEach(k=>{if(fresh[k]===undefined)delete userData[k];else userData[k]=fresh[k]});
+      const doc=buildLeaderboardDoc();
+      try{await ref.set(doc)}
+      catch(e2){
+        // Leave a note on the profile so the dev's Board health report can show the cause
+        const why=lbChecks(fresh,doc);
+        userData.lbSyncError=true;
+        db.collection('users').doc(U.uid).update({lbSyncError:{at:new Date().toISOString(),code:String(e2.code||''),why:why.slice(0,6),v:APP_VERSION}}).catch(()=>{});
+        throw e2;
+      }
+    }
+    if(userData.lbSyncError){userData.lbSyncError=null;db.collection('users').doc(U.uid).update({lbSyncError:firebase.firestore.FieldValue.delete()}).catch(()=>{})}
   }catch(e){console.warn('[saveLeaderboard]',e.code||e.message)}
+}
+// Dev: which hunters' boards are stale, and why
+async function devBoardHealth(){
+  if(!isDev)return;
+  openSheet(`<h2>Board health</h2><div class="mist sm">Loading every hunter…</div>`);
+  try{
+    const lbs=await db.collection('leaderboard').limit(300).get();const rows=[];
+    await Promise.all(lbs.docs.map(async d=>{const l=d.data()||{};let u={};try{u=(await db.collection('users').doc(d.id).get()).data()||{}}catch(e){}
+      const upd=l.updatedAt&&l.updatedAt.toDate?l.updatedAt.toDate():new Date(l.updatedAt||0);
+      const lastLog=friendLastTrained(l);
+      const diff=lbChecks(u,l).filter(x=>!/^best|^week streak|^steps|^dist|^recent/.test(x));
+      rows.push({name:l.username||u.username||d.id,upd:upd.getTime()||0,v:u.lastSeenVersion||'?',err:u.lbSyncError,diff,lastLog,xpGap:(u.xp||0)-(l.xp||0)})}));
+    rows.sort((a,b)=>a.upd-b.upd);
+    const ago=t=>{if(!t)return 'never';const dd=Math.floor((Date.now()-t)/86400000);return dd<=0?'today':dd===1?'yesterday':dd+' days ago'};
+    const h=rows.map(r=>{const stale=r.xpGap>0||(r.err&&r.err.why);
+      return `<div class="li"><span class="t">${esc(r.name)}<small>Board updated ${ago(r.upd)}. App ${esc(r.v)}.${r.lastLog?' '+trainedAgo(r.lastLog)+'.':''}${r.xpGap>0?` Profile is ${fmtN(r.xpGap)} XP ahead of the board.`:''}</small>
+        ${r.err&&r.err.why?`<small class="gold">Refused ${esc(new Date(r.err.at).toLocaleDateString('en-US',{month:'short',day:'numeric'}))} on app ${esc(r.err.v||'?')}: ${esc((r.err.why||[]).join('; ')||r.err.code)}</small>`:''}
+        ${r.diff.length?`<small class="gold">Board and profile differ: ${esc(r.diff.join('; '))}</small>`:''}</span><span class="${stale?'gold':'mist'}">${stale?'!':'OK'}</span></div>`}).join('');
+    openSheet(`<h2>Board health</h2><div class="mist sm" style="margin:-4px 0 10px">Oldest first. "Profile ahead of the board" means their leaderboard writes are being refused. Opening the new version fixes most of these on its own.</div><div class="li-list">${h}</div>
+      <div class="m-actions"><button class="m-cancel" onclick="closeSheet()">Close</button></div>`);
+  }catch(e){openSheet(`<h2>Board health</h2><p>Couldn't load: ${esc(e.message||'')}</p><div class="m-actions"><button class="m-cancel" onclick="closeSheet()">Close</button></div>`)}
 }
 
 // ═══════════ RANK-UP SPLASH ═══════════
@@ -935,11 +997,42 @@ function weekBounds(monIso){const s=new Date(monIso+'T00:00:00');const e=new Dat
 function weekDayKeys(monIso){const out=[];for(let i=0;i<7;i++){const d=new Date(monIso+'T12:00:00');d.setDate(d.getDate()+i);out.push(getDateStr(d))}return out}
 // Same gate for every S-Rank each week. Fixed 7-week cycle: every gate shows up once
 // per cycle and never twice in a row. Week index uses UTC date math (DST-proof).
+// v1.32.3: 15 gates in a fixed order that alternates lifting, cardio and discipline weeks.
+// Every S-Rank faces the same gate each week, and no gate comes back for 15 weeks.
+const RED_GATE_ORDER_START='2026-11-09';
+const RED_GATE_SEQUENCE=['trinity','cardio_raid','quest_hunter','volume_siege','step_storm','flawless_five','macro_master','double_breach',
+  'long_march','iron_discipline','centurion_sets','dawn_raid','fuel_the_hunt','six_day_siege','endurance_gate'];
 function pickGateType(monIso){
   const [y,m,d]=monIso.split('-').map(Number);
-  const idx=Math.round((Date.UTC(y,m-1,d)-Date.UTC(2026,0,5))/(7*86400000));
-  const n=RED_GATE_POOL.length;
-  return RED_GATE_POOL[((idx%n)+n)%n];
+  if(monIso<RED_GATE_ORDER_START){ // weeks before the update keep the gate they had
+    const idx=Math.round((Date.UTC(y,m-1,d)-Date.UTC(2026,0,5))/(7*86400000));return RED_GATE_POOL[((idx%7)+7)%7]}
+  const[sy,sm,sd]=RED_GATE_ORDER_START.split('-').map(Number);
+  const i=Math.round((Date.UTC(y,m-1,d)-Date.UTC(sy,sm-1,sd))/(7*86400000)),n=RED_GATE_SEQUENCE.length;
+  return RED_GATE_POOL.find(t=>t.id===RED_GATE_SEQUENCE[((i%n)+n)%n])||RED_GATE_POOL[0];
+}
+// Swap a gate the hunter can't take part in for one they can
+function redGateFallback(type,monIso){
+  const by=id=>RED_GATE_POOL.find(t=>t.id===id);
+  if((type.id==='step_storm'||type.id==='long_march')&&!hasRecentSteps(monIso))return by('six_day_siege');
+  if(type.id==='macro_master'&&!((typeof calcTDEE==='function')&&calcTDEE()))return by('quest_hunter');
+  return type;
+}
+// Lifts, sets and days used by the v1.32.3 gates
+const TRINITY_KEYS=['bench','squat','deadlift'];
+function weekTrainingDays(wk){return new Set(getTrainingLogs().filter(e=>!e.isRest&&inGateWeek(e,wk)).map(e=>getDateStr(new Date(e.date)))).size}
+function weekCheckedSets(wk){let n=0;getLiftLogs().forEach(e=>{if(!inGateWeek(e,wk))return;(e.exercises||[]).forEach(ex=>(ex.sets||[]).forEach(s=>{if(s&&s.done&&((parseFloat(s.weight)||0)>0||(parseFloat(s.reps)||0)>0))n++}))});return n}
+function weekDawnStarts(wk){return getTrainingLogs().filter(e=>{if(e.isRest||!inGateWeek(e,wk))return false;const start=new Date(new Date(e.date).getTime()-(e.durationSec||0)*1000);return start.getHours()<9}).length}
+function weekQuestsDone(wk){const mc=userData.missionsCompleted||{};return weekDayKeys(wk).reduce((a,k)=>a+((mc[k]||[]).length),0)}
+function weekCalorieHits(wk){const t=(typeof calcTDEE==='function')?calcTDEE():null;if(!t)return 0;
+  return weekDayKeys(wk).filter(k=>{const c=getDayTotals(getDayLog(k)).cal;return c>0&&Math.abs(c-t.target)<=t.target*0.1}).length}
+function weekTrinity(wk){
+  const[s]=weekBounds(wk);const best={},hit=new Set();
+  getLiftLogs().forEach(e=>{if(new Date(e.date).getTime()>=s)return;(e.exercises||[]).forEach(ex=>{const n=String(ex.name||'').toLowerCase();
+    TRINITY_KEYS.forEach(k=>{const r=STR_LIFTS[k];if(!r.inc.test(n)||r.exc.test(n))return;(ex.sets||[]).forEach(st=>{const w=parseFloat(st.weight)||0;if(w>(best[k]||0))best[k]=w})})})});
+  getLiftLogs().forEach(e=>{if(!inGateWeek(e,wk))return;(e.exercises||[]).forEach(ex=>{const n=String(ex.name||'').toLowerCase();
+    TRINITY_KEYS.forEach(k=>{const r=STR_LIFTS[k];if(!r.inc.test(n)||r.exc.test(n))return;(ex.sets||[]).forEach(st=>{const w=parseFloat(st.weight)||0,reps=parseFloat(st.reps)||0;
+      if(reps>0&&w>0&&w>=(best[k]||0)*0.85)hit.add(k)})})})});
+  return hit.size;
 }
 function inGateWeek(e,monIso){const[s,end]=weekBounds(monIso);const t=new Date(e.date).getTime();return t>=s&&t<end&&!e.backdated}
 function weeklyVolume(monIso){let v=0;getLiftLogs().forEach(x=>{if(!inGateWeek(x,monIso))return;(x.exercises||[]).forEach(ex=>(ex.sets||[]).forEach(st=>{v+=(parseFloat(st.weight)||0)*(parseFloat(st.reps)||0)}))});return v}
@@ -963,6 +1056,14 @@ function computeGateTarget(type,monIso){
     case 'iron_discipline':return 5;
     case 'fuel_the_hunt':return 5;
     case 'cardio_raid':return 150;
+    case 'trinity':return 3;
+    case 'step_storm':{let best=0;for(let i=1;i<=8;i++)best=Math.max(best,stepsWeek(shiftWeek(monIso,-i)));return Math.max(70000,Math.round(best*1.1/1000)*1000)}
+    case 'quest_hunter':return 25;
+    case 'centurion_sets':return 100;
+    case 'dawn_raid':return 3;
+    case 'long_march':return Math.round(40*KM_PER_MI*1000)/1000; // 40 mi, stored in km
+    case 'six_day_siege':return 6;
+    case 'macro_master':return 5;
   }
   return 1;
 }
@@ -991,6 +1092,16 @@ function getGateProgress(g){
       if(!t){blocker='Set up your nutrition targets first (Nutrition → Adjust Targets)';break}
       val=weekDayKeys(wk).filter(k=>getDayTotals(getDayLog(k)).p>=t.proteinG).length;break}
     case 'steps_week':val=stepsWeek(wk);break;
+    case 'step_storm':val=stepsWeek(wk);break;
+    case 'trinity':val=weekTrinity(wk);break;
+    case 'quest_hunter':val=weekQuestsDone(wk);break;
+    case 'centurion_sets':val=weekCheckedSets(wk);break;
+    case 'dawn_raid':val=weekDawnStarts(wk);break;
+    case 'long_march':val=Math.round(distWeek(wk)*100)/100;break;
+    case 'six_day_siege':val=weekTrainingDays(wk);break;
+    case 'macro_master':{const t=(typeof calcTDEE==='function')?calcTDEE():null;
+      if(!t){blocker='Set up your nutrition targets first (Nutrition, Adjust targets)';break}
+      val=weekCalorieHits(wk);break}
     case 'cardio_raid':val=Math.round(getActivityLogs().filter(e=>inGateWeek(e,wk)).reduce((a,e)=>a+(parseFloat(e.duration)||0),0));break;
   }
   return {val,target:g.target,blocker,done:val>=g.target&&!blocker};
@@ -1006,7 +1117,7 @@ async function ensureRedGate(){
     if(!hist.some(h=>h.week===g.week))hist.push({week:g.week,type:g.type,cleared:!!g.cleared});
     userData.redGateHistory=hist.slice(-52);
   }
-  const type=pickGateType(wk);
+  const type=redGateFallback(pickGateType(wk),wk);
   g={week:wk,type:type.id,target:computeGateTarget(type,wk),cleared:false};
   userData.redGate=g;
   try{await saveUser({redGate:g,redGateHistory:userData.redGateHistory||[]})}catch(e){console.warn('gate save:',e)}
@@ -1021,7 +1132,8 @@ function calcGateStreak(){
   let n=0;while(byWeek[expect]){n++;expect=shiftWeek(expect,-1)}
   return n;
 }
-function fmtGateNum(n,unit){return unit==='lbs'?(n>=1000?(n/1000).toFixed(n>=100000?0:1)+'k':n):n}
+function fmtGateNum(n,unit){if(unit==='dist')return fmtDist(n);if(unit==='steps')return fmtN(n);return unit==='lbs'?(n>=1000?(n/1000).toFixed(n>=100000?0:1)+'k':n):n}
+function gateDesc(type,target){return String(type.desc||'').replace('{t}',type.unit==='dist'?fmtDist(target,0):fmtN(target))}
 function renderRedGateCard(){
   const g=userData.redGate;
   if(!g||g.week!==gateWeekKey()){
@@ -1039,9 +1151,9 @@ function renderRedGateCard(){
   else if(p.done)action=`<button class="btn-p rg-claim" onclick="claimRedGate()">Claim: +${SHARD_REWARDS.redGate} shards, +${RED_GATE_XP} XP</button>`;
   return sysWin(`<div class="sys-title">[ Red Gate ]</div>
     <div class="rg-head"><div><div class="rg-name">${esc(type.name)}</div><div class="mist sm">Week of ${weekLabel}</div></div>${g.cleared?'':`<div class="num rg-timer">${dLeft}d ${hLeft}h</div>`}</div>
-    <div class="rg-desc">${esc(type.desc)}</div>
+    <div class="rg-desc">${esc(gateDesc(type,g.target))}</div>
     <div class="track rg-track"><div class="fill" style="width:${pct}%"></div></div>
-    <div class="rg-nums"><span>${fmtGateNum(p.val,type.unit)} / ${fmtGateNum(p.target,type.unit)} ${esc(type.unit)}</span><span>${Math.round(pct)}%</span></div>
+    <div class="rg-nums"><span>${fmtGateNum(p.val,type.unit)} / ${fmtGateNum(p.target,type.unit)}${type.unit==='dist'?'':' '+esc(type.unit)}</span><span>${Math.round(pct)}%</span></div>
     ${p.blocker&&!g.cleared?`<div class="rg-blocker">${esc(p.blocker)}</div>`:''}
     ${action}
     <div class="rg-foot">${userData.redGatesCleared||0} cleared, gate streak ${calcGateStreak()}. Every S-Rank faces the same gate. It resets Monday.</div>`,'red-gate'+(g.cleared?' cleared':''));
@@ -1142,6 +1254,19 @@ async function pushFeedEvent(t,d){
   try{await saveUser({feedEvents:userData.feedEvents});await saveLeaderboard()}catch(e){console.warn('feed save:',e)}
 }
 // What friends get to see. Respects "share activity" and "hide body stats" privacy settings.
+// Newest real training (lift or cardio, not rest). Published on the leaderboard doc so
+// friends see it even when the feed's event list has rolled over (v1.32.3).
+function lastTrainedISO(){let best=0;workoutLog.forEach(e=>{if(e.isRest)return;const t=new Date(e.date).getTime();if(t>best&&t<=Date.now()+3600000)best=t});return best?new Date(best).toISOString():''}
+function sortWorkoutLog(){workoutLog.sort((a,b)=>new Date(b.date)-new Date(a.date))}
+// When a friend last trained: newest of their published lastWorkoutAt and their feed events
+function friendLastTrained(u){
+  let t=new Date((u&&u.lastWorkoutAt)||0).getTime()||0;
+  (Array.isArray(u&&u.recent)?u.recent:[]).forEach(ev=>{if(ev&&(ev.t==='workout'||ev.t==='cardio')){const x=new Date(ev.at).getTime();if(x>t)t=x}});
+  return t>Date.now()+3600000?0:t;
+}
+function trainedAgo(t){if(!t)return '';const days=Math.floor((Date.now()-t)/86400000);
+  if(new Date(t).toDateString()===new Date().toDateString())return 'Trained today';
+  return days<=1?'Trained yesterday':`Trained ${days} days ago`}
 function publicFeedEvents(){
   const priv=userData.privacy||{};
   if(priv.shareActivity===false)return[];
@@ -1347,11 +1472,13 @@ async function devGrantToUser(){
   const ud=(await db.collection('users').doc(uid).get()).data()||{};
   const xpAdd=parseInt(prompt(`@${un} has ${ud.xp||0} XP. XP to ADD (0 for none):`,'0'))||0;
   const shardAdd=parseInt(prompt(`@${un} has ${ud.shards||0} shards. Shards to ADD (0 for none):`,'0'))||0;
+  const gateAdd=parseInt(prompt(`@${un} has cleared ${ud.redGatesCleared||0} Red Gates. Red Gates to ADD (0 for none). 5 unlocks the Crimson Gate Frame and the Crimson Hunter title:`,'0'))||0;
   const trialIn=(prompt(`Trials to mark complete (comma-separated: iron_gate, gauntlet, awakening). Current: [${(ud.trialsCompleted||[]).join(', ')}]`,'')||'');
   const trials=trialIn.split(',').map(s=>s.trim()).filter(t=>['iron_gate','gauntlet','awakening'].includes(t));
   const upd={};
   if(xpAdd)upd.xp=Math.max(0,(ud.xp||0)+xpAdd);
   if(shardAdd)upd.shards=Math.max(0,(ud.shards||0)+shardAdd);
+  if(gateAdd)upd.redGatesCleared=Math.max(0,(ud.redGatesCleared||0)+gateAdd);
   if(trials.length)upd.trialsCompleted=[...new Set([...(ud.trialsCompleted||[]),...trials])];
   if(!Object.keys(upd).length){toast('Nothing to grant');return}
   if(!confirm(`Apply to @${un}?\n\n${JSON.stringify(upd,null,1)}\n\nTheir leaderboard updates on their next app open.`))return;
@@ -1822,6 +1949,9 @@ function renderDevTools(){
       <button class="dev-btn" style="color:var(--gold)" onclick="devRestoreRecords()">Restore records</button>
     </div>
     <div class="dev-row">
+      <button class="dev-btn" style="color:var(--sys)" onclick="devBoardHealth()">Board health</button>
+    </div>
+    <div class="dev-row">
       <button class="dev-btn" onclick="devResetTrials()">Reset Trials</button>
       <button class="dev-btn" style="color:var(--red)" onclick="devResetAll()">Full Reset</button>
     </div>
@@ -1865,7 +1995,7 @@ async function devFakeIronGate(){
       const day=prog[d];
       const entry={dayId:day.id,dayTitle:day.title,date:date.toISOString(),exercises:day.exercises.map(ex=>({name:ex.name,sets:Array.from({length:ex.sets},()=>({weight:'135',reps:'8',done:true,isTime:!!ex.isTime}))}))};
       const ref=await db.collection('users').doc(U.uid).collection('log').add(entry);
-      workoutLog.push({_id:ref.id,...entry});
+      workoutLog.push({_id:ref.id,...entry});sortWorkoutLog();
     }
   }
   toast('DEV: Injected 3 perfect weeks (12 workouts). Check Missions → Iron Gate.');renderProfile();
@@ -1878,7 +2008,7 @@ async function devFakeGauntlet(){
     const day=prog[i%prog.length];
     const entry={dayId:day.id,dayTitle:day.title,date:date.toISOString(),exercises:[{name:'Heavy Squat',sets:[{weight:'245',reps:'5',done:true,isTime:false}]}]};
     const ref=await db.collection('users').doc(U.uid).collection('log').add(entry);
-    workoutLog.push({_id:ref.id,...entry});
+    workoutLog.push({_id:ref.id,...entry});sortWorkoutLog();
   }
   toast('DEV: Injected 14-day streak with 245lb lifts. Check Missions → Gauntlet.');renderProfile();
 }
@@ -1891,7 +2021,7 @@ async function devFakeAwakening(){
     const day=prog[i%prog.length];
     const entry={dayId:day.id,dayTitle:day.title,date:date.toISOString(),exercises:[{name:'Training',sets:[{weight:'135',reps:'10',done:true,isTime:false}]}]};
     const ref=await db.collection('users').doc(U.uid).collection('log').add(entry);
-    workoutLog.push({_id:ref.id,...entry});
+    workoutLog.push({_id:ref.id,...entry});sortWorkoutLog();
   }
   // 7-day mission streak
   const mc={};
@@ -1911,7 +2041,7 @@ async function devInjectWorkouts(n){
     const day=prog[i%prog.length];
     const entry={dayId:day.id,dayTitle:day.title,date:date.toISOString(),exercises:[{name:day.exercises[0]?.name||'Exercise',sets:[{weight:'135',reps:'10',done:true,isTime:false}]}]};
     const ref=await db.collection('users').doc(U.uid).collection('log').add(entry);
-    workoutLog.push({_id:ref.id,...entry});
+    workoutLog.push({_id:ref.id,...entry});sortWorkoutLog();
   }
   toast('DEV: +'+n+' fake workouts');renderProfile();
 }
@@ -2543,7 +2673,7 @@ async function logWorkoutWithOptions(opts){
   day.exercises.forEach((ex,ei)=>{const sets=[];for(let s=0;s<ex.sets;s++){const wEl=$(day.id+'_e'+ei+'_s'+s+'_w'),rEl=$(day.id+'_e'+ei+'_s'+s+'_r'),cEl=$(day.id+'_e'+ei+'_s'+s+'_c');const w=wEl?wEl.value:'',r=rEl?rEl.value:'',d=cEl?cEl.checked:false;if(w||r)hasData=true;if(!d)allDone=false;if(parseInt(w)>maxW)maxW=parseInt(w);sets.push({weight:w,reps:r,done:d,isTime:!!ex.isTime})}const exObj={name:savedInputs[day.id+'_e'+ei+'_swap']||ex.name,sets};const nEl=$(day.id+'_e'+ei+'_note');if(nEl&&nEl.value.trim())exObj.note=nEl.value.trim();entry.exercises.push(exObj)});
   if(opts.sessionNote&&String(opts.sessionNote).trim())entry.notes=String(opts.sessionNote).trim();
   if(!hasData){toast('Fill in sets!');logLock=false;return}
-  const ref=await db.collection('users').doc(U.uid).collection('log').add(entry);entry._id=ref.id;workoutLog.unshift(entry);
+  const ref=await db.collection('users').doc(U.uid).collection('log').add(entry);entry._id=ref.id;workoutLog.unshift(entry);sortWorkoutLog();
   // Notes are per-session: clear drafts for this day after logging
   day.exercises.forEach((ex,ei)=>{const nid=day.id+'_e'+ei+'_note';delete savedInputs[nid];const nEl=$(nid);if(nEl)nEl.value='';delete savedInputs[day.id+'_e'+ei+'_swap']});
   const anyInjury=entry.exercises.some(ex=>ex.note&&INJURY_RX.test(ex.note))||(entry.notes&&INJURY_RX.test(entry.notes));
@@ -2652,8 +2782,8 @@ async function logAllDays(){
     // Build entry from savedInputs
     const entry={dayId:day.id,dayTitle:day.title,date:new Date().toISOString(),exercises:[]};let allDone=true,maxW=0;
     day.exercises.forEach((ex,ei)=>{const sets=[];for(let s=0;s<ex.sets;s++){const w=savedInputs[day.id+'_e'+ei+'_s'+s+'_w']||'',r=savedInputs[day.id+'_e'+ei+'_s'+s+'_r']||'',d=!!savedInputs[day.id+'_e'+ei+'_s'+s+'_c'];if(!d)allDone=false;if(parseInt(w)>maxW)maxW=parseInt(w);sets.push({weight:w,reps:r,done:d,isTime:!!ex.isTime})}const exObj={name:savedInputs[day.id+'_e'+ei+'_swap']||ex.name,sets};const nEl=$(day.id+'_e'+ei+'_note');if(nEl&&nEl.value.trim())exObj.note=nEl.value.trim();entry.exercises.push(exObj)});
-  if(opts.sessionNote&&String(opts.sessionNote).trim())entry.notes=String(opts.sessionNote).trim();
-    const ref=await db.collection('users').doc(U.uid).collection('log').add(entry);entry._id=ref.id;workoutLog.unshift(entry);
+    const ref=await db.collection('users').doc(U.uid).collection('log').add(entry);entry._id=ref.id;workoutLog.unshift(entry);sortWorkoutLog();
+    queueFeedEvent('workout',{title:String(day.title||'').slice(0,40),min:0});
     let xp=50;if(allDone)xp+=50;totalXp+=xp;logged++;
     // Clear savedInputs for this day after logging
     day.exercises.forEach((ex,ei)=>{for(let s=0;s<ex.sets;s++){delete savedInputs[day.id+'_e'+ei+'_s'+s+'_w'];delete savedInputs[day.id+'_e'+ei+'_s'+s+'_r'];delete savedInputs[day.id+'_e'+ei+'_s'+s+'_c']}});
@@ -3105,7 +3235,8 @@ async function loadFriendsList(){
       }
       const pokedTodayFlag=pokedToday[fid]===today;
       const atRisk=streak>0&&lastMutualDay&&lastMutualDay!==today;
-      const sub=[rankLabel(r.name),f.class?esc(f.class):'',streak>0?`${streak}-day poke streak${atRisk?', poke today to keep it':''}`:''].filter(Boolean).join('. ');
+      const lt=friendLastTrained(f);
+      const sub=[rankLabel(r.name),lt?trainedAgo(lt):(f.class?esc(f.class):''),streak>0?`${streak}-day poke streak${atRisk?', poke today to keep it':''}`:''].filter(Boolean).join('. ');
       const pokeBtn=pokedTodayFlag
         ?`<span class="mist sm">Poked</span>`
         :`<button class="btn-s ghost sm" onclick="event.stopPropagation();sendPoke('${safeId(fid)}','${safeName(f.username||'hunter')}')">Poke</button>`;
@@ -3748,6 +3879,8 @@ async function checkPassiveAchievements(){
       if(d.getMonth()===1&&d.getDate()===29)U('leap_of_faith');
       if(!e.isRest&&!e.isActivity&&d.getDay()===5&&d.getHours()>=20)U('friday_lights');
     });
+    // Red Gate count badges (also catches counts granted from Dev Tools)
+    {const rg=userData.redGatesCleared||0;if(rg>=1)U('red_gate_1');if(rg>=5)U('red_gate_5');if(rg>=25)U('red_gate_25')}
     // Steps (v1.31)
     try{stepAchEarnedNow().forEach(id=>U(id))}catch(e){}
     // Fable: the meta-capstone
@@ -4736,8 +4869,7 @@ async function renderGuildActivity(){
   const now=Date.now();
   // "Needs a push": friends whose latest workout is 4+ days old (and who share activity at all)
   const byUser={};(feedCache.docs||[]).forEach(({uid,u})=>{
-    const ws=(Array.isArray(u.recent)?u.recent:[]).filter(ev=>ev&&(ev.t==='workout'||ev.t==='cardio')).map(ev=>new Date(ev.at).getTime()).filter(Boolean);
-    if(ws.length)byUser[uid]={u,last:Math.max(...ws)};
+    const last=friendLastTrained(u);if(last)byUser[uid]={u,last};
   });
   const pokedToday=userData.pokedToday||{},today=getTodayStr();
   const push=Object.entries(byUser).filter(([,v])=>now-v.last>=4*86400000&&now-v.last<30*86400000).slice(0,3);
@@ -4794,7 +4926,7 @@ function renderTrainOverview(){
   const wa=$('workoutActions');if(wa)wa.style.display='none';
   $('dayTabs').innerHTML=prog.map(d=>`<button class="chip${d.id===currentDay?' on':''}" onclick="switchDay('${safeId(d.id)}')">${esc(dayLabel(d.title))}</button>`).join('')
     +`<button class="chip chip-icon" aria-label="New workout" onclick="addWorkoutDay()">${icon('plus',16)}</button>`;
-  const lastLog=workoutLog.find(e=>e.dayId===day.id&&!e.isRest&&!e.isActivity);
+  const lastLog=workoutLog.filter(e=>e.dayId===day.id&&!e.isRest&&!e.isActivity).sort((a,b)=>new Date(b.date)-new Date(a.date))[0];
   const lastTxt=lastLog?'Last done '+new Date(lastLog.date).toLocaleDateString('en-US',{month:'short',day:'numeric'}):'Not done yet';
   const n=day.exercises.length;
   let h=`<div class="tr-head"><div class="tr-head-t"><div class="tr-day">${esc(dayLabel(day.title))}</div>${day.subtitle?`<div class="mist">${esc(day.subtitle)}</div>`:''}
@@ -5586,6 +5718,7 @@ async function applyStepHint(b){if(!STEP_BUCKETS.includes(b))return;await saveUs
     if(!m.classList||!m.classList.contains('modal-bg')||!m.classList.contains('open'))return;
     if(downOn!==m)return; // a drag that started inside the menu (e.g. selecting text) doesn't count
     if(m.id==='sheetModal')return; // the sheet has its own handler
+    if(m.dataset.locked==='1')return; // a pushed plan can only be accepted
     if(m.dataset.dirty==='1'&&!confirm('Discard what you typed?'))return;
     closeModalBg(m);
   });
