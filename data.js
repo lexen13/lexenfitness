@@ -1,9 +1,10 @@
 // ═══════════════════════════════════════════
 //  LEXENFITNESS — DATA v4 (Solo Leveling)
 // ═══════════════════════════════════════════
-const APP_VERSION='1.32.3';
+const APP_VERSION='1.32.4';
 const WELCOME_MESSAGE=`Welcome to Lexen Fitness! A Solo-Leveling inspired, gamified Fitness App to help friends and family stay motivated by giving fitness a game-like experience.\n\nThis app is developed by one person, and is very much still in the testing phase. Not everything will be perfect, but please bear with me. If you have any suggestions, feel free to pass them along as I continue to make this the best app that I can, before I actually have to start buying dev rights with Apple and Google.\n\nFeel free to share this with your own family and friends as we build a community that becomes healthier together!\n\n— Gavin (founder)`;
 const CHANGELOG=[
+  {version:'1.32.4',date:'Nov 2026',title:'Unlock card fix',blurb:'The unlock card always goes away now, and See all shows everything you earned.',items:['Tap anywhere else, tap the ✕ or swipe up to clear an unlock card. It also leaves on its own after a few seconds','See all lists every badge and title from that card']},
   {version:'1.32.3',date:'Nov 2026',title:'Eight new Red Gates',blurb:'Red Gates now rotate through 15 challenges instead of 7, and your friends list shows when everyone last trained.',items:[
     'New Red Gates: Trinity, Step Storm, Quest Hunter, Centurion, Dawn Raid, Long March, Six-Day Siege and Macro Master. The order shuffles each cycle',
     'Friends list and Needs a push now show when each friend last trained, and update as soon as they log',

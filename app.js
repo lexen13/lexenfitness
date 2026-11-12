@@ -5784,13 +5784,15 @@ function hofPublicDist(){
 // A burst becomes ONE card. It waits 0.6 s to gather everything, anything that unlocks
 // while it's up joins it, it leaves after 4 s (one) or 6 s (several, max 8 s on screen),
 // and ✕ or a swipe up clears it at once. See all keeps the full list.
-let unlockQueue=[],unlockShowing=false,unlockTimer=null,unlockBatch=[],unlockGather=null,unlockShownAt=0;
+// v1.32.4: one state machine (idle → showing → hiding → idle) plus a generation number, so a
+// late timer or a background-delayed animation frame can never empty or re-show a card it doesn't own.
+let unlockQueue=[],unlockState='idle',unlockGen=0,unlockTimer=null,unlockMax=null,unlockBatch=[],unlockGather=null,unlockShownAt=0;
 function celebrate(item){
   if(!item||(item.kind==='badge'&&!item.a)||(item.kind==='title'&&!item.t))return;
   const card=$('achCelebration');
-  if(unlockShowing&&unlockBatch.length&&card&&card.classList.contains('show')){unlockBatch.push(item);renderUnlockCard(true);return}
+  if(unlockState==='showing'&&card){unlockBatch.push(item);renderUnlockCard(true);return}
   unlockQueue.push(item);
-  if(!unlockShowing&&!unlockGather)unlockGather=setTimeout(()=>{unlockGather=null;showNextUnlock()},600);
+  if(unlockState==='idle'&&!unlockGather)unlockGather=setTimeout(()=>{unlockGather=null;showNextUnlock()},600);
 }
 function celebrateAch(a){if(a)celebrate({kind:'badge',a})}
 function unlockRow(ic,name,desc,gold){return `<div class="un-row${gold?' gold':''}"><span class="un-ic">${ic}</span><span class="un-t"><span class="un-n">${esc(name)}</span>${desc?`<span class="un-d">${esc(desc)}</span>`:''}</span></div>`}
@@ -5801,9 +5803,10 @@ function unlockItemRow(it){
 }
 function unlockOrder(items){const r={title:0,tier:1,badge:2};return items.slice().sort((a,b)=>r[a.kind]-r[b.kind])}
 function showNextUnlock(){
-  clearTimeout(unlockTimer);
-  if(!unlockQueue.length){unlockShowing=false;unlockBatch=[];return}
-  unlockShowing=true;unlockBatch=unlockQueue.splice(0);unlockShownAt=Date.now();
+  if(unlockState!=='idle'||!unlockQueue.length)return;
+  unlockState='showing';unlockGen++;unlockBatch=unlockQueue.splice(0);unlockShownAt=Date.now();
+  const gen=unlockGen;
+  clearTimeout(unlockMax);unlockMax=setTimeout(()=>{if(gen===unlockGen)hideUnlock()},9000); // hard ceiling, whatever happens
   renderUnlockCard(false);
   try{if(navigator.vibrate)navigator.vibrate([100,50,100])}catch(e){}
 }
@@ -5838,18 +5841,26 @@ function renderUnlockCard(grew){
     card.onclick=()=>openUnlockList();
   }
   card.innerHTML=sysWin(html,'un-win'+(gold?' gold':''));
-  if(!grew)requestAnimationFrame(()=>card.classList.add('show'));
+  card._items=items.slice(); // See all reads from here, so it can't come up empty
+  const gen=unlockGen;
+  if(!grew){const on=()=>{if(unlockState==='showing'&&gen===unlockGen)card.classList.add('show')};requestAnimationFrame(on);setTimeout(on,60)}
   clearTimeout(unlockTimer);
   const ms=items.length===1?4000:6000;
-  unlockTimer=setTimeout(hideUnlock,grew?Math.max(1500,Math.min(ms,unlockShownAt+8000-Date.now())):ms);
+  unlockTimer=setTimeout(()=>{if(gen===unlockGen)hideUnlock()},grew?Math.max(1500,Math.min(ms,unlockShownAt+8000-Date.now())):ms);
 }
 function hideUnlock(){
-  clearTimeout(unlockTimer);
-  const card=$('achCelebration');if(card)card.classList.remove('show');
-  setTimeout(()=>{unlockShowing=false;unlockBatch=[];if(unlockQueue.length)showNextUnlock()},380);
+  const card=$('achCelebration');
+  if(unlockState!=='showing'){if(card&&unlockState==='idle')card.classList.remove('show');return}
+  unlockState='hiding';clearTimeout(unlockTimer);clearTimeout(unlockMax);
+  const gen=unlockGen;
+  if(card)card.classList.remove('show');
+  setTimeout(()=>{if(gen!==unlockGen||unlockState!=='hiding')return;unlockState='idle';unlockBatch=[];if(unlockQueue.length)showNextUnlock()},380);
 }
+// Tapping anywhere else on the screen dismisses the card (the tap still goes through)
+document.addEventListener('pointerdown',e=>{const c=$('achCelebration');if(unlockState==='showing'&&c&&!c.contains(e.target))hideUnlock()},true);
 function openUnlockList(){
-  const list=unlockOrder(unlockBatch);hideUnlock();
+  const card=$('achCelebration');const list=unlockOrder((card&&card._items&&card._items.length?card._items:unlockBatch)||[]);hideUnlock();
+  if(!list.length){openProfileView('badges');return}
   const row=it=>it.kind==='title'?`<div class="li"><span class="ico gold">${icon('tag',18)}</span><span class="t gold">${esc(it.t.name)}<small>Title: ${esc(it.t.how)}</small></span><button class="btn-s sm" onclick="closeSheet();equipTitle('${safeId(it.t.id)}')">Equip</button></div>`
     :it.kind==='tier'?`<div class="li"><span class="ico">${icon('ladder',18)}</span><span class="t">${esc(it.name)}<small>${esc(it.sub)}</small></span><span class="num gold">+${fmtN(it.xp)}</span></div>`
     :`<div class="li"><span class="ico un-ico">${it.a.icon||'🏅'}</span><span class="t">${esc(it.a.name)}<small>${esc(it.a.desc||'')}</small></span><span class="num gold">${it.a.xp?'+'+fmtN(it.a.xp):''}</span></div>`;
